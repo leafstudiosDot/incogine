@@ -1,6 +1,9 @@
 #include <iostream>
 
+#include "misc/console/console.h"
+Console console;
+
 int main() {
-    std::cout << "Hello World!" << std::endl;
+    console.Println("Hello World!");
     return 0;
 }

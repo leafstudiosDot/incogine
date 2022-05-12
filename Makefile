@@ -1,2 +1,2 @@
 release-mac:
-	g++ ./src/main.cpp -o ./build/main
+	g++ -g -Wall ./src/main.cpp ./src/misc/console/console.cpp -I./reqs/include -o ./build/main
