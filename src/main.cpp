@@ -1,11 +1,25 @@
 #include <iostream>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "misc/console/console.h"
 Console console;
 
 #include <SDL2/SDL.h>
-#include <glad/glad.h>
+#include <SDL2/SDL_opengl.h>
+#include <SDL2/SDL_image.h>
+
+#if __APPLE__
+    #include <OpenGL/gl.h>
+    #include <OpenGL/glu.h>
+#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+    #include <GL/GL.h>
+    #include <GL/GLU.h>
+    //#include <GL/glut.h>
+#else
+    #include <GL/gl.h>
+    #include <GL/glu.h>
+#endif
 
 #define _WINDOW_NAME "leafstudiosDot"
 
@@ -23,15 +37,20 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 0);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
-    SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-
+    SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
+    SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
     SDL_Window* window = nullptr;
 
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         //console.Println("Init Core Error " + SDL_GetError());
         cout << "Init Core Error " << SDL_GetError() << endl;
+        return -1;
+    }
+
+    if (IMG_Init(IMG_INIT_PNG) < 0) {
+        cout << "Init Image Error " << IMG_GetError() << endl;
         return -1;
     }
 
@@ -62,7 +81,42 @@ int main(int argc, char* argv[]) {
     SDL_GLContext context;
     context = SDL_GL_CreateContext(window);
 
-    gladLoadGLLoader(SDL_GL_GetProcAddress);
+    //gladLoadGLLoader(SDL_GL_GetProcAddress);
+
+    /* Incogine Logo */
+
+    GLuint IncogineLogo_TextureID = 0;
+    SDL_Surface* IncogineLogo_Surface;
+    if ((IncogineLogo_Surface = IMG_Load("../assets/logo_black_fill.jpg"))) {
+        glGenTextures(1, &IncogineLogo_TextureID);
+        glBindTexture(GL_TEXTURE_2D, IncogineLogo_TextureID);
+
+        // Check that the image's width and height is a power of 2
+        if ( (IncogineLogo_Surface->w & (IncogineLogo_Surface->w - 1)) != 0 ) {
+            printf("warning: core image's width is not a power of 2\n");
+        }
+        if ( (IncogineLogo_Surface->h & (IncogineLogo_Surface->h - 1)) != 0 ) {
+            printf("warning: core image's height is not a power of 2\n");
+        }
+        
+        GLenum IncogineLogo_Mode = GL_RGB;
+        
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, IncogineLogo_Surface->w, IncogineLogo_Surface->h, 0, IncogineLogo_Mode, GL_UNSIGNED_BYTE, IncogineLogo_Surface->pixels);
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        
+    } else {
+      printf("Core could not load the image: %s\n", SDL_GetError());
+      return 2;
+    }  
+
+    if (IncogineLogo_Surface) { 
+        SDL_FreeSurface(IncogineLogo_Surface);
+    } else {
+        printf("Core cannot free the surface Sad: %s\n", SDL_GetError());
+        return 2;
+    }
 
     while (running) {
         glViewport(0, 0, windowWidth, windowHeight);
@@ -80,8 +134,31 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+        /* Render GL Here */
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, IncogineLogo_TextureID);
+        glDisable(GL_BLEND);
+        glDisable(GL_LIGHTING);
+        glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
+
+        glEnable(GL_TEXTURE_2D);
+        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_BLEND);
+
+        glBegin(GL_QUADS);
+            int englogox = 0, englogoy = 0, englogowidth = 100, englogoheight = 100;
+            glTexCoord2f(0, 0); glVertex3f(englogox, englogoy, 0);
+            glTexCoord2f(1, 0); glVertex3f(englogox + englogowidth, englogoy, 0);
+            glTexCoord2f(1, 1); glVertex3f(englogox + englogowidth, englogoy + englogoheight, 0);
+            glTexCoord2f(0, 1); glVertex3f(englogox, englogoy + englogoheight, 0);
+        glEnd();
+        glDisable(GL_TEXTURE_2D);
 
         SDL_GL_SwapWindow(window);
     }
@@ -89,6 +166,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_DeleteContext(context);
     SDL_DestroyWindow(window);
 
+    IMG_Quit();
     SDL_Quit();
 
     return 0;
