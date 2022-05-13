@@ -85,38 +85,6 @@ int main(int argc, char* argv[]) {
 
     /* Incogine Logo */
 
-    GLuint IncogineLogo_TextureID = 0;
-    SDL_Surface* IncogineLogo_Surface;
-    if ((IncogineLogo_Surface = IMG_Load("../assets/logo_black_fill.jpg"))) {
-        glGenTextures(1, &IncogineLogo_TextureID);
-        glBindTexture(GL_TEXTURE_2D, IncogineLogo_TextureID);
-
-        // Check that the image's width and height is a power of 2
-        if ( (IncogineLogo_Surface->w & (IncogineLogo_Surface->w - 1)) != 0 ) {
-            printf("warning: core image's width is not a power of 2\n");
-        }
-        if ( (IncogineLogo_Surface->h & (IncogineLogo_Surface->h - 1)) != 0 ) {
-            printf("warning: core image's height is not a power of 2\n");
-        }
-        
-        GLenum IncogineLogo_Mode = GL_RGB;
-        
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8, IncogineLogo_Surface->w, IncogineLogo_Surface->h, 0, IncogineLogo_Mode, GL_UNSIGNED_BYTE, IncogineLogo_Surface->pixels);
-        
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        
-    } else {
-      printf("Core could not load the image: %s\n", SDL_GetError());
-      return 2;
-    }  
-
-    if (IncogineLogo_Surface) { 
-        SDL_FreeSurface(IncogineLogo_Surface);
-    } else {
-        printf("Core cannot free the surface Sad: %s\n", SDL_GetError());
-        return 2;
-    }
 
     while (running) {
         glViewport(0, 0, windowWidth, windowHeight);
@@ -138,27 +106,6 @@ int main(int argc, char* argv[]) {
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
         /* Render GL Here */
-        glMatrixMode(GL_MODELVIEW);
-        glLoadIdentity();
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, IncogineLogo_TextureID);
-        glDisable(GL_BLEND);
-        glDisable(GL_LIGHTING);
-        glTexEnvi( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE );
-
-        glEnable(GL_TEXTURE_2D);
-        glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
-        glEnable(GL_BLEND);
-
-        glBegin(GL_QUADS);
-            int englogox = 0, englogoy = 0, englogowidth = 100, englogoheight = 100;
-            glTexCoord2f(0, 0); glVertex3f(englogox, englogoy, 0);
-            glTexCoord2f(1, 0); glVertex3f(englogox + englogowidth, englogoy, 0);
-            glTexCoord2f(1, 1); glVertex3f(englogox + englogowidth, englogoy + englogoheight, 0);
-            glTexCoord2f(0, 1); glVertex3f(englogox, englogoy + englogoheight, 0);
-        glEnd();
-        glDisable(GL_TEXTURE_2D);
 
         SDL_GL_SwapWindow(window);
     }
