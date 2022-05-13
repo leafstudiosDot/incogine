@@ -67,7 +67,6 @@ int main(int argc, char* argv[]) {
     while (running) {
         glViewport(0, 0, windowWidth, windowHeight);
         SDL_GL_SetSwapInterval(-1);
-        cout << glGetError() << endl;
 
         SDL_Event event;
         while(SDL_PollEvent(&event)) {
