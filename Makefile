@@ -1,2 +1,2 @@
 release-mac:
-	g++ -g -Wall ./src/main.cpp ./src/misc/console/console.cpp -I./reqs/include -o ./build/main
+	g++ -g -Wall ./src/main.cpp ./src/misc/console/console.cpp ./src/glad/glad.c -I./reqs/include -L./reqs/lib -F/Library/Frameworks -framework SDL2 -lSDL2_image -lSDL2_ttf -ldl -framework OpenGL -march=x86-64 -o ./build/main
