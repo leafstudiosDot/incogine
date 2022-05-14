@@ -75,6 +75,10 @@ int main(int argc, char* argv[]) {
     core->StartInit();
 
     while (Core::corerunning) {
+        glMatrixMode(GL_PROJECTION_MATRIX);
+        glLoadIdentity();
+        glMatrixMode(GL_MODELVIEW_MATRIX);
+        glLoadIdentity();
         glViewport(0, 0, windowWidth, windowHeight);
         SDL_GL_SetSwapInterval(-1);
         

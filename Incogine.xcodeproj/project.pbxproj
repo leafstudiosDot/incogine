@@ -144,11 +144,19 @@
 		8EF41AB0282F2D14000CB559 /* core */ = {
 			isa = PBXGroup;
 			children = (
+				8EF41AB8282F7937000CB559 /* objects */,
 				8EA66542282E0D8E00E12605 /* misc */,
 				8EF41AB1282F2D51000CB559 /* core.cpp */,
 				8EF41AB2282F2D51000CB559 /* core.hpp */,
 			);
 			path = core;
+			sourceTree = "<group>";
+		};
+		8EF41AB8282F7937000CB559 /* objects */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = objects;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
