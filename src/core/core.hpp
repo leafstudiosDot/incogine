@@ -28,10 +28,16 @@ public:
     Core();
     ~Core();
     
+    void StartInit();
+    void Event();
     void Update();
     void Render();
+    
+    static bool corerunning;
+    
 private:
     int SceneIndex;
+    int Frame;
 };
 
 #endif

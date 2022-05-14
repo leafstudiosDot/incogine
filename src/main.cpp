@@ -5,6 +5,8 @@ Console console;
 
 #define _WINDOW_NAME "leafstudiosDot"
 
+bool Core::corerunning;
+
 int main(int argc, char* argv[]) {
     #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
         system("cls");
@@ -61,7 +63,7 @@ int main(int argc, char* argv[]) {
     #endif
 
     window = SDL_CreateWindow(_WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
-    bool running = true;
+    Core::corerunning = true;
 
     SDL_GLContext context;
     context = SDL_GL_CreateContext(window);
@@ -69,29 +71,25 @@ int main(int argc, char* argv[]) {
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
     
     console.Println("Starting...");
+    SDL_Delay(1000);
+    core->StartInit();
 
-    while (running) {
+    while (Core::corerunning) {
         glViewport(0, 0, windowWidth, windowHeight);
         SDL_GL_SetSwapInterval(-1);
-
-        SDL_Event event;
-        while(SDL_PollEvent(&event)) {
-            if(event.type == SDL_QUIT) {
-                running = false;
-            }
-
-            const Uint8* state = SDL_GetKeyboardState(NULL);
-            if (state[SDL_SCANCODE_RIGHT]) {
-                console.Println("Right key pressed!");
-            }
-        }
+        
+        //Uint64 startF = SDL_GetPerformanceCounter();
+        core->Event();
 
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
-        /* Render Core Here */
         core->Update();
         core->Render();
+        
+        /*Uint64 endF = SDL_GetPerformanceCounter();
+        float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
+        SDL_Delay(floor(16.666f - elapsedMS));*/
 
         SDL_GL_SwapWindow(window);
     }
