@@ -16,6 +16,8 @@
 		8EA6655B282E12CD00E12605 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA6655A282E12CD00E12605 /* CoreFoundation.framework */; };
 		8EA6655D282E12D500E12605 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA6655C282E12D500E12605 /* Foundation.framework */; };
 		8EA6655F282E12E300E12605 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA6655E282E12E300E12605 /* CoreGraphics.framework */; };
+		8EF41AAB282F2AA8000CB559 /* SDL2_image.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */; };
+		8EF41AAF282F2AFC000CB559 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAE282F2AFC000CB559 /* OpenGL.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -44,6 +46,8 @@
 		8EA6655A282E12CD00E12605 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		8EA6655C282E12D500E12605 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		8EA6655E282E12E300E12605 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SDL2_image.framework; path = ../../../../../Library/Frameworks/SDL2_image.framework; sourceTree = "<group>"; };
+		8EF41AAE282F2AFC000CB559 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,7 +56,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				8EA6655F282E12E300E12605 /* CoreGraphics.framework in Frameworks */,
+				8EF41AAF282F2AFC000CB559 /* OpenGL.framework in Frameworks */,
 				8EA6655D282E12D500E12605 /* Foundation.framework in Frameworks */,
+				8EF41AAB282F2AA8000CB559 /* SDL2_image.framework in Frameworks */,
 				8EA6655B282E12CD00E12605 /* CoreFoundation.framework in Frameworks */,
 				8EA66559282E12C200E12605 /* IOKit.framework in Frameworks */,
 				8EA66557282E12B200E12605 /* AppKit.framework in Frameworks */,
@@ -120,6 +126,8 @@
 		8EA66551282E0F9800E12605 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				8EF41AAE282F2AFC000CB559 /* OpenGL.framework */,
+				8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */,
 				8EA6655E282E12E300E12605 /* CoreGraphics.framework */,
 				8EA6655C282E12D500E12605 /* Foundation.framework */,
 				8EA6655A282E12CD00E12605 /* CoreFoundation.framework */,
