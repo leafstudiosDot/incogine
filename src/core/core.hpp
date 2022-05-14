@@ -38,6 +38,7 @@ public:
 private:
     int SceneIndex;
     int Frame;
+    int timeSeconds;
 };
 
 #endif

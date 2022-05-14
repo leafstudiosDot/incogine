@@ -37,9 +37,10 @@ void Core::Update() {
     Frame++;
     
     // Calculating Seconds
-    /*if ((Frame % 60) == 0) {
-        std::cout << Frame << "\r" << std::endl;
-    }*/
+    if ((Frame % 60) == 0) {
+        timeSeconds++;
+        //std::cout << Frame << "\r" << std::endl;
+    }
 }
 
 void Core::Render() {
