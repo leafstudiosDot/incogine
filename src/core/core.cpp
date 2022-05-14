@@ -21,14 +21,32 @@ void Core::Event() {
             corerunning = false;
         }
         
-        switch(event.type) {
-            
+        // KeyUp and KeyDown
+        // Pressed
+        if(event.type == SDL_KEYDOWN) {
+            switch(event.key.keysym.sym){
+            case SDLK_LEFT:
+                console.Println("Left Key Pressed");
+                break;
+            }
         }
-
-        const Uint8* state = SDL_GetKeyboardState(NULL);
-        if (state[SDL_SCANCODE_RIGHT]) {
+        // Released
+        if(event.type == SDL_KEYUP) {
+            switch(event.key.keysym.sym) {
+                case SDLK_LEFT:
+                    console.Println("Left Key Lifted");
+                    break;
+            }
+        }
+        
+        // Raw KeyDown (Hold Key)
+        /*const Uint8* stateinp = SDL_GetKeyboardState(NULL);
+        if (stateinp[SDL_SCANCODE_RIGHT]) {
+            // Pressed
             console.Println("Right key pressed!");
-        }
+        } else {
+            // Released
+        }*/
     }
 }
 
