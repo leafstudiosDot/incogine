@@ -1,25 +1,7 @@
-#include <iostream>
-#include <stdint.h>
-#include <stdio.h>
+#include "core/core.hpp"
+Core *core = nullptr;
 
-#include "misc/console/console.h"
 Console console;
-
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL_image.h>
-
-#if __APPLE__
-    #include <OpenGL/gl.h>
-    #include <OpenGL/glu.h>
-#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-    #include <GL/GL.h>
-    #include <GL/GLU.h>
-    //#include <GL/glut.h>
-#else
-    #include <GL/gl.h>
-    #include <GL/glu.h>
-#endif
 
 #define _WINDOW_NAME "leafstudiosDot"
 
@@ -58,6 +40,9 @@ int main(int argc, char* argv[]) {
     int height = 720;
     int windowWidth;
     int windowHeight;
+    
+    console.Println("Initializing Core...");
+    core = new Core();
         
     #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
         windowWidth = width*1.5;
@@ -82,9 +67,8 @@ int main(int argc, char* argv[]) {
     context = SDL_GL_CreateContext(window);
 
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
-
-    /* Incogine Logo */
-
+    
+    console.Println("Starting...");
 
     while (running) {
         glViewport(0, 0, windowWidth, windowHeight);
@@ -102,10 +86,12 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
-        /* Render GL Here */
+        /* Render Core Here */
+        core->Update();
+        core->Render();
 
         SDL_GL_SwapWindow(window);
     }
@@ -115,6 +101,7 @@ int main(int argc, char* argv[]) {
 
     IMG_Quit();
     SDL_Quit();
+    delete core;
 
     return 0;
 }
