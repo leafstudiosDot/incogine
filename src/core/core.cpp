@@ -6,7 +6,8 @@ Core::Core() {
 }
 
 Core::~Core() {
-    
+    Console console;
+    console.Println("Core purged successfully");
 }
 
 void Core::StartInit() {
