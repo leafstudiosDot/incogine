@@ -27,6 +27,9 @@
 
 #include "misc/console/console.h"
 
+#define _WINDOW_WIDTH 1280
+#define _WINDOW_HEIGHT 720
+
 class Core {
 public:
     Core();

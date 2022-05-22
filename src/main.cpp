@@ -7,6 +7,20 @@ Console console;
 
 bool Core::corerunning;
 
+int width = _WINDOW_WIDTH;
+int height = _WINDOW_HEIGHT;
+
+static int resizingEventWatcher(void* data, SDL_Event* event) {
+  if (event->type == SDL_WINDOWEVENT &&
+      event->window.event == SDL_WINDOWEVENT_RESIZED) {
+    SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
+    if (window == (SDL_Window*)data) {
+        // Resizing...
+    }
+  }
+  return 0;
+}
+
 int main(int argc, char* argv[]) {
     #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
         system("cls");
@@ -38,8 +52,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-    int width = 1280;
-    int height = 720;
     int windowWidth;
     int windowHeight;
     
@@ -54,7 +66,7 @@ int main(int argc, char* argv[]) {
         windowHeight = height;
     #endif
 
-    int flags = SDL_WINDOW_ALLOW_HIGHDPI + SDL_WINDOW_RESIZABLE + SDL_WINDOW_SHOWN;
+    int flags = SDL_WINDOW_ALLOW_HIGHDPI + SDL_WINDOW_SHOWN;
     #if __APPLE__
         //flags = flags + SDL_WINDOW_METAL; // uncomment later when Apple is accepting OpenGL and Metal is friendship.
         flags = flags + SDL_WINDOW_OPENGL; // uncomment later when Apple is accepting OpenGL and Metal is friendship.
@@ -63,6 +75,7 @@ int main(int argc, char* argv[]) {
     #endif
 
     window = SDL_CreateWindow(_WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
+    SDL_AddEventWatch(resizingEventWatcher, window);
     Core::corerunning = true;
 
     SDL_GLContext context;
@@ -73,13 +86,7 @@ int main(int argc, char* argv[]) {
     }
     
     glewExperimental=GL_TRUE;
-    GLenum glew_init_error = glewInit(); 
-    
-    glMatrixMode(GL_PROJECTION_MATRIX);
-    glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW_MATRIX);
-    glLoadIdentity();
-    glDisable(GL_TEXTURE_2D);
+    //GLenum glew_init_error = glewInit();
     
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
     
@@ -88,12 +95,19 @@ int main(int argc, char* argv[]) {
     core->StartInit();
 
     while (Core::corerunning) {
-        glViewport(0, 0, windowWidth, windowHeight);
+        glViewport(0, 0, windowWidth*2, windowHeight*2);
+        /*glMatrixMode(GL_PROJECTION_MATRIX);
+        glLoadIdentity();
+        glMatrixMode(GL_MODELVIEW_MATRIX);
+        glLoadIdentity();*/
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0, windowWidth, windowHeight, 0, -10, 10);
         
         //Uint64 startF = SDL_GetPerformanceCounter();
         core->Event();
 
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClearColor(0.0f, 0.2f, 0.1f, 1.0f);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
         core->Update();
@@ -102,8 +116,6 @@ int main(int argc, char* argv[]) {
         /*Uint64 endF = SDL_GetPerformanceCounter();
         float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
         SDL_Delay(floor(16.666f - elapsedMS));*/
-        
-        glFlush();
 
         SDL_GL_SwapWindow(window);
     }
