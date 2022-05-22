@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute( SDL_GL_RED_SIZE, 8 );
     SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
@@ -67,7 +67,20 @@ int main(int argc, char* argv[]) {
 
     SDL_GLContext context;
     context = SDL_GL_CreateContext(window);
-
+    if( SDL_GL_SetSwapInterval(1) < 0 )
+    {
+        printf( "Warning: Unable to enable VSync: %s\n", SDL_GetError() );
+    }
+    
+    glewExperimental=GL_TRUE;
+    GLenum glew_init_error = glewInit(); 
+    
+    glMatrixMode(GL_PROJECTION_MATRIX);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW_MATRIX);
+    glLoadIdentity();
+    glDisable(GL_TEXTURE_2D);
+    
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
     
     console.Println("Starting...");
@@ -75,12 +88,7 @@ int main(int argc, char* argv[]) {
     core->StartInit();
 
     while (Core::corerunning) {
-        glMatrixMode(GL_PROJECTION_MATRIX);
-        glLoadIdentity();
-        glMatrixMode(GL_MODELVIEW_MATRIX);
-        glLoadIdentity();
         glViewport(0, 0, windowWidth, windowHeight);
-        SDL_GL_SetSwapInterval(-1);
         
         //Uint64 startF = SDL_GetPerformanceCounter();
         core->Event();
@@ -94,6 +102,8 @@ int main(int argc, char* argv[]) {
         /*Uint64 endF = SDL_GetPerformanceCounter();
         float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
         SDL_Delay(floor(16.666f - elapsedMS));*/
+        
+        glFlush();
 
         SDL_GL_SwapWindow(window);
     }

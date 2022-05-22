@@ -1,6 +1,9 @@
 #ifndef CORE_hpp
 #define CORE_hpp
 
+#define GLEW_STATIC
+#include <glew/glew.h>
+
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_image.h>
@@ -20,6 +23,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <stdio.h>
+#include <string>
 
 #include "misc/console/console.h"
 
