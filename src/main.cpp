@@ -66,7 +66,7 @@ int main(int argc, char* argv[]) {
         windowHeight = height;
     #endif
 
-    int flags = SDL_WINDOW_ALLOW_HIGHDPI + SDL_WINDOW_SHOWN;
+    int flags = SDL_WINDOW_ALLOW_HIGHDPI + SDL_WINDOW_SHOWN + SDL_WINDOW_RESIZABLE;
     #if __APPLE__
         //flags = flags + SDL_WINDOW_METAL; // uncomment later when Apple is accepting OpenGL and Metal is friendship.
         flags = flags + SDL_WINDOW_OPENGL; // uncomment later when Apple is accepting OpenGL and Metal is friendship.
