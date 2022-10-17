@@ -36,7 +36,7 @@ public:
     ~Core();
     
     void StartInit();
-    void Event();
+    void Event(SDL_Window* window);
     void Update();
     void Render();
     
@@ -46,6 +46,8 @@ private:
     int SceneIndex;
     int Frame;
     int timeSeconds;
+    int _windowWidth;
+    int _windowHeight;
 };
 
 #endif

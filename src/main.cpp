@@ -95,17 +95,15 @@ int main(int argc, char* argv[]) {
     core->StartInit();
 
     while (Core::corerunning) {
-        glViewport(0, 0, windowWidth*2, windowHeight*2);
         /*glMatrixMode(GL_PROJECTION_MATRIX);
         glLoadIdentity();
         glMatrixMode(GL_MODELVIEW_MATRIX);
         glLoadIdentity();*/
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
-        glOrtho(0, windowWidth, windowHeight, 0, -10, 10);
         
         //Uint64 startF = SDL_GetPerformanceCounter();
-        core->Event();
+        core->Event(window);
 
         glClearColor(0.0f, 0.2f, 0.1f, 1.0f);
         glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);

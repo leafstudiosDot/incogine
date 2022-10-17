@@ -12,17 +12,30 @@ Core::~Core() {
 
 void Core::StartInit() {
     /* Start at Run once. */
+    _windowWidth = _WINDOW_WIDTH;
+    _windowHeight = _WINDOW_HEIGHT;
 }
 
 float playerx = 0, playery = 0, speed = 5;
 const Uint8 *_Pkeyboard = SDL_GetKeyboardState(0);
 
-void Core::Event() {
+void Core::Event(SDL_Window* window) {
     Console console;
     SDL_Event event;
     while(SDL_PollEvent(&event)) {
+        // Quit
         if(event.type == SDL_QUIT) {
             corerunning = false;
+        }
+        
+        if(event.type == SDL_WINDOWEVENT) {
+            switch(event.window.event)
+            {
+                case SDL_WINDOWEVENT_SIZE_CHANGED:
+                    _windowWidth = event.window.data1;
+                    _windowHeight = event.window.data2;
+                    break;
+            }
         }
         
         // KeyUp and KeyDown
@@ -87,6 +100,11 @@ void Core::Update() {
 
 void Core::Render() {
     /*  Render Codes. cleaner codes. */
+    
+    // Display
+    glViewport(0, 0, _windowWidth*2, _windowHeight*2);
+    glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);
+    
     glPushMatrix();
     glTranslated(playerx, playery, 0);
     glBegin(GL_QUADS);
