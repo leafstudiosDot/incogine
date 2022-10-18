@@ -26,6 +26,7 @@
 #include <string>
 
 #include "misc/console/console.h"
+#include "../game/game.hpp"
 
 #define _WINDOW_WIDTH 1280
 #define _WINDOW_HEIGHT 720

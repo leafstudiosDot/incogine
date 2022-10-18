@@ -9,5 +9,21 @@
 #define game_hpp
 
 #include <stdio.h>
+#include "../core/core.hpp"
+
+class Game {
+public:
+    Game();
+    ~Game();
+    
+    void Event(SDL_Event event);
+    void RawEvent(SDL_Event event, int _windowWidth, int _windowHeight);
+    void Start();
+    void Update();
+    void Render();
+    
+private:
+    int SceneNow;
+};
 
 #endif /* game_hpp */
