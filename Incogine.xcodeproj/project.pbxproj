@@ -18,6 +18,7 @@
 		8EA6655F282E12E300E12605 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA6655E282E12E300E12605 /* CoreGraphics.framework */; };
 		8EBD1CBE283A1574007C741B /* libGLEW.2.2.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EBD1CBD283A1574007C741B /* libGLEW.2.2.0.dylib */; };
 		8EBD1CC2283A424D007C741B /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EBD1CC1283A424D007C741B /* ImageIO.framework */; };
+		8EC0F63728FD381500218372 /* game.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EC0F63528FD381500218372 /* game.cpp */; };
 		8EF41AAB282F2AA8000CB559 /* SDL2_image.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */; };
 		8EF41AAF282F2AFC000CB559 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAE282F2AFC000CB559 /* OpenGL.framework */; };
 		8EF41AB3282F2D51000CB559 /* core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF41AB1282F2D51000CB559 /* core.cpp */; };
@@ -67,6 +68,9 @@
 		8EA6655E282E12E300E12605 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		8EBD1CBD283A1574007C741B /* libGLEW.2.2.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libGLEW.2.2.0.dylib; path = reqs/lib/libGLEW.2.2.0.dylib; sourceTree = "<group>"; };
 		8EBD1CC1283A424D007C741B /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
+		8EC0F63228FD12ED00218372 /* Python3.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Python3.framework; path = Library/Frameworks/Python3.framework; sourceTree = DEVELOPER_DIR; };
+		8EC0F63528FD381500218372 /* game.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = game.cpp; sourceTree = "<group>"; };
+		8EC0F63628FD381500218372 /* game.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = game.hpp; sourceTree = "<group>"; };
 		8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SDL2_image.framework; path = ../../../../../Library/Frameworks/SDL2_image.framework; sourceTree = "<group>"; };
 		8EF41AAE282F2AFC000CB559 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		8EF41AB1282F2D51000CB559 /* core.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = core.cpp; sourceTree = "<group>"; };
@@ -117,6 +121,7 @@
 		8EA66541282E0D6600E12605 /* src */ = {
 			isa = PBXGroup;
 			children = (
+				8EC0F63428FD37DA00218372 /* game */,
 				8EF41AB0282F2D14000CB559 /* core */,
 				8EA66548282E0DC800E12605 /* glad */,
 				8E5A11B1282E0D1400CB0E8C /* main.cpp */,
@@ -152,6 +157,7 @@
 		8EA66551282E0F9800E12605 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				8EC0F63228FD12ED00218372 /* Python3.framework */,
 				8EBD1CC1283A424D007C741B /* ImageIO.framework */,
 				8EBD1CBD283A1574007C741B /* libGLEW.2.2.0.dylib */,
 				8EF41AAE282F2AFC000CB559 /* OpenGL.framework */,
@@ -164,6 +170,15 @@
 				8EA66552282E0F9800E12605 /* SDL2.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		8EC0F63428FD37DA00218372 /* game */ = {
+			isa = PBXGroup;
+			children = (
+				8EC0F63528FD381500218372 /* game.cpp */,
+				8EC0F63628FD381500218372 /* game.hpp */,
+			);
+			path = game;
 			sourceTree = "<group>";
 		};
 		8EF41AB0282F2D14000CB559 /* core */ = {
@@ -212,7 +227,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastUpgradeCheck = 1340;
+				LastUpgradeCheck = 1400;
 				TargetAttributes = {
 					8E5A11AD282E0D1400CB0E8C = {
 						CreatedOnToolsVersion = 13.3.1;
@@ -245,6 +260,7 @@
 				8E5A11B2282E0D1400CB0E8C /* main.cpp in Sources */,
 				8EA6654F282E0E4D00E12605 /* console.cpp in Sources */,
 				8EF41AB3282F2D51000CB559 /* core.cpp in Sources */,
+				8EC0F63728FD381500218372 /* game.cpp in Sources */,
 				8EA66554282E117000E12605 /* glad.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -285,6 +301,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -353,6 +370,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -389,6 +407,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = assets/macOS/AppIcon.iconset;
 				DEVELOPMENT_TEAM = XDJ8UH9GD4;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -419,6 +438,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = assets/macOS/AppIcon.iconset;
 				DEVELOPMENT_TEAM = XDJ8UH9GD4;
 				ENABLE_HARDENED_RUNTIME = YES;

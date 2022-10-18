@@ -105,6 +105,9 @@ void Core::Render() {
     glViewport(0, 0, _windowWidth*2, _windowHeight*2);
     glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);
     
+    // Game
+    glClearColor(0.0f, 0.2f, 0.1f, 1.0f);
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
     glPushMatrix();
     glTranslated(playerx, playery, 0);
     glBegin(GL_QUADS);
