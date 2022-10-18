@@ -16,6 +16,7 @@ void Core::StartInit() {
     /* Start at Run once. */
     _windowWidth = _WINDOW_WIDTH;
     _windowHeight = _WINDOW_HEIGHT;
+    game.Start();
 }
 
 void Core::Event(SDL_Window* window) {

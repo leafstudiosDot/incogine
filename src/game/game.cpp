@@ -87,6 +87,7 @@ void Game::Event(SDL_Event event) {
 
 void Game::Start() {
     // Executes as game launches
+    Console console;
 }
 
 void Game::Update() {
