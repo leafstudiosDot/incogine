@@ -15,3 +15,5 @@ project.xcworkspace/
 xcuserdata/
 
 *.o
+
+src/side_project

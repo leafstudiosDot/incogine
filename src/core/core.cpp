@@ -50,7 +50,7 @@ void Core::Update() {
         timeSeconds++;
         //std::cout << Frame << "\r" << std::endl;
     }
-    game.Update();
+    game.Update(_windowWidth, _windowHeight);
 }
 
 void Core::Render() {
