@@ -23,11 +23,11 @@ float playerx = 0, playery = 0, speed = 5;
 const Uint8 *_Pkeyboard = SDL_GetKeyboardState(0);
 
 
-void Game::Event(SDL_Event event) {
+void Game::RawEvent(SDL_Event event, int _windowWidth, int _windowHeight) {
     // Events (Keyboard, Mouse, etc.)
     Console console;
     
-    //Raw KeyDown (Hold Key)
+    // Type-Style KeyDown (Hold Key)
     if (_Pkeyboard[SDL_SCANCODE_D]) {
         // Pressed
         playerx += speed;
@@ -37,6 +37,7 @@ void Game::Event(SDL_Event event) {
     
     if (_Pkeyboard[SDL_SCANCODE_A]) {
        // Pressed
+        console.Println("Type Style Left Key Pressed");
         playerx -= speed;
     } else {
         // Released
@@ -57,7 +58,7 @@ void Game::Event(SDL_Event event) {
     }
 }
 
-void Game::RawEvent(SDL_Event event, int _windowWidth, int _windowHeight) {
+void Game::Event(SDL_Event event) {
     Console console;
     
     // Quit

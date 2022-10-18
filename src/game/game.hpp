@@ -16,8 +16,8 @@ public:
     Game();
     ~Game();
     
-    void Event(SDL_Event event);
     void RawEvent(SDL_Event event, int _windowWidth, int _windowHeight);
+    void Event(SDL_Event event);
     void Start();
     void Update();
     void Render();

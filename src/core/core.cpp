@@ -34,10 +34,10 @@ void Core::Event(SDL_Window* window) {
             }
         }
         
-        game.RawEvent(event, _windowWidth, _windowHeight);
+        game.Event(event);
     }
     
-    game.Event(event);
+    game.RawEvent(event, _windowWidth, _windowHeight);
 }
 
 void Core::Update() {
