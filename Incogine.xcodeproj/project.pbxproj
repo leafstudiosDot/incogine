@@ -22,6 +22,8 @@
 		8EF41AAB282F2AA8000CB559 /* SDL2_image.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAA282F2AA8000CB559 /* SDL2_image.framework */; };
 		8EF41AAF282F2AFC000CB559 /* OpenGL.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF41AAE282F2AFC000CB559 /* OpenGL.framework */; };
 		8EF41AB3282F2D51000CB559 /* core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF41AB1282F2D51000CB559 /* core.cpp */; };
+		8EF8AD1029011B5700792048 /* fonts.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF8AD0E29011B5700792048 /* fonts.cpp */; };
+		8EF8AD1229011BB300792048 /* SDL2_ttf.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF8AD1129011BB300792048 /* SDL2_ttf.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -75,6 +77,9 @@
 		8EF41AAE282F2AFC000CB559 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
 		8EF41AB1282F2D51000CB559 /* core.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = core.cpp; sourceTree = "<group>"; };
 		8EF41AB2282F2D51000CB559 /* core.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = core.hpp; sourceTree = "<group>"; };
+		8EF8AD0E29011B5700792048 /* fonts.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = fonts.cpp; sourceTree = "<group>"; };
+		8EF8AD0F29011B5700792048 /* fonts.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = fonts.hpp; sourceTree = "<group>"; };
+		8EF8AD1129011BB300792048 /* SDL2_ttf.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SDL2_ttf.framework; path = ../../../../../Library/Frameworks/SDL2_ttf.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +93,7 @@
 				8EF41AAF282F2AFC000CB559 /* OpenGL.framework in Frameworks */,
 				8EA6655D282E12D500E12605 /* Foundation.framework in Frameworks */,
 				8EF41AAB282F2AA8000CB559 /* SDL2_image.framework in Frameworks */,
+				8EF8AD1229011BB300792048 /* SDL2_ttf.framework in Frameworks */,
 				8EA6655B282E12CD00E12605 /* CoreFoundation.framework in Frameworks */,
 				8EA66559282E12C200E12605 /* IOKit.framework in Frameworks */,
 				8EA66557282E12B200E12605 /* AppKit.framework in Frameworks */,
@@ -157,6 +163,7 @@
 		8EA66551282E0F9800E12605 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				8EF8AD1129011BB300792048 /* SDL2_ttf.framework */,
 				8EC0F63228FD12ED00218372 /* Python3.framework */,
 				8EBD1CC1283A424D007C741B /* ImageIO.framework */,
 				8EBD1CBD283A1574007C741B /* libGLEW.2.2.0.dylib */,
@@ -195,6 +202,8 @@
 		8EF41AB8282F7937000CB559 /* objects */ = {
 			isa = PBXGroup;
 			children = (
+				8EF8AD0E29011B5700792048 /* fonts.cpp */,
+				8EF8AD0F29011B5700792048 /* fonts.hpp */,
 			);
 			path = objects;
 			sourceTree = "<group>";
@@ -258,8 +267,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E5A11B2282E0D1400CB0E8C /* main.cpp in Sources */,
-				8EA6654F282E0E4D00E12605 /* console.cpp in Sources */,
 				8EF41AB3282F2D51000CB559 /* core.cpp in Sources */,
+				8EA6654F282E0E4D00E12605 /* console.cpp in Sources */,
+				8EF8AD1029011B5700792048 /* fonts.cpp in Sources */,
 				8EC0F63728FD381500218372 /* game.cpp in Sources */,
 				8EA66554282E117000E12605 /* glad.c in Sources */,
 			);

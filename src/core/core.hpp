@@ -7,6 +7,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2_ttf/SDL_ttf.h>
 
 #if __APPLE__
     #include <OpenGL/gl.h>
@@ -26,6 +27,8 @@
 #include <string>
 
 #include "misc/console/console.h"
+//#include "objects/fonts.hpp"
+
 #include "../game/game.hpp"
 
 #define _WINDOW_WIDTH 1280

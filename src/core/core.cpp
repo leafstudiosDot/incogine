@@ -56,6 +56,14 @@ void Core::Update() {
 void Core::Render() {
     /*  Render Codes. cleaner codes. */
     
+    /*glShadeModel(GL_SMOOTH);
+    glClearDepth(1.0f);
+    glDepthFunc(GL_LEQUAL);
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+    
+    glBlendFunc(GL_ONE, GL_ONE);
+    glEnable(GL_BLEND);*/
+    
     // Display
     glViewport(0, 0, _windowWidth*2, _windowHeight*2);
     glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);

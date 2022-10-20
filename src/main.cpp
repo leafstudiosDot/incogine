@@ -93,6 +93,7 @@ int main(int argc, char* argv[]) {
     console.Println("Starting...");
     SDL_Delay(1000);
     core->StartInit();
+    TTF_Init();
 
     while (Core::corerunning) {
         //Uint64 startF = SDL_GetPerformanceCounter();
@@ -115,6 +116,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_DeleteContext(context);
     SDL_DestroyWindow(window);
 
+    TTF_Quit();
     IMG_Quit();
     SDL_Quit();
     delete core;
