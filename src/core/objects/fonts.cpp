@@ -33,7 +33,7 @@ GLuint TextToTexture(TTF_Font* font, SDL_Color color, const char* text)
     return tex;
 }
 
-void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth) {
+void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight) {
     stringTex = TextToTexture(font, color, content);
 
     glColor3ub( 255, 255, 255 );
@@ -41,10 +41,10 @@ void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, fl
     glBindTexture(GL_TEXTURE_2D, stringTex);
     glTranslated(x, y, z);
     glBegin(GL_QUADS);
-        glTexCoord2f( 0.0f, 0.0f ); glVertex2f( -1.0f, 1.0f );
-        glTexCoord2f( 1.0f, 0.0f ); glVertex2f( objWidth, 1.0f );
-        glTexCoord2f( 1.0f, 1.0f ); glVertex2f( objWidth, -1.0f );
-        glTexCoord2f( 0.0f, 1.0f ); glVertex2f( -1.0f,  -1.0f );
+        glTexCoord2f( 0.0f, 0.0f ); glVertex2f( (objWidth*(-1)), objHeight );
+        glTexCoord2f( 1.0f, 0.0f ); glVertex2f( objWidth, objHeight );
+        glTexCoord2f( 1.0f, 1.0f ); glVertex2f( objWidth, (objHeight*(-1)) );
+        glTexCoord2f( 0.0f, 1.0f ); glVertex2f( (objWidth*(-1)), (objHeight*(-1)) );
     glEnd();
     glDisable(GL_TEXTURE_2D);
 }
