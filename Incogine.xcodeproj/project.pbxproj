@@ -24,6 +24,7 @@
 		8EF41AB3282F2D51000CB559 /* core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF41AB1282F2D51000CB559 /* core.cpp */; };
 		8EF8AD1029011B5700792048 /* fonts.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF8AD0E29011B5700792048 /* fonts.cpp */; };
 		8EF8AD1229011BB300792048 /* SDL2_ttf.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF8AD1129011BB300792048 /* SDL2_ttf.framework */; };
+		8EF8AD162902059C00792048 /* def_font.ttf in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8EF8AD152902059C00792048 /* def_font.ttf */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -44,12 +45,13 @@
 /* Begin PBXCopyFilesBuildPhase section */
 		8E5A11AC282E0D1400CB0E8C /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
+			buildActionMask = 12;
+			dstPath = "";
+			dstSubfolderSpec = 16;
 			files = (
+				8EF8AD162902059C00792048 /* def_font.ttf in CopyFiles */,
 			);
-			runOnlyForDeploymentPostprocessing = 1;
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
@@ -80,6 +82,7 @@
 		8EF8AD0E29011B5700792048 /* fonts.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = fonts.cpp; sourceTree = "<group>"; };
 		8EF8AD0F29011B5700792048 /* fonts.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = fonts.hpp; sourceTree = "<group>"; };
 		8EF8AD1129011BB300792048 /* SDL2_ttf.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SDL2_ttf.framework; path = ../../../../../Library/Frameworks/SDL2_ttf.framework; sourceTree = "<group>"; };
+		8EF8AD152902059C00792048 /* def_font.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = def_font.ttf; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -204,6 +207,7 @@
 			children = (
 				8EF8AD0E29011B5700792048 /* fonts.cpp */,
 				8EF8AD0F29011B5700792048 /* fonts.hpp */,
+				8EF8AD152902059C00792048 /* def_font.ttf */,
 			);
 			path = objects;
 			sourceTree = "<group>";
@@ -218,6 +222,7 @@
 				8E5A11AA282E0D1400CB0E8C /* Sources */,
 				8E5A11AB282E0D1400CB0E8C /* Frameworks */,
 				8E5A11AC282E0D1400CB0E8C /* CopyFiles */,
+				8EF8AD142901780100792048 /* ShellScript */,
 			);
 			buildRules = (
 				8E37EEC628404283006BF561 /* PBXBuildRule */,
@@ -260,6 +265,26 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		8EF8AD142901780100792048 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Type a script or drag a script file from your workspace to insert its path.\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		8E5A11AA282E0D1400CB0E8C /* Sources */ = {

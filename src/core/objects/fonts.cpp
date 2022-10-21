@@ -7,11 +7,24 @@
 
 #include "fonts.hpp"
 
-Fonts::~Fonts() {
-    TTF_CloseFont(font);
+Fonts::Fonts() {
+    
 }
 
-void Fonts::RenderFont(const char* content, SDL_Rect *position, SDL_Color color) {
+Fonts::~Fonts() {
+    
+}
+
+void Fonts::RenderFont(TTF_Font *font, const char* content, SDL_Rect *position, SDL_Color color) {
+    //cout << "Error loading font: " << TTF_GetError() << endl;
+    
+    //OpenGL Thingy that doesn't even work
+    
+    GLuint texture;
+    SDL_Surface *initial;
+    SDL_Surface *intermediary;
+    int w, h;
+    
     initial = TTF_RenderText_Blended(font, content, color);
     
     w = nextpoweroftwo(initial->w);
@@ -50,6 +63,9 @@ void Fonts::RenderFont(const char* content, SDL_Rect *position, SDL_Color color)
     SDL_FreeSurface(initial);
     SDL_FreeSurface(intermediary);
     glDeleteTextures(1, &texture);
+    
+    // OpenGL Part 2
+    
 }
 
 int Fonts::round(double x)

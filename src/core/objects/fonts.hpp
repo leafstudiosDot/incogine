@@ -10,22 +10,16 @@
 
 #include "../core.hpp"
 
-char fontFile[] = "./font.ttf";
-
 class Fonts {
 public:
+    Fonts();
     ~Fonts();
     
-    void RenderFont(const char* content, SDL_Rect *position, SDL_Color color);
+    void RenderFont(TTF_Font *font, const char* content, SDL_Rect *position, SDL_Color color);
 
 private:
     int round(double x);
     int nextpoweroftwo(int x);
-    int w, h;
-    GLuint texture;
-    SDL_Surface *initial;
-    SDL_Surface *intermediary;
-    TTF_Font* font;
 };
 
 #endif /* fonts_hpp */

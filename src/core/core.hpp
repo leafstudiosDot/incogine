@@ -27,7 +27,7 @@
 #include <string>
 
 #include "misc/console/console.h"
-//#include "objects/fonts.hpp"
+#include "objects/fonts.hpp"
 
 #include "../game/game.hpp"
 
@@ -43,6 +43,7 @@ public:
     void Event(SDL_Window* window);
     void Update();
     void Render();
+    void Destroy();
     
     static bool corerunning;
     

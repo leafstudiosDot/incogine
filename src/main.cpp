@@ -22,12 +22,12 @@ static int resizingEventWatcher(void* data, SDL_Event* event) {
 }
 
 int main(int argc, char* argv[]) {
-    #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-        system("cls");
-    #elif __APPLE__
-        system("clear");
-    #endif
-
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+    system("cls");
+#elif __APPLE__
+    system("clear");
+#endif
+    
     console.Println("Incogine by leafstudiosDot");
     
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
@@ -40,15 +40,20 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
     SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
     SDL_Window* window = nullptr;
-
+    
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         //console.Println("Init Core Error " + SDL_GetError());
         cout << "Init Core Error " << SDL_GetError() << endl;
         return -1;
     }
-
+    
     if (IMG_Init(IMG_INIT_PNG) < 0) {
         cout << "Init Image Error " << IMG_GetError() << endl;
+        return -1;
+    }
+    
+    if(TTF_Init() < -1) {
+        cout << "TTF Error " << TTF_GetError() << endl;
         return -1;
     }
 
@@ -93,13 +98,9 @@ int main(int argc, char* argv[]) {
     console.Println("Starting...");
     SDL_Delay(1000);
     core->StartInit();
-    TTF_Init();
 
     while (Core::corerunning) {
         //Uint64 startF = SDL_GetPerformanceCounter();
-        
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
         
         core->Event(window);
 
@@ -112,6 +113,8 @@ int main(int argc, char* argv[]) {
 
         SDL_GL_SwapWindow(window);
     }
+    
+    core->Destroy();
     
     SDL_GL_DeleteContext(context);
     SDL_DestroyWindow(window);

@@ -1,6 +1,6 @@
 #include "core.hpp"
 
-Game game;
+Game *game;
 
 Core::Core() {
     Console console;
@@ -9,6 +9,7 @@ Core::Core() {
 
 Core::~Core() {
     Console console;
+    delete game;
     console.Println("Core purged successfully");
 }
 
@@ -16,7 +17,7 @@ void Core::StartInit() {
     /* Start at Run once. */
     _windowWidth = _WINDOW_WIDTH;
     _windowHeight = _WINDOW_HEIGHT;
-    game.Start();
+    game->Start();
 }
 
 void Core::Event(SDL_Window* window) {
@@ -35,10 +36,10 @@ void Core::Event(SDL_Window* window) {
             }
         }
         
-        game.Event(event);
+        game->Event(event);
     }
     
-    game.RawEvent(event, _windowWidth, _windowHeight);
+    game->RawEvent(event, _windowWidth, _windowHeight);
 }
 
 void Core::Update() {
@@ -50,24 +51,32 @@ void Core::Update() {
         timeSeconds++;
         //std::cout << Frame << "\r" << std::endl;
     }
-    game.Update(_windowWidth, _windowHeight);
+    game->Update(_windowWidth, _windowHeight);
 }
 
 void Core::Render() {
     /*  Render Codes. cleaner codes. */
     
-    /*glShadeModel(GL_SMOOTH);
+    glShadeModel(GL_SMOOTH);
+    glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
     glClearDepth(1.0f);
     glDepthFunc(GL_LEQUAL);
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
     
     glBlendFunc(GL_ONE, GL_ONE);
-    glEnable(GL_BLEND);*/
+    glEnable(GL_BLEND);
     
     // Display
     glViewport(0, 0, _windowWidth*2, _windowHeight*2);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    
     glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);
     
     // Game
-    game.Render();
+    game->Render();
+}
+
+void Core::Destroy() {
+    game->Destroy();
 }
