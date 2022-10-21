@@ -15,12 +15,29 @@ Fonts::~Fonts() {
     
 }
 
-void Fonts::RenderFont(TTF_Font *font, const char* content, SDL_Rect *position, SDL_Color color) {
-    //cout << "Error loading font: " << TTF_GetError() << endl;
-    
+GLuint stringTex = 0;
+
+GLuint TextToTexture(TTF_Font* font, SDL_Color color, const char* text)
+{
+    SDL_Color bgcolor = {0, 0, 0, 255};
+    SDL_Surface* msg = TTF_RenderText_Blended(font, text, color);
+
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, msg->w, msg->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, msg->pixels );
+
+    SDL_FreeSurface(msg);
+    return tex;
+}
+
+void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth) {
     //OpenGL Thingy that doesn't even work
     
-    GLuint texture;
+    /*GLuint texture;
     SDL_Surface *initial;
     SDL_Surface *intermediary;
     int w, h;
@@ -36,10 +53,10 @@ void Fonts::RenderFont(TTF_Font *font, const char* content, SDL_Rect *position, 
     // GL New Texture
     glGenTextures(1, &texture);
     glBindTexture(GL_TEXTURE_2D, texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, intermediary->pixels);
     
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, 4, w, h, 0, GL_BGRA, GL_UNSIGNED_BYTE, intermediary->pixels);
     
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, texture);
@@ -64,8 +81,25 @@ void Fonts::RenderFont(TTF_Font *font, const char* content, SDL_Rect *position, 
     SDL_FreeSurface(intermediary);
     glDeleteTextures(1, &texture);
     
-    // OpenGL Part 2
+    //cout << "Error loading font: " << TTF_GetError() << endl;*/
     
+    // OpenGL Part 2
+    stringTex = TextToTexture(font, color, content);
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glColor3ub( 255, 255, 255 );
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, stringTex);
+    glTranslated(x, y, z);
+    glBegin(GL_QUADS);
+        glTexCoord2f( 0.0f, 0.0f ); glVertex2f( -1.0f, 1.0f );
+        glTexCoord2f( 1.0f, 0.0f ); glVertex2f( objWidth, 1.0f );
+        glTexCoord2f( 1.0f, 1.0f ); glVertex2f( objWidth, -1.0f );
+        glTexCoord2f( 0.0f, 1.0f ); glVertex2f( -1.0f,  -1.0f );
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
 }
 
 int Fonts::round(double x)

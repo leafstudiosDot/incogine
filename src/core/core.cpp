@@ -17,6 +17,11 @@ void Core::StartInit() {
     /* Start at Run once. */
     _windowWidth = _WINDOW_WIDTH;
     _windowHeight = _WINDOW_HEIGHT;
+    
+    glDepthFunc(GL_LESS);
+    glEnable(GL_DEPTH_TEST);
+    glShadeModel(GL_SMOOTH);
+    
     game->Start();
 }
 
@@ -57,21 +62,27 @@ void Core::Update() {
 void Core::Render() {
     /*  Render Codes. cleaner codes. */
     
-    glShadeModel(GL_SMOOTH);
+    /*glShadeModel(GL_SMOOTH);
     glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
     glClearDepth(1.0f);
     glDepthFunc(GL_LEQUAL);
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
     
-    glBlendFunc(GL_ONE, GL_ONE);
-    glEnable(GL_BLEND);
+    glEnable( GL_BLEND );
+    glBlendFunc( GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA );
+    glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);*/
     
     // Display
-    glViewport(0, 0, _windowWidth*2, _windowHeight*2);
+    /*glViewport(0, 0, _windowWidth*2, _windowHeight*2);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
+    glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);*/
     
-    glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);
+    glViewport(0, 0, _windowWidth*2, _windowHeight*2);
+
+    glClearColor(0.0f, 0.0f, 1.0f, 0.0f);
+    glClearDepth(1.0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     
     // Game
     game->Render();

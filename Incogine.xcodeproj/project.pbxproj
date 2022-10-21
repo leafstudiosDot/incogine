@@ -24,7 +24,7 @@
 		8EF41AB3282F2D51000CB559 /* core.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF41AB1282F2D51000CB559 /* core.cpp */; };
 		8EF8AD1029011B5700792048 /* fonts.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EF8AD0E29011B5700792048 /* fonts.cpp */; };
 		8EF8AD1229011BB300792048 /* SDL2_ttf.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EF8AD1129011BB300792048 /* SDL2_ttf.framework */; };
-		8EF8AD162902059C00792048 /* def_font.ttf in CopyFiles */ = {isa = PBXBuildFile; fileRef = 8EF8AD152902059C00792048 /* def_font.ttf */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		8EF8AD162902059C00792048 /* def_font.ttf in Copy Files (Fonts) */ = {isa = PBXBuildFile; fileRef = 8EF8AD152902059C00792048 /* def_font.ttf */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXBuildRule section */
@@ -43,14 +43,25 @@
 /* End PBXBuildRule section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		8E5A11AC282E0D1400CB0E8C /* CopyFiles */ = {
+		8E5A11AC282E0D1400CB0E8C /* Copy Files (Fonts) */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 12;
-			dstPath = "";
+			dstPath = ../Resources/fonts;
 			dstSubfolderSpec = 16;
 			files = (
-				8EF8AD162902059C00792048 /* def_font.ttf in CopyFiles */,
+				8EF8AD162902059C00792048 /* def_font.ttf in Copy Files (Fonts) */,
 			);
+			name = "Copy Files (Fonts)";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8EF8AD1729028D4900792048 /* Copy Files (Resources) */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = ../Resources;
+			dstSubfolderSpec = 7;
+			files = (
+			);
+			name = "Copy Files (Resources)";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -221,7 +232,8 @@
 			buildPhases = (
 				8E5A11AA282E0D1400CB0E8C /* Sources */,
 				8E5A11AB282E0D1400CB0E8C /* Frameworks */,
-				8E5A11AC282E0D1400CB0E8C /* CopyFiles */,
+				8EF8AD1729028D4900792048 /* Copy Files (Resources) */,
+				8E5A11AC282E0D1400CB0E8C /* Copy Files (Fonts) */,
 				8EF8AD142901780100792048 /* ShellScript */,
 			);
 			buildRules = (
