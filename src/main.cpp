@@ -101,6 +101,7 @@ int main(int argc, char* argv[]) {
 
     while (Core::corerunning) {
         //Uint64 startF = SDL_GetPerformanceCounter();
+        Uint32 enginetick = SDL_GetTicks();
         
         core->Event(window);
 
@@ -110,6 +111,10 @@ int main(int argc, char* argv[]) {
         /*Uint64 endF = SDL_GetPerformanceCounter();
         float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
         SDL_Delay(floor(16.666f - elapsedMS));*/
+        
+        if((1000/60)>(SDL_GetTicks()-enginetick)) {
+            SDL_Delay((1000/60)-(SDL_GetTicks()-enginetick));
+        }
 
         SDL_GL_SwapWindow(window);
     }
