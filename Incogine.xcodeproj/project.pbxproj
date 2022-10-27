@@ -10,7 +10,6 @@
 		8E5A11B2282E0D1400CB0E8C /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E5A11B1282E0D1400CB0E8C /* main.cpp */; };
 		8EA6654F282E0E4D00E12605 /* console.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EA6654E282E0E4D00E12605 /* console.cpp */; };
 		8EA66553282E0F9800E12605 /* SDL2.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA66552282E0F9800E12605 /* SDL2.framework */; };
-		8EA66554282E117000E12605 /* glad.c in Sources */ = {isa = PBXBuildFile; fileRef = 8EA66549282E0DC800E12605 /* glad.c */; };
 		8EA66557282E12B200E12605 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA66556282E12B200E12605 /* AppKit.framework */; };
 		8EA66559282E12C200E12605 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA66558282E12C200E12605 /* IOKit.framework */; };
 		8EA6655B282E12CD00E12605 /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA6655A282E12CD00E12605 /* CoreFoundation.framework */; };
@@ -308,7 +307,6 @@
 				8EA6654F282E0E4D00E12605 /* console.cpp in Sources */,
 				8EF8AD1029011B5700792048 /* fonts.cpp in Sources */,
 				8EC0F63728FD381500218372 /* game.cpp in Sources */,
-				8EA66554282E117000E12605 /* glad.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
