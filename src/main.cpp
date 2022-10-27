@@ -1,5 +1,5 @@
 #include "core/core.hpp"
-Core *core = nullptr;
+Core* core = nullptr;
 
 Console console;
 
@@ -11,14 +11,13 @@ int width = _WINDOW_WIDTH;
 int height = _WINDOW_HEIGHT;
 
 static int resizingEventWatcher(void* data, SDL_Event* event) {
-  if (event->type == SDL_WINDOWEVENT &&
-      event->window.event == SDL_WINDOWEVENT_RESIZED) {
-    SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
-    if (window == (SDL_Window*)data) {
-        // Resizing...
+    if (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_RESIZED) {
+        SDL_Window* window = SDL_GetWindowFromID(event->window.windowID);
+        if (window == (SDL_Window*)data) {
+            // Resizing...
+        }
     }
-  }
-  return 0;
+    return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -27,9 +26,9 @@ int main(int argc, char* argv[]) {
 #elif __APPLE__
     system("clear");
 #endif
-    
+
     console.Println("Incogine by leafstudiosDot");
-    
+
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
@@ -85,16 +84,16 @@ int main(int argc, char* argv[]) {
 
     SDL_GLContext context;
     context = SDL_GL_CreateContext(window);
-    if( SDL_GL_SetSwapInterval(1) < 0 )
+    if (SDL_GL_SetSwapInterval(1) < 0)
     {
-        printf( "Warning: Unable to enable VSync: %s\n", SDL_GetError() );
+        printf("Warning: Unable to enable VSync: %s\n", SDL_GetError());
     }
-    
-    glewExperimental=GL_TRUE;
+
+    glewExperimental = GL_TRUE;
     //GLenum glew_init_error = glewInit();
-    
+
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
-    
+
     console.Println("Starting...");
     SDL_Delay(1000);
     core->StartInit();
