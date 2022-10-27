@@ -17,3 +17,5 @@ xcuserdata/
 *.o
 
 src/side_project
+.vs
+Incogine.vcxproj.user

@@ -13,8 +13,8 @@
     #include <OpenGL/gl.h>
     #include <OpenGL/glu.h>
 #elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-    #include <GL/GL.h>
-    #include <GL/GLU.h>
+    #include <gl/GL.h>
+    #include <gl/GLU.h>
     //#include <GL/glut.h>
 #else
     #include <GL/gl.h>
