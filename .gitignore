@@ -17,8 +17,6 @@ xcuserdata/
 *.o
 
 src/side_project
-"Icon\r"
-Icon
-
 .vs
 Incogine.vcxproj.user
+Icon
