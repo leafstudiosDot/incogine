@@ -79,17 +79,21 @@ void Core::Render() {
     // Game
     game->Render();
     
-    /*glDepthMask(GL_FALSE);
+    // HUD
+    glDepthMask(GL_FALSE);
     glDisable(GL_DEPTH_TEST);
     glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
     glLoadIdentity();
-    gluOrtho2D(0,_windowWidth,0,_windowHeight);
+    glOrtho(0, _windowWidth, _windowHeight, 0, -10, 10);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_CULL_FACE);
+    glClear(GL_DEPTH_BUFFER_BIT);
     game->RenderCanvas();
-    glDepthMask(GL_TRUE);
-    glEnable(GL_DEPTH_TEST);*/
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }
 
 void Core::Destroy() {
