@@ -21,6 +21,8 @@ public:
     void Start();
     void Update(int _windowWidth, int _windowHeight);
     void Render();
+    void RenderCanvas();
+    void Destroy();
     
 private:
     int SceneNow;
