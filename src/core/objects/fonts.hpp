@@ -16,6 +16,7 @@ public:
     ~Fonts();
     
     void RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight);
+    void RenderFontHUD(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight);
 
 private:
     int round(double x);

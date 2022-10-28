@@ -49,6 +49,22 @@ void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, fl
     glDisable(GL_TEXTURE_2D);
 }
 
+void Fonts::RenderFontHUD(TTF_Font *font, const char *content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight) {
+    stringTex = TextToTexture(font, color, content);
+
+    glColor3ub( 255, 255, 255 );
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, stringTex);
+    glTranslated(x, y, z);
+    glBegin(GL_QUADS);
+        glTexCoord2f( 0.0f, 0.0f ); glVertex2f( (objWidth*(-1)), objHeight );
+        glTexCoord2f( 1.0f, 0.0f ); glVertex2f( objWidth, objHeight );
+        glTexCoord2f( 1.0f, 1.0f ); glVertex2f( objWidth, (objHeight*(-1)) );
+        glTexCoord2f( 0.0f, 1.0f ); glVertex2f( (objWidth*(-1)), (objHeight*(-1)) );
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+}
+
 int Fonts::round(double x)
 {
     return (int)(x + 0.5);
