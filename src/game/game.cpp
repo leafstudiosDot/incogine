@@ -162,6 +162,22 @@ void Game::Event(SDL_Event event) {
                 break;
         }
     }
+    
+    // Mouse
+    if (event.type == SDL_MOUSEMOTION) {
+        int mouseposx = event.motion.xrel, mouseposy = event.motion.yrel;
+        if (is3D) {
+            if (mouseposx < 1) {
+                angle -= mouseposx * (camsensitivity + 0.01f);
+                camx = sin(angle);
+                camy = -cos(angle);
+            } else {
+                angle += (mouseposx * (camsensitivity + 0.01f))*(-1);
+                camx = sin(angle);
+                camy = -cos(angle);
+            }
+        }
+    }
 }
 
 void Game::Start() {
@@ -179,6 +195,10 @@ void Game::Start() {
     
     camx = sin(angle);
     camy = -cos(angle);
+    
+    if (is3D) {
+        SDL_SetRelativeMouseMode(SDL_TRUE);
+    }
 }
 
 void Game::Update(int _windowWidth, int _windowHeight) {
