@@ -27,7 +27,7 @@ void Core::StartInit() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    game->Start();
+    game->Start(_windowWidth, _windowHeight);
 }
 
 void Core::Event(SDL_Window* window) {
@@ -46,7 +46,7 @@ void Core::Event(SDL_Window* window) {
             }
         }
         
-        game->Event(event);
+        game->Event(event, _windowWidth, _windowHeight);
     }
     
     game->RawEvent(event, _windowWidth, _windowHeight);
@@ -77,7 +77,7 @@ void Core::Render() {
     gluPerspective(70.0f, _windowWidth / (float)_windowHeight, 0.1f, 300.0f);
     
     // Game
-    game->Render();
+    game->Render(_windowWidth, _windowHeight);
     
     // HUD
     glDepthMask(GL_FALSE);
@@ -90,7 +90,7 @@ void Core::Render() {
     glLoadIdentity();
     glDisable(GL_CULL_FACE);
     glClear(GL_DEPTH_BUFFER_BIT);
-    game->RenderCanvas();
+    game->RenderCanvas(_windowWidth, _windowHeight);
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
