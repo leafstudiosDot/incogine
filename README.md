@@ -3,9 +3,10 @@ A proprietary engine, mostly used for games by leafstudiosDot.
 
 ## Bundling application
 ### macOS
-- Editing soon
+#### Method 1
+- Xcode for bundling an application.
 ### Windows
-- Editing soon
+- Visual Studio 2022 for bundling an application. (Still working on it)
 ### Linux
 - Editing soon
 ## License
