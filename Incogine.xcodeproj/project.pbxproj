@@ -69,7 +69,6 @@
 		8E37EEC528404113006BF561 /* AppIcon.iconset */ = {isa = PBXFileReference; lastKnownFileType = folder.iconset; name = AppIcon.iconset; path = assets/macOS/AppIcon.iconset; sourceTree = "<group>"; };
 		8E5A11AE282E0D1400CB0E8C /* Incogine */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Incogine; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E5A11B1282E0D1400CB0E8C /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
-		8EA66549282E0DC800E12605 /* glad.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = glad.c; sourceTree = "<group>"; };
 		8EA6654D282E0E4D00E12605 /* console.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = console.h; sourceTree = "<group>"; };
 		8EA6654E282E0E4D00E12605 /* console.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = console.cpp; sourceTree = "<group>"; };
 		8EA66550282E0F2300E12605 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -142,7 +141,6 @@
 			children = (
 				8EC0F63428FD37DA00218372 /* game */,
 				8EF41AB0282F2D14000CB559 /* core */,
-				8EA66548282E0DC800E12605 /* glad */,
 				8E5A11B1282E0D1400CB0E8C /* main.cpp */,
 			);
 			path = src;
@@ -163,14 +161,6 @@
 				8EA6654D282E0E4D00E12605 /* console.h */,
 			);
 			path = console;
-			sourceTree = "<group>";
-		};
-		8EA66548282E0DC800E12605 /* glad */ = {
-			isa = PBXGroup;
-			children = (
-				8EA66549282E0DC800E12605 /* glad.c */,
-			);
-			path = glad;
 			sourceTree = "<group>";
 		};
 		8EA66551282E0F9800E12605 /* Frameworks */ = {
