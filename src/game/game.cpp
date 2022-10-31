@@ -185,7 +185,11 @@ void Game::Event(SDL_Event event, int _windowWidth, int _windowHeight) {
 void Game::Start(int _windowWidth, int _windowHeight) {
     // Executes as game launches
     Console console;
+    #if __APPLE__
     const char fontFile[] = "../Resources/fonts/def_font.ttf";
+    #elif EMSCRIPTEN
+    const char fontFile[] = "/assets/fonts/def_font.ttf";
+    #endif
     
     if(!(font = TTF_OpenFont(fontFile, 100))) {
         printf("Error loading font: %s", TTF_GetError());

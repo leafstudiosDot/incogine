@@ -16,6 +16,10 @@
     #include <gl/GL.h>
     #include <gl/GLU.h>
     //#include <GL/glut.h>
+#elif __EMSCRIPTEN__
+    #include <OpenGL/gl.h>
+    #include <OpenGL/glu.h>
+    #include <emscripten.h>
 #else
     #include <GL/gl.h>
     #include <GL/glu.h>

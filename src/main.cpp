@@ -1,5 +1,6 @@
 #include "core/core.hpp"
 Core* core = nullptr;
+SDL_Window* window;
 
 Console console;
 
@@ -16,6 +17,41 @@ static int resizingEventWatcher(void* data, SDL_Event* event) {
         }
     }
     return 0;
+}
+
+void CoreLoop() {
+    //Uint64 startF = SDL_GetPerformanceCounter();
+    Uint32 enginetick = SDL_GetTicks();
+    
+    core->Event(window);
+
+    core->Update();
+    core->Render();
+    
+    /*Uint64 endF = SDL_GetPerformanceCounter();
+    float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
+    SDL_Delay(floor(16.666f - elapsedMS));*/
+    
+    if((1000/60)>(SDL_GetTicks()-enginetick)) {
+        SDL_Delay((1000/60)-(SDL_GetTicks()-enginetick));
+    }
+
+    SDL_GL_SwapWindow(window);
+}
+
+void CoreInit() {
+    console.Println("Starting...");
+    SDL_Delay(1000);
+    core->StartInit();
+    
+#ifndef EMSCRIPTEN
+    while (Core::corerunning) {
+        CoreLoop();
+    }
+#else
+    console.Println("Incogine Running in Web platform");
+    emscripten_set_main_loop(CoreLoop, 0, 1);
+#endif
 }
 
 int main(int argc, char* argv[]) {
@@ -36,7 +72,6 @@ int main(int argc, char* argv[]) {
     SDL_GL_SetAttribute( SDL_GL_GREEN_SIZE, 8 );
     SDL_GL_SetAttribute( SDL_GL_BLUE_SIZE, 8 );
     SDL_GL_SetAttribute( SDL_GL_ALPHA_SIZE, 8 );
-    SDL_Window* window = nullptr;
     
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         //console.Println("Init Core Error " + SDL_GetError());
@@ -87,34 +122,13 @@ int main(int argc, char* argv[]) {
         printf("Warning: Unable to enable VSync: %s\n", SDL_GetError());
     }
 
+    #ifndef __EMSCRIPTEN__
     glewExperimental = GL_TRUE;
+    #endif
     //GLenum glew_init_error = glewInit();
 
     //gladLoadGLLoader(SDL_GL_GetProcAddress);
-
-    console.Println("Starting...");
-    SDL_Delay(1000);
-    core->StartInit();
-
-    while (Core::corerunning) {
-        //Uint64 startF = SDL_GetPerformanceCounter();
-        Uint32 enginetick = SDL_GetTicks();
-        
-        core->Event(window);
-
-        core->Update();
-        core->Render();
-        
-        /*Uint64 endF = SDL_GetPerformanceCounter();
-        float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
-        SDL_Delay(floor(16.666f - elapsedMS));*/
-        
-        if((1000/60)>(SDL_GetTicks()-enginetick)) {
-            SDL_Delay((1000/60)-(SDL_GetTicks()-enginetick));
-        }
-
-        SDL_GL_SwapWindow(window);
-    }
+    CoreInit();
     
     core->Destroy();
     
