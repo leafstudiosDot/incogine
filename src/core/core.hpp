@@ -34,6 +34,11 @@
 #define _WINDOW_WIDTH 1280
 #define _WINDOW_HEIGHT 720
 
+#define _COMPANY_NAME "leafstudiosDot"
+#define _PROJ_NAME "Incogine"
+
+#define _WINDOW_NAME "leafstudiosDot"
+
 class Core {
 public:
     Core();
@@ -46,13 +51,14 @@ public:
     void Destroy();
     
     static bool corerunning;
-    
+    char *prefpath;
 private:
     int SceneIndex;
     int Frame;
     int timeSeconds;
     int _windowWidth;
     int _windowHeight;
+    void InitSysPrefPath();
 };
 
 #endif

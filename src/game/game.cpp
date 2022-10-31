@@ -144,7 +144,7 @@ void Game::Event(SDL_Event event, int _windowWidth, int _windowHeight) {
     if(event.type == SDL_KEYDOWN) {
         switch(event.key.keysym.sym){
         case SDLK_LEFT:
-            console.Println("Left Key Pressed");
+            //console.Println("Left Key Pressed");
             break;
         case SDLK_r:
             playery = 0;
@@ -160,7 +160,7 @@ void Game::Event(SDL_Event event, int _windowWidth, int _windowHeight) {
     if(event.type == SDL_KEYUP) {
         switch(event.key.keysym.sym) {
             case SDLK_LEFT:
-                console.Println("Left Key Lifted");
+                //console.Println("Left Key Lifted");
                 break;
         }
     }
@@ -241,8 +241,8 @@ void Game::Render(int _windowWidth, int _windowHeight) {
     // Debug Point
     //const char* deb = (char)playerx + ", " + (char)playery;
     //renderdebug_position2->RenderFont(font, "", 0, 0, 0, {255, 255, 255, 255}, 0.25f, 0.2f);
-    cout << "X: " << playerx << " Y: " << playery << endl;
-    cout << "CamX: " << camx << " CamY: " << camy << endl;
+    //cout << "X: " << playerx << " Y: " << playery << endl;
+    //cout << "CamX: " << camx << " CamY: " << camy << endl;
     glPushMatrix();
     glTranslated(0, 3.0f, 0);
     glBegin(GL_QUADS);

@@ -27,6 +27,7 @@ void Core::StartInit() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
+    InitSysPrefPath();
     game->Start(_windowWidth, _windowHeight);
 }
 
@@ -98,4 +99,27 @@ void Core::Render() {
 
 void Core::Destroy() {
     game->Destroy();
+}
+
+char *prefpath = NULL;
+
+void Core::InitSysPrefPath() {
+    
+    /*
+        Windows:
+        C:\Users\${Username}\AppData\Roaming\${_COMPANY_NAME}\${_PROJ_NAME}\
+
+        Linux:
+        /home/${Username}/.local/share/${_PROJ_NAME}/
+
+        macOS:
+        /Users/${Username}/Library/Application Support/${_PROJ_NAME}/
+    */
+    
+    char *base_path = SDL_GetPrefPath(_COMPANY_NAME, _PROJ_NAME);
+    if (base_path) {
+        prefpath = base_path;
+    } else {
+        cout << "Cannot write in preferences path, Saving and Loading disabled!" << endl;
+    }
 }

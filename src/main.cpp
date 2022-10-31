@@ -3,8 +3,6 @@ Core* core = nullptr;
 
 Console console;
 
-#define _WINDOW_NAME "leafstudiosDot"
-
 bool Core::corerunning;
 
 int width = _WINDOW_WIDTH;
