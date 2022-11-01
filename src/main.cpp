@@ -5,6 +5,7 @@ SDL_Window* window;
 Console console;
 
 bool Core::corerunning;
+bool Core::devMode;
 
 int width = _WINDOW_WIDTH;
 int height = _WINDOW_HEIGHT;
@@ -113,6 +114,16 @@ int main(int argc, char* argv[]) {
 
     window = SDL_CreateWindow(_WINDOW_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, windowWidth, windowHeight, flags);
     SDL_AddEventWatch(resizingEventWatcher, window);
+    
+    for (int i = 0; i < argc; ++i) {
+        if (strcmp(argv[i], "-dev") == 0) {
+            Core::devMode = true;
+            cout << "Development Mode enabled" << endl;
+        } else {
+            Core::devMode = false;
+        }
+    }
+    
     Core::corerunning = true;
 
     SDL_GLContext context;

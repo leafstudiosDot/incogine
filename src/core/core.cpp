@@ -91,7 +91,7 @@ void Core::Render() {
     glLoadIdentity();
     glDisable(GL_CULL_FACE);
     glClear(GL_DEPTH_BUFFER_BIT);
-    game->RenderCanvas(_windowWidth, _windowHeight);
+    game->RenderCanvas(_windowWidth, _windowHeight, Core::devMode);
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);

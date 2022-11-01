@@ -20,7 +20,7 @@ public:
     void Start(int _windowWidth, int _windowHeight);
     void Update(int _windowWidth, int _windowHeight);
     void Render(int _windowWidth, int _windowHeight);
-    void RenderCanvas(int _windowWidth, int _windowHeight);
+    void RenderCanvas(int _windowWidth, int _windowHeight, bool devMode);
     void Destroy();
     
 private:

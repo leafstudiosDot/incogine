@@ -55,6 +55,7 @@ public:
     void Destroy();
     
     static bool corerunning;
+    static bool devMode;
     char *prefpath;
 private:
     int SceneIndex;

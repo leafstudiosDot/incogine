@@ -259,10 +259,7 @@ void Game::Render(int _windowWidth, int _windowHeight) {
     glPopMatrix();
 }
 
-SDL_Color _whatsoeva_hud_color;
-Fonts *whatsoeva_hud;
-
-void Game::RenderCanvas(int _windowWidth, int _windowHeight) {
+void Game::RenderCanvas(int _windowWidth, int _windowHeight, bool devMode) {
     // Render HUD
     glPushMatrix();
     glTranslatef(hudx, hudy, 0);
