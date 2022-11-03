@@ -12,6 +12,8 @@ TTF_Font *font;
 int p_windowWidth;
 int p_windowHeight;
 
+int frame = 0;
+
 Game::Game() {
     // Initialize Game
     Console console;
@@ -155,6 +157,11 @@ void Game::Update(int _windowWidth, int _windowHeight) {
     // Executes every frame at game
     p_windowWidth = _windowWidth;
     p_windowHeight = _windowHeight;
+    
+    if (frame <= 300) {
+        frame++;
+    }
+    //cout << frame << endl;
 }
 
 Fonts *lsDotLogo;
@@ -175,14 +182,27 @@ void Game::Render(int _windowWidth, int _windowHeight) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
     }
     
-    glPushMatrix();
-    glTranslated(-5.1f, 0.0f, -10.0f);
-    _lsDotLogo_color.r = 255;
-    _lsDotLogo_color.g = 255;
-    _lsDotLogo_color.b = 255;
-    _lsDotLogo_color.a = 255;
-    lsDotLogo->RenderFont(logofont, "leafstudiosDot", 5.0f, 0, 0, _lsDotLogo_color, 3.0f, 0.5f);
-    glPopMatrix();
+    if (frame < 130) {
+        glPushMatrix();
+        glTranslated(-5.1f, 0.0f, -10.0f);
+        _lsDotLogo_color.r = 255;
+        _lsDotLogo_color.g = 255;
+        _lsDotLogo_color.b = 255;
+        _lsDotLogo_color.a = 255;
+        lsDotLogo->RenderFont(logofont, "leafstudiosDot", 5.0f, 0, 0, _lsDotLogo_color, 3.0f, 0.5f);
+        glPopMatrix();
+    } else if (frame >= 130 && frame < 280) {
+        glPushMatrix();
+        glTranslated(-5.1f, 0.0f, -10.0f);
+        _lsDotLogo_color.r = 255;
+        _lsDotLogo_color.g = 255;
+        _lsDotLogo_color.b = 255;
+        _lsDotLogo_color.a = 255;
+        lsDotLogo->RenderFont(logofont, "Powered by Incogine", 5.0f, 0, 0, _lsDotLogo_color, 2.6f, 0.3f);
+        glPopMatrix();
+    } else if (frame == 301) {
+        // New Scene
+    }
 }
 
 void Game::RenderCanvas(int _windowWidth, int _windowHeight, bool devMode) {
