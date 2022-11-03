@@ -2,6 +2,8 @@
 
 Game *game;
 
+TTF_Font *__logofont;
+
 Core::Core() {
     Console console;
     console.Println("Core initialized successfully");
@@ -28,7 +30,16 @@ void Core::StartInit() {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     InitSysPrefPath();
-    game->Start(_windowWidth, _windowHeight);
+    
+    #if __APPLE__
+    const char __fontFile1[] = "../Resources/fonts/arlrdbd.ttf";
+    #elif EMSCRIPTEN
+    const char __fontFile1[] = "/assets/fonts/arlrdbd.ttf";
+    #endif
+
+    if(!(__logofont = TTF_OpenFont(__fontFile1, 100))) {
+        printf("Error loading font: %s", TTF_GetError());
+    }
 }
 
 void Core::Event(SDL_Window* window) {
@@ -65,6 +76,9 @@ void Core::Update() {
     game->Update(_windowWidth, _windowHeight);
 }
 
+Fonts *__lsDotLogo;
+SDL_Color __lsDotLogo_color;
+
 void Core::Render() {
     /*  Render Codes. cleaner codes. */
     
@@ -78,7 +92,34 @@ void Core::Render() {
     gluPerspective(70.0f, _windowWidth / (float)_windowHeight, 0.1f, 300.0f);
     
     // Game
-    game->Render(_windowWidth, _windowHeight);
+    if (Frame < 130) {
+        gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
+        glPushMatrix();
+        glTranslated(-5.1f, 0.0f, -10.0f);
+        __lsDotLogo_color.r = 255;
+        __lsDotLogo_color.g = 255;
+        __lsDotLogo_color.b = 255;
+        __lsDotLogo_color.a = 255;
+        __lsDotLogo->RenderFont(__logofont, "leafstudiosDot", 5.0f, 0, 0, __lsDotLogo_color, 3.0f, 0.5f);
+        glPopMatrix();
+    } else if (Frame >= 130 && Frame < 280) {
+        gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
+        glPushMatrix();
+        glTranslated(-5.1f, 0.0f, -10.0f);
+        __lsDotLogo_color.r = 255;
+        __lsDotLogo_color.g = 255;
+        __lsDotLogo_color.b = 255;
+        __lsDotLogo_color.a = 255;
+        __lsDotLogo->RenderFont(__logofont, "Powered by Incogine", 5.0f, 0, 0, __lsDotLogo_color, 2.6f, 0.3f);
+        glPopMatrix();
+    } else if (Frame >= 280) {
+        // New Scene
+        if (Frame == 280) {
+            game->Start(_windowWidth, _windowHeight);
+        }
+        
+        game->Render(_windowWidth, _windowHeight);
+    }
     
     // HUD
     glDepthMask(GL_FALSE);
@@ -91,14 +132,20 @@ void Core::Render() {
     glLoadIdentity();
     glDisable(GL_CULL_FACE);
     glClear(GL_DEPTH_BUFFER_BIT);
-    game->RenderCanvas(_windowWidth, _windowHeight, Core::devMode);
+    if (Frame >= 280) {
+        // New Game Render Canvas
+        game->RenderCanvas(_windowWidth, _windowHeight, Core::devMode);
+    }
     glMatrixMode(GL_PROJECTION);
     glPopMatrix();
     glMatrixMode(GL_MODELVIEW);
 }
 
 void Core::Destroy() {
-    game->Destroy();
+    if (Frame >= 280) {
+        game->Destroy();
+    }
+    TTF_CloseFont(__logofont);
 }
 
 char *prefpath = NULL;

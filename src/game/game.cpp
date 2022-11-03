@@ -7,8 +7,7 @@
 
 #include "game.hpp"
 
-TTF_Font *logofont;
-TTF_Font *font;
+TTF_Font *fontsample;
 int p_windowWidth;
 int p_windowHeight;
 
@@ -127,17 +126,12 @@ void Game::Start(int _windowWidth, int _windowHeight) {
     // Executes as game launches
     Console console;
     #if __APPLE__
-    const char fontFile1[] = "../Resources/fonts/def_font.ttf";
-    const char fontFile2[] = "../Resources/fonts/arlrdbd.ttf";
+    const char fontFile3[] = "../Resources/fonts/def_font.ttf";
     #elif EMSCRIPTEN
-    const char fontFile1[] = "/assets/fonts/def_font.ttf";
-    const char fontFile2[] = "/assets/fonts/arlrdbd.ttf";
+    const char fontFile3[] = "/assets/fonts/def_font.ttf";
     #endif
     
-    if(!(font = TTF_OpenFont(fontFile1, 100))) {
-        printf("Error loading font: %s", TTF_GetError());
-    }
-    if(!(logofont = TTF_OpenFont(fontFile2, 100))) {
+    if(!(fontsample = TTF_OpenFont(fontFile3, 100))) {
         printf("Error loading font: %s", TTF_GetError());
     }
     
@@ -157,15 +151,11 @@ void Game::Update(int _windowWidth, int _windowHeight) {
     // Executes every frame at game
     p_windowWidth = _windowWidth;
     p_windowHeight = _windowHeight;
-    
-    if (frame <= 300) {
-        frame++;
-    }
     //cout << frame << endl;
 }
 
-Fonts *lsDotLogo;
-SDL_Color _lsDotLogo_color;
+Fonts *fontsampletext;
+SDL_Color _fontsample_color;
 
 void Game::Render(int _windowWidth, int _windowHeight) {
     // Render Game
@@ -182,27 +172,14 @@ void Game::Render(int _windowWidth, int _windowHeight) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
     }
     
-    if (frame < 130) {
-        glPushMatrix();
-        glTranslated(-5.1f, 0.0f, -10.0f);
-        _lsDotLogo_color.r = 255;
-        _lsDotLogo_color.g = 255;
-        _lsDotLogo_color.b = 255;
-        _lsDotLogo_color.a = 255;
-        lsDotLogo->RenderFont(logofont, "leafstudiosDot", 5.0f, 0, 0, _lsDotLogo_color, 3.0f, 0.5f);
-        glPopMatrix();
-    } else if (frame >= 130 && frame < 280) {
-        glPushMatrix();
-        glTranslated(-5.1f, 0.0f, -10.0f);
-        _lsDotLogo_color.r = 255;
-        _lsDotLogo_color.g = 255;
-        _lsDotLogo_color.b = 255;
-        _lsDotLogo_color.a = 255;
-        lsDotLogo->RenderFont(logofont, "Powered by Incogine", 5.0f, 0, 0, _lsDotLogo_color, 2.6f, 0.3f);
-        glPopMatrix();
-    } else if (frame == 301) {
-        // New Scene
-    }
+    glPushMatrix();
+    glTranslated(-5.1f, 0.0f, -10.0f);
+    _fontsample_color.r = 255;
+    _fontsample_color.g = 255;
+    _fontsample_color.b = 255;
+    _fontsample_color.a = 255;
+    fontsampletext->RenderFont(fontsample, "This is a game", 5.0f, 0, 0, _fontsample_color, 9.5f, 2.1f);
+    glPopMatrix();
 }
 
 void Game::RenderCanvas(int _windowWidth, int _windowHeight, bool devMode) {
@@ -230,5 +207,5 @@ void Game::RenderCanvas(int _windowWidth, int _windowHeight, bool devMode) {
 
 void Game::Destroy() {
     // Destroy Game
-    TTF_CloseFont(font);
+    
 }
