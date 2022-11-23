@@ -113,6 +113,7 @@ void Core::Render() {
     } else if (Frame >= 280) {
         // New Scene
         if (Frame == 280) {
+            delete __lsDotLogo;
             game->Start(_windowWidth, _windowHeight);
         }
         
@@ -140,6 +141,7 @@ void Core::Render() {
 }
 
 void Core::Destroy() {
+    delete __lsDotLogo;
     if (Frame >= 280) {
         game->Destroy();
     }
