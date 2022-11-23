@@ -134,10 +134,8 @@ void Game::Start(int _windowWidth, int _windowHeight) {
         fontFile = "/assets/fonts/def_font.ttf";
     #endif
     
-    
     fontsampletext = new Fonts(fontFile);
 
-    
     glDepthFunc(GL_LESS);
     glEnable(GL_DEPTH_TEST);
     glShadeModel(GL_SMOOTH);

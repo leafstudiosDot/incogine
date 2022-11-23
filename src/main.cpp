@@ -21,21 +21,25 @@ static int resizingEventWatcher(void* data, SDL_Event* event) {
 }
 
 void CoreLoop() {
-    //Uint64 startF = SDL_GetPerformanceCounter();
-    Uint32 enginetick = SDL_GetTicks();
+    float elapsed = 0.0f;
+    float elapsedMS = 0.0f;
+    Uint64 startF = SDL_GetPerformanceCounter();
+    Uint32 engineticka = SDL_GetTicks();
+    Uint32 enginetickb;
     
-    core->Event(window);
-
-    core->Update();
-    core->Render();
-    
-    /*Uint64 endF = SDL_GetPerformanceCounter();
-    float elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
-    SDL_Delay(floor(16.666f - elapsedMS));*/
-    
-    if((1000/60)>(SDL_GetTicks()-enginetick)) {
-        SDL_Delay((1000/60)-(SDL_GetTicks()-enginetick));
+    if ((engineticka - enginetickb) > 1000/60.0f) {
+        //cout << "fps: " << 1000 / (engineticka - enginetickb) << endl;
+        core->Event(window);
+        
+        core->Update();
+        core->Render(1000/(engineticka - enginetickb));
+        
+        enginetickb = engineticka;
     }
+    
+    Uint64 endF = SDL_GetPerformanceCounter();
+    elapsed = (endF-startF) / (float)SDL_GetPerformanceFrequency();
+    elapsedMS = (endF-startF) / (float)SDL_GetPerformanceFrequency() * 1000.0f;
 
     SDL_GL_SwapWindow(window);
 }

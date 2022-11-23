@@ -29,6 +29,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
+#include <sstream>
 
 #include "misc/console/console.h"
 #include "objects/fonts.hpp"
@@ -51,12 +52,13 @@ public:
     void StartInit();
     void Event(SDL_Window* window);
     void Update();
-    void Render();
+    void Render(float fps);
     void Destroy();
     
     static bool corerunning;
     static bool devMode;
     char *prefpath;
+    void showPerfs(bool enabled, float fps);
 private:
     int SceneIndex;
     int Frame;
@@ -64,6 +66,8 @@ private:
     int _windowWidth;
     int _windowHeight;
     void InitSysPrefPath();
+    int FramePerSecondClock;
+    float FramePerSecond;
 };
 
 #endif

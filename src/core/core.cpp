@@ -4,6 +4,7 @@ Game *game;
 
 const char* __fontFile1;
 Fonts *__lsDotLogo;
+Fonts *perfWidget;
 
 Core::Core() {
     Console console;
@@ -39,6 +40,7 @@ void Core::StartInit() {
     #endif
 
     __lsDotLogo = new Fonts(__fontFile1);
+    perfWidget = new Fonts(__fontFile1);
 }
 
 void Core::Event(SDL_Window* window) {
@@ -75,9 +77,7 @@ void Core::Update() {
     game->Update(_windowWidth, _windowHeight);
 }
 
-SDL_Color __lsDotLogo_color;
-
-void Core::Render() {
+void Core::Render(float fps) {
     /*  Render Codes. cleaner codes. */
     
     glViewport(0, 0, _windowWidth*2, _windowHeight*2);
@@ -94,26 +94,17 @@ void Core::Render() {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
         glPushMatrix();
         glTranslated(-5.1f, 0.0f, -10.0f);
-        __lsDotLogo_color.r = 255;
-        __lsDotLogo_color.g = 255;
-        __lsDotLogo_color.b = 255;
-        __lsDotLogo_color.a = 255;
-        __lsDotLogo->RenderFont("leafstudiosDot", 5.0f, 0, 0, __lsDotLogo_color, 3.0f, 0.5f);
+        __lsDotLogo->RenderFont("leafstudiosDot", 5.0f, 0, 0, {255, 255, 255, 255}, 3.0f, 0.5f);
         glPopMatrix();
     } else if (Frame >= 130 && Frame < 280) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
         glPushMatrix();
         glTranslated(-5.1f, 0.0f, -10.0f);
-        __lsDotLogo_color.r = 255;
-        __lsDotLogo_color.g = 255;
-        __lsDotLogo_color.b = 255;
-        __lsDotLogo_color.a = 255;
-        __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, __lsDotLogo_color, 2.6f, 0.3f);
+        __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, {255, 255, 255, 255}, 2.6f, 0.3f);
         glPopMatrix();
     } else if (Frame >= 280) {
         // New Scene
         if (Frame == 280) {
-            delete __lsDotLogo;
             game->Start(_windowWidth, _windowHeight);
         }
         
@@ -131,6 +122,7 @@ void Core::Render() {
     glLoadIdentity();
     glDisable(GL_CULL_FACE);
     glClear(GL_DEPTH_BUFFER_BIT);
+    showPerfs(true, fps);
     if (Frame >= 280) {
         // New Game Render Canvas
         game->RenderCanvas(_windowWidth, _windowHeight, Core::devMode);
@@ -167,5 +159,31 @@ void Core::InitSysPrefPath() {
         prefpath = base_path;
     } else {
         cout << "Cannot write in preferences path, Saving and Loading disabled!" << endl;
+    }
+}
+
+void Core::showPerfs(bool enabled, float fps) {
+    if (enabled) {
+        if (FramePerSecondClock >= 15) {
+            //cout << "FPS Changed: " << fps << endl;
+            FramePerSecond = fps;
+            FramePerSecondClock = 0;
+        } else {
+            FramePerSecondClock++;
+        }
+        
+        std::stringstream ss;
+        ss << FramePerSecond;
+        std::string str = ss.str();
+        
+        char* fps_char_arr;
+        string fps_str_obj(str + " fps");
+        fps_char_arr = &fps_str_obj[0];
+        
+        if (Frame >= 280) {
+            perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 29.0f, -14.0f, 0);
+        } else {
+            perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 29.0f, -10.0f, 0);
+        }
     }
 }

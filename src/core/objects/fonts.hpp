@@ -21,6 +21,7 @@ public:
 private:
     int round(double x);
     int nextpoweroftwo(int x);
+    TTF_Font *fontassigned;
 };
 
 #endif /* fonts_hpp */
