@@ -2,7 +2,8 @@
 
 Game *game;
 
-TTF_Font *__logofont;
+const char* __fontFile1;
+Fonts *__lsDotLogo;
 
 Core::Core() {
     Console console;
@@ -32,14 +33,12 @@ void Core::StartInit() {
     InitSysPrefPath();
     
     #if __APPLE__
-    const char __fontFile1[] = "../Resources/fonts/arlrdbd.ttf";
+    __fontFile1 = "../Resources/fonts/arlrdbd.ttf";
     #elif EMSCRIPTEN
-    const char __fontFile1[] = "/assets/fonts/arlrdbd.ttf";
+    __fontFile1 = "/assets/fonts/arlrdbd.ttf";
     #endif
 
-    if(!(__logofont = TTF_OpenFont(__fontFile1, 100))) {
-        printf("Error loading font: %s", TTF_GetError());
-    }
+    __lsDotLogo = new Fonts(__fontFile1);
 }
 
 void Core::Event(SDL_Window* window) {
@@ -76,7 +75,6 @@ void Core::Update() {
     game->Update(_windowWidth, _windowHeight);
 }
 
-Fonts *__lsDotLogo;
 SDL_Color __lsDotLogo_color;
 
 void Core::Render() {
@@ -100,7 +98,7 @@ void Core::Render() {
         __lsDotLogo_color.g = 255;
         __lsDotLogo_color.b = 255;
         __lsDotLogo_color.a = 255;
-        __lsDotLogo->RenderFont(__logofont, "leafstudiosDot", 5.0f, 0, 0, __lsDotLogo_color, 3.0f, 0.5f);
+        __lsDotLogo->RenderFont("leafstudiosDot", 5.0f, 0, 0, __lsDotLogo_color, 3.0f, 0.5f);
         glPopMatrix();
     } else if (Frame >= 130 && Frame < 280) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
@@ -110,7 +108,7 @@ void Core::Render() {
         __lsDotLogo_color.g = 255;
         __lsDotLogo_color.b = 255;
         __lsDotLogo_color.a = 255;
-        __lsDotLogo->RenderFont(__logofont, "Powered by Incogine", 5.0f, 0, 0, __lsDotLogo_color, 2.6f, 0.3f);
+        __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, __lsDotLogo_color, 2.6f, 0.3f);
         glPopMatrix();
     } else if (Frame >= 280) {
         // New Scene
@@ -145,7 +143,6 @@ void Core::Destroy() {
     if (Frame >= 280) {
         game->Destroy();
     }
-    TTF_CloseFont(__logofont);
 }
 
 char *prefpath = NULL;

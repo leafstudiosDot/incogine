@@ -12,11 +12,11 @@
 
 class Fonts {
 public:
-    Fonts();
+    Fonts(const char* loc);
     ~Fonts();
     
-    void RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight);
-    void RenderFontHUD(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight, GLfloat rotateangle);
+    void RenderFont(const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight);
+    void RenderFontHUD(const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight, GLfloat rotateangle);
 
 private:
     int round(double x);

@@ -7,11 +7,13 @@
 
 #include "game.hpp"
 
-TTF_Font *fontsample;
 int p_windowWidth;
 int p_windowHeight;
 
 int frame = 0;
+
+const char* fontFile;
+Fonts *fontsampletext;
 
 Game::Game() {
     // Initialize Game
@@ -125,15 +127,16 @@ void Game::Event(SDL_Event event, int _windowWidth, int _windowHeight) {
 void Game::Start(int _windowWidth, int _windowHeight) {
     // Executes as game launches
     Console console;
+    
     #if __APPLE__
-    const char fontFile3[] = "../Resources/fonts/def_font.ttf";
+        fontFile = "../Resources/fonts/def_font.ttf";
     #elif EMSCRIPTEN
-    const char fontFile3[] = "/assets/fonts/def_font.ttf";
+        fontFile = "/assets/fonts/def_font.ttf";
     #endif
     
-    if(!(fontsample = TTF_OpenFont(fontFile3, 100))) {
-        printf("Error loading font: %s", TTF_GetError());
-    }
+    
+    fontsampletext = new Fonts(fontFile);
+
     
     glDepthFunc(GL_LESS);
     glEnable(GL_DEPTH_TEST);
@@ -154,9 +157,6 @@ void Game::Update(int _windowWidth, int _windowHeight) {
     //cout << frame << endl;
 }
 
-Fonts *fontsampletext;
-SDL_Color _fontsample_color;
-
 void Game::Render(int _windowWidth, int _windowHeight) {
     // Render Game
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -174,11 +174,7 @@ void Game::Render(int _windowWidth, int _windowHeight) {
     
     glPushMatrix();
     glTranslated(-5.1f, 0.0f, -10.0f);
-    _fontsample_color.r = 255;
-    _fontsample_color.g = 255;
-    _fontsample_color.b = 255;
-    _fontsample_color.a = 255;
-    fontsampletext->RenderFont(fontsample, "This is a game", 5.0f, 0, 0, _fontsample_color, 9.5f, 2.1f);
+    fontsampletext->RenderFont("This is a game", 5.0f, 0, 0, {255, 255, 255, 255}, 9.5f, 2.1f);
     glPopMatrix();
 }
 

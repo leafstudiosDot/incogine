@@ -6,20 +6,26 @@
 //
 
 #include "fonts.hpp"
+#ifndef INCOGINE_FONTS_H
+#define INCOGINE_FONTS_H
 
-Fonts::Fonts() {
-    
+TTF_Font *fontsample;
+
+Fonts::Fonts(const char* loc) {
+    if(!(fontsample = TTF_OpenFont(loc, 100))) {
+        printf("Error loading font: %s", TTF_GetError());
+    }
 }
 
 Fonts::~Fonts() {
-    
+    TTF_CloseFont(fontsample);
 }
 
 GLuint stringTex = 0;
 
-GLuint TextToTexture(TTF_Font* font, SDL_Color color, const char* text)
+GLuint TextToTexture(SDL_Color color, const char* text)
 {
-    SDL_Surface* msg = TTF_RenderText_Blended(font, text, color);
+    SDL_Surface* msg = TTF_RenderText_Blended(fontsample, text, color);
 
     GLuint tex;
     glGenTextures(1, &tex);
@@ -33,8 +39,8 @@ GLuint TextToTexture(TTF_Font* font, SDL_Color color, const char* text)
     return tex;
 }
 
-void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight) {
-    stringTex = TextToTexture(font, color, content);
+void Fonts::RenderFont(const char* content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight) {
+    stringTex = TextToTexture(color, content);
 
     glColor3ub( 255, 255, 255 );
     glEnable(GL_TEXTURE_2D);
@@ -49,8 +55,8 @@ void Fonts::RenderFont(TTF_Font *font, const char* content, float x, float y, fl
     glDisable(GL_TEXTURE_2D);
 }
 
-void Fonts::RenderFontHUD(TTF_Font *font, const char *content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight, GLfloat rotateangle) {
-    stringTex = TextToTexture(font, color, content);
+void Fonts::RenderFontHUD(const char *content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight, GLfloat rotateangle) {
+    stringTex = TextToTexture(color, content);
 
     glColor3ub( 255, 255, 255 );
     glEnable(GL_TEXTURE_2D);
@@ -76,3 +82,5 @@ int Fonts::nextpoweroftwo(int x)
     double logbase2 = log(x) / log(2);
     return round(pow(2,ceil(logbase2)));
 }
+
+#endif
