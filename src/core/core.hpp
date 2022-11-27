@@ -33,6 +33,8 @@
 
 #include "misc/console/console.h"
 #include "objects/fonts.hpp"
+#include "objects/entity.hpp"
+#include "objects/components/component.hpp"
 
 #include "../game/game.hpp"
 

@@ -8,6 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		8E3C96B22911355C0055C24C /* arlrdbd.ttf in Copy Files (Fonts) */ = {isa = PBXBuildFile; fileRef = 8E3C96B12911355C0055C24C /* arlrdbd.ttf */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		8E4334AE29336E4400CA2CBC /* entity.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E4334AC29336E4400CA2CBC /* entity.cpp */; };
+		8E4334B329338E9200CA2CBC /* component.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E4334B129338E9200CA2CBC /* component.cpp */; };
+		8E4334B62933900D00CA2CBC /* collider.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E4334B42933900D00CA2CBC /* collider.cpp */; };
+		8E4334B92933994F00CA2CBC /* transform.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E4334B72933994F00CA2CBC /* transform.cpp */; };
 		8E5A11B2282E0D1400CB0E8C /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8E5A11B1282E0D1400CB0E8C /* main.cpp */; };
 		8EA6654F282E0E4D00E12605 /* console.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8EA6654E282E0E4D00E12605 /* console.cpp */; };
 		8EA66553282E0F9800E12605 /* SDL2.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EA66552282E0F9800E12605 /* SDL2.framework */; };
@@ -70,6 +74,14 @@
 /* Begin PBXFileReference section */
 		8E37EEC528404113006BF561 /* AppIcon.iconset */ = {isa = PBXFileReference; lastKnownFileType = folder.iconset; name = AppIcon.iconset; path = assets/macOS/AppIcon.iconset; sourceTree = "<group>"; };
 		8E3C96B12911355C0055C24C /* arlrdbd.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = arlrdbd.ttf; sourceTree = "<group>"; };
+		8E4334AC29336E4400CA2CBC /* entity.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = entity.cpp; sourceTree = "<group>"; };
+		8E4334AD29336E4400CA2CBC /* entity.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = entity.hpp; sourceTree = "<group>"; };
+		8E4334B129338E9200CA2CBC /* component.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = component.cpp; sourceTree = "<group>"; };
+		8E4334B229338E9200CA2CBC /* component.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = component.hpp; sourceTree = "<group>"; };
+		8E4334B42933900D00CA2CBC /* collider.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = collider.cpp; sourceTree = "<group>"; };
+		8E4334B52933900D00CA2CBC /* collider.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = collider.hpp; sourceTree = "<group>"; };
+		8E4334B72933994F00CA2CBC /* transform.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = transform.cpp; sourceTree = "<group>"; };
+		8E4334B82933994F00CA2CBC /* transform.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = transform.hpp; sourceTree = "<group>"; };
 		8E5A11AE282E0D1400CB0E8C /* Incogine */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Incogine; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E5A11B1282E0D1400CB0E8C /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		8EA6654D282E0E4D00E12605 /* console.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = console.h; sourceTree = "<group>"; };
@@ -124,6 +136,19 @@
 			children = (
 			);
 			path = scenes;
+			sourceTree = "<group>";
+		};
+		8E4334AF29338E6400CA2CBC /* components */ = {
+			isa = PBXGroup;
+			children = (
+				8E4334B129338E9200CA2CBC /* component.cpp */,
+				8E4334B229338E9200CA2CBC /* component.hpp */,
+				8E4334B42933900D00CA2CBC /* collider.cpp */,
+				8E4334B52933900D00CA2CBC /* collider.hpp */,
+				8E4334B72933994F00CA2CBC /* transform.cpp */,
+				8E4334B82933994F00CA2CBC /* transform.hpp */,
+			);
+			path = components;
 			sourceTree = "<group>";
 		};
 		8E5A11A5282E0D1400CB0E8C = {
@@ -216,10 +241,13 @@
 		8EF41AB8282F7937000CB559 /* objects */ = {
 			isa = PBXGroup;
 			children = (
+				8E4334AF29338E6400CA2CBC /* components */,
 				8E3C96B12911355C0055C24C /* arlrdbd.ttf */,
 				8EF8AD0E29011B5700792048 /* fonts.cpp */,
 				8EF8AD0F29011B5700792048 /* fonts.hpp */,
 				8EF8AD152902059C00792048 /* def_font.ttf */,
+				8E4334AC29336E4400CA2CBC /* entity.cpp */,
+				8E4334AD29336E4400CA2CBC /* entity.hpp */,
 			);
 			path = objects;
 			sourceTree = "<group>";
@@ -305,9 +333,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				8E5A11B2282E0D1400CB0E8C /* main.cpp in Sources */,
+				8E4334B329338E9200CA2CBC /* component.cpp in Sources */,
+				8E4334B92933994F00CA2CBC /* transform.cpp in Sources */,
 				8EF41AB3282F2D51000CB559 /* core.cpp in Sources */,
+				8E4334B62933900D00CA2CBC /* collider.cpp in Sources */,
 				8EA6654F282E0E4D00E12605 /* console.cpp in Sources */,
 				8EF8AD1029011B5700792048 /* fonts.cpp in Sources */,
+				8E4334AE29336E4400CA2CBC /* entity.cpp in Sources */,
 				8EC0F63728FD381500218372 /* game.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
