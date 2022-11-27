@@ -21,7 +21,8 @@ public:
 private:
     int round(double x);
     int nextpoweroftwo(int x);
-    TTF_Font *fontassigned;
+    GLuint TextToTexture(SDL_Color color, const char* text);
+    TTF_Font* fontassigned;
 };
 
 #endif /* fonts_hpp */

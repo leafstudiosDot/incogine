@@ -180,10 +180,6 @@ void Core::showPerfs(bool enabled, float fps) {
         string fps_str_obj(str + " fps");
         fps_char_arr = &fps_str_obj[0];
         
-        if (Frame >= 280) {
-            perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 29.0f, -14.0f, 0);
-        } else {
-            perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 29.0f, -10.0f, 0);
-        }
+        perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 27.0f, -10.0f, 0);
     }
 }

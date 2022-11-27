@@ -9,23 +9,21 @@
 #ifndef INCOGINE_FONTS_H
 #define INCOGINE_FONTS_H
 
-TTF_Font *fontsample;
-
 Fonts::Fonts(const char* loc) {
-    if(!(fontsample = TTF_OpenFont(loc, 100))) {
+    if(!(fontassigned = TTF_OpenFont(loc, 100))) {
         printf("Error loading font: %s", TTF_GetError());
     }
 }
 
 Fonts::~Fonts() {
-    TTF_CloseFont(fontsample);
+    TTF_CloseFont(fontassigned);
 }
 
 GLuint stringTex = 0;
 
-GLuint TextToTexture(SDL_Color color, const char* text)
+GLuint Fonts::TextToTexture(SDL_Color color, const char* text)
 {
-    SDL_Surface* msg = TTF_RenderText_Blended(fontsample, text, color);
+    SDL_Surface* msg = TTF_RenderText_Blended(fontassigned, text, color);
 
     GLuint tex;
     glGenTextures(1, &tex);
