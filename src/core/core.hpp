@@ -42,7 +42,7 @@
 #define _COMPANY_NAME "leafstudiosDot"
 #define _PROJ_NAME "Incogine"
 
-#define _WINDOW_NAME "leafstudiosDot"
+#define _WINDOW_NAME "Incogine"
 
 class Core {
 public:

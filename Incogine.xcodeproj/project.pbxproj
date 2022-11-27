@@ -69,7 +69,7 @@
 
 /* Begin PBXFileReference section */
 		8E37EEC528404113006BF561 /* AppIcon.iconset */ = {isa = PBXFileReference; lastKnownFileType = folder.iconset; name = AppIcon.iconset; path = assets/macOS/AppIcon.iconset; sourceTree = "<group>"; };
-		8E3C96B12911355C0055C24C /* arlrdbd.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; name = arlrdbd.ttf; path = src/core/objects/arlrdbd.ttf; sourceTree = "<group>"; };
+		8E3C96B12911355C0055C24C /* arlrdbd.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = arlrdbd.ttf; sourceTree = "<group>"; };
 		8E5A11AE282E0D1400CB0E8C /* Incogine */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Incogine; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E5A11B1282E0D1400CB0E8C /* main.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
 		8EA6654D282E0E4D00E12605 /* console.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = console.h; sourceTree = "<group>"; };
@@ -129,7 +129,6 @@
 		8E5A11A5282E0D1400CB0E8C = {
 			isa = PBXGroup;
 			children = (
-				8E3C96B12911355C0055C24C /* arlrdbd.ttf */,
 				8E37EEC528404113006BF561 /* AppIcon.iconset */,
 				8EA66555282E124700E12605 /* Incogine.entitlements */,
 				8EA66550282E0F2300E12605 /* Info.plist */,
@@ -217,6 +216,7 @@
 		8EF41AB8282F7937000CB559 /* objects */ = {
 			isa = PBXGroup;
 			children = (
+				8E3C96B12911355C0055C24C /* arlrdbd.ttf */,
 				8EF8AD0E29011B5700792048 /* fonts.cpp */,
 				8EF8AD0F29011B5700792048 /* fonts.hpp */,
 				8EF8AD152902059C00792048 /* def_font.ttf */,
