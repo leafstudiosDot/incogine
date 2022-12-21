@@ -30,6 +30,8 @@
 #include <stdio.h>
 #include <string>
 #include <sstream>
+#include <vector>
+#include <cmath>
 
 #include "misc/console/console.h"
 #include "objects/fonts.hpp"

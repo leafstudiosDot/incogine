@@ -9,12 +9,17 @@
 #define entity_hpp
 
 #include "../core.hpp"
+#include "components/component.hpp"
 
+class Component;
 class Entity {
 public:
     Entity();
     ~Entity();
     
+    vector<Component*> components;
+    
+    void Start();
     void Update();
     void Render();
     void Destroy();

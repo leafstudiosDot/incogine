@@ -5,6 +5,7 @@ Game *game;
 const char* __fontFile1;
 Fonts *__lsDotLogo;
 Fonts *perfWidget;
+Fonts *__lsDotLogo2;
 
 Core::Core() {
     Console console;
@@ -40,6 +41,7 @@ void Core::StartInit() {
     #endif
 
     __lsDotLogo = new Fonts(__fontFile1);
+    __lsDotLogo2 = new Fonts(__fontFile1);
     perfWidget = new Fonts(__fontFile1);
 }
 
@@ -102,6 +104,20 @@ void Core::Render(float fps) {
         glTranslated(-5.1f, 0.0f, -10.0f);
         __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, {255, 255, 255, 255}, 2.6f, 0.3f);
         glPopMatrix();
+        
+        glPushMatrix();
+        cout << _windowHeight << endl;
+        glTranslated(-5.1f, ((-1)*(_windowHeight)/_windowWidth)-5.5f, -10.0f);
+        char copyright = 0xA9;
+        string notice1 = "";
+        
+        std::stringstream ss;
+        ss << copyright;
+        ss >> notice1;
+        string fullnotice = ss.str() + " 2022 leafstudiosDot";
+        
+        __lsDotLogo2->RenderFont(fullnotice.c_str(), 5.0f, 0, 0, {255, 255, 255, 255}, 2.7f, 0.3f);
+        glPopMatrix();
     } else if (Frame >= 280) {
         // New Scene
         if (Frame == 280) {
@@ -134,6 +150,7 @@ void Core::Render(float fps) {
 
 void Core::Destroy() {
     delete __lsDotLogo;
+    delete __lsDotLogo2;
     if (Frame >= 280) {
         game->Destroy();
     }

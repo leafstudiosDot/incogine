@@ -11,12 +11,16 @@
 class Component;
 class TransformComponent : public Component {
 private:
-    const string c_type = "transform";
+    string c_type = "transform";
+    bool c_enabled = false;
     float c_location[2] = {0, 0};
     float c_height;
     float c_width;
 public:
-    TransformComponent(float width, float height, float *location);
+    TransformComponent(float width, float height, float *location) {
+        
+    };
+    
     float& getLocation();
     float getSize();
     
@@ -24,13 +28,23 @@ public:
         return c_type;
     }
     
-    void disableComponent();
-    void enableComponent();
-    bool enabled() {
-        return false;
+    void disableComponent() {
+        c_enabled = false;
     }
     
-    void Start(Entity* self) {
+    void enableComponent() {
+        c_enabled = true;
+    }
+    
+    bool enabled() {
+        return c_enabled;
+    }
+    
+    void Update() {
+        
+    }
+    
+    void Start() {
         
     }
 };

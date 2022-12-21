@@ -6,6 +6,8 @@
 //
 
 #include "game.hpp"
+#include "../core/objects/components/transform.hpp"
+#include "../core/objects/components/collider.hpp"
 
 int p_windowWidth;
 int p_windowHeight;
@@ -14,6 +16,7 @@ int frame = 0;
 
 const char* fontFile;
 Fonts *fontsampletext;
+Entity entity1;
 
 Game::Game() {
     // Initialize Game
@@ -128,6 +131,8 @@ void Game::Start(int _windowWidth, int _windowHeight) {
     // Executes as game launches
     Console console;
     
+    entity1.components.push_back(new ColliderComponent());
+    
     #if __APPLE__
         fontFile = "../Resources/fonts/def_font.ttf";
     #elif EMSCRIPTEN
@@ -173,6 +178,9 @@ void Game::Render(int _windowWidth, int _windowHeight) {
     glPushMatrix();
     glTranslated(-5.1f, 0.0f, -10.0f);
     fontsampletext->RenderFont("This is a game", 5.0f, 0, 0, {255, 255, 255, 255}, 9.5f, 2.1f);
+    // Entity
+    entity1.Update();
+    
     glPopMatrix();
 }
 
@@ -202,4 +210,8 @@ void Game::RenderCanvas(int _windowWidth, int _windowHeight, bool devMode) {
 void Game::Destroy() {
     // Destroy Game
     
+    // Destroy Entity
+    for (Component* component : entity1.components) {
+        delete component;
+    }
 }

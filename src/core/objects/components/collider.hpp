@@ -30,7 +30,11 @@ public:
         return c_enabled;
     }
     
-    void Start(Entity* self) {
+    void Update() {
+        
+    }
+    
+    void Start() {
         
     }
 };
