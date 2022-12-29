@@ -36,6 +36,8 @@ const Uint8 *_Pkeyboard = SDL_GetKeyboardState(0);
 
 float hudsx = 2.9f, hudsy = 0.5f;
 
+SDL_Color font_sample_color;
+
 void Game::RawEvent(SDL_Event event, int _windowWidth, int _windowHeight) {
     // Events (Keyboard, Mouse, etc.)
     Console console;
@@ -177,7 +179,12 @@ void Game::Render(int _windowWidth, int _windowHeight) {
     
     glPushMatrix();
     glTranslated(-5.1f, 0.0f, -10.0f);
-    fontsampletext->RenderFont("This is a game", 5.0f, 0, 0, {255, 255, 255, 255}, 9.5f, 2.1f);
+    
+    font_sample_color.r = 255;
+    font_sample_color.g = 255;
+    font_sample_color.b = 255;
+    font_sample_color.a = 255;
+    fontsampletext->RenderFont("This is a game", 5.0f, 0, 0, font_sample_color, 9.5f, 2.1f);
     // Entity
     entity1.Update();
     

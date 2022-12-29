@@ -4,7 +4,9 @@ Game *game;
 
 const char* __fontFile1;
 Fonts *__lsDotLogo;
+SDL_Color white;
 Fonts *perfWidget;
+SDL_Color perffpscolor;
 Fonts *__lsDotLogo2;
 
 Core::Core() {
@@ -82,6 +84,11 @@ void Core::Update() {
 void Core::Render(float fps) {
     /*  Render Codes. cleaner codes. */
     
+    white.r = 255;
+    white.g = 255;
+    white.b = 255;
+    white.a = 255;
+    
     glViewport(0, 0, _windowWidth*2, _windowHeight*2);
     //glClearDepth(1.0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -96,17 +103,17 @@ void Core::Render(float fps) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
         glPushMatrix();
         glTranslated(-5.1f, 0.0f, -10.0f);
-        __lsDotLogo->RenderFont("leafstudiosDot", 5.0f, 0, 0, {255, 255, 255, 255}, 3.0f, 0.5f);
+        __lsDotLogo->RenderFont("leafstudiosDot", 5.0f, 0, 0, white, 3.0f, 0.5f);
         glPopMatrix();
     } else if (Frame >= 130 && Frame < 280) {
         gluLookAt((0.0f*(-1)), (0.0f*(-1)), 0.0f, (0.0f*(-1)), (0.0f*(-1)), -100, 0, 1, 0);
         glPushMatrix();
         glTranslated(-5.1f, 0.0f, -10.0f);
-        __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, {255, 255, 255, 255}, 2.6f, 0.3f);
+        __lsDotLogo->RenderFont("Powered by Incogine", 5.0f, 0, 0, white, 2.6f, 0.3f);
         glPopMatrix();
         
         glPushMatrix();
-        cout << _windowHeight << endl;
+        //cout << _windowHeight << endl;
         glTranslated(-5.1f, ((-1)*(_windowHeight)/_windowWidth)-5.5f, -10.0f);
         char copyright = 0xA9;
         string notice1 = "";
@@ -116,7 +123,7 @@ void Core::Render(float fps) {
         ss >> notice1;
         string fullnotice = ss.str() + " 2022 leafstudiosDot";
         
-        __lsDotLogo2->RenderFont(fullnotice.c_str(), 5.0f, 0, 0, {255, 255, 255, 255}, 2.7f, 0.3f);
+        __lsDotLogo2->RenderFont(fullnotice.c_str(), 5.0f, 0, 0, white, 2.7f, 0.3f);
         glPopMatrix();
     } else if (Frame >= 280) {
         // New Scene
@@ -197,6 +204,10 @@ void Core::showPerfs(bool enabled, float fps) {
         string fps_str_obj(str + " fps");
         fps_char_arr = &fps_str_obj[0];
         
-        perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, {255, 255, 255, 50}, 27.0f, -10.0f, 0);
+        perffpscolor.r = 255;
+        perffpscolor.g = 255;
+        perffpscolor.b = 255;
+        perffpscolor.a = 50;
+        perfWidget->RenderFontHUD(fps_char_arr, _windowWidth - 45, 15, 0, perffpscolor, 27.0f, -10.0f, 0);
     }
 }

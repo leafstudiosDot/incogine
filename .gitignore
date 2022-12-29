@@ -18,5 +18,9 @@ xcuserdata/
 
 src/side_project
 .vs
+
+Incogine.sln
+Incogine.xcodeproj
+
 Incogine.vcxproj.user
 Icon
