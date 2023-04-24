@@ -51,6 +51,7 @@ void Fonts::RenderFont(const char* content, float x, float y, float z, SDL_Color
         glTexCoord2f( 0.0f, 1.0f ); glVertex2f( (objWidth*(-1)), (objHeight*(-1)) );
     glEnd();
     glDisable(GL_TEXTURE_2D);
+    glDeleteTextures(1, &stringTex);
 }
 
 void Fonts::RenderFontHUD(const char *content, float x, float y, float z, SDL_Color color, GLfloat objWidth, GLfloat objHeight, GLfloat rotateangle) {
@@ -68,6 +69,7 @@ void Fonts::RenderFontHUD(const char *content, float x, float y, float z, SDL_Co
         glTexCoord2f( 0.0f, 1.0f ); glVertex2f( (objWidth*(-1)), (objHeight*(-1)) );
     glEnd();
     glDisable(GL_TEXTURE_2D);
+    glDeleteTextures(1, &stringTex);
 }
 
 int Fonts::round(double x)
