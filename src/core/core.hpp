@@ -6,12 +6,20 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL_image.h>
+#include <SDL2_image/SDL_image.h>
 #include <SDL2_ttf/SDL_ttf.h>
 
 #if __APPLE__
-    #include <OpenGL/gl.h>
-    #include <OpenGL/glu.h>
+    #include "TargetConditionals.h"
+    #ifdef TARGET_OS_MAC
+        #include <OpenGL/gl.h>
+        #include <OpenGL/glu.h>
+    #elif TARGET_OS_IOS || TARGET_IPHONE_SIMULATOR
+        #include <OpenGLES/ES2/gl.h>
+        #include <OpenGLES/ES2/glext.h>
+        #include <OpenGLES/ES2/glu.h>
+    #else
+    #endif
 #elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
     #include <gl/GL.h>
     #include <gl/GLU.h>
@@ -20,6 +28,10 @@
     #include <OpenGL/gl.h>
     #include <OpenGL/glu.h>
     #include <emscripten.h>
+#elif __ANDROID__
+    #include <OpenGLES/ES2/gl.h>
+    #include <OpenGLES/ES2/glext.h>
+    #include <OpenGLES/ES2/glu.h>
 #else
     #include <GL/gl.h>
     #include <GL/glu.h>

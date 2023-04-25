@@ -4,5 +4,18 @@
 <dict>
 	<key>CFBundleIconFile</key>
 	<string>$(SRCROOT)/assets/macOS/AppIcon</string>
+	<key>GCSupportedGameControllers</key>
+	<array>
+		<dict>
+			<key>ProfileName</key>
+			<string>DirectionalGamepad</string>
+		</dict>
+		<dict>
+			<key>ProfileName</key>
+			<string>ExtendedGamepad</string>
+		</dict>
+	</array>
+	<key>GCSupportsControllerUserInteraction</key>
+	<true/>
 </dict>
 </plist>

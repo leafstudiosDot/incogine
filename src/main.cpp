@@ -63,7 +63,9 @@ int main(int argc, char* argv[]) {
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
     system("cls");
 #elif __APPLE__
-    system("clear");
+    #ifndef TARGET_OS_IOS || TARGET_IPHONE_SIMULATOR
+        system("clear");
+    #endif
 #endif
 
     console.Println("Incogine by leafstudiosDot");
