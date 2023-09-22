@@ -1,5 +1,5 @@
 # Incogine
-A proprietary engine, mostly used for games by leafstudiosDot.
+A (now open source) planned game engine.
 ## Building
 - CMake
     - XCode
