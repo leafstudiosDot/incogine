@@ -1,8 +1,8 @@
-© leafstudiosDot 2022
+© leafstudiosDot 2024
 
 SOURCE CODE
 
-Unauthorized downloads of the source code and sharing of the source code to outside leafstudiosDot result in a termination of collaboration of one member for this project. You may have permission to modify for this software and have limits and restrictions to distribute, copy, and publish of the source code to other site not associated with leafstudiosDot.
+The source code is now open for everyone to modify.
 
 FOR PRODUCTS AND SOFTWARES
 
