@@ -1,0 +1,3 @@
+[submodule "compiler"]
+	path = compiler
+	url = git@gitlab.com:leafstudiosDot/Incogine/compiler.git
