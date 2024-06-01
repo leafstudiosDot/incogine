@@ -8,7 +8,7 @@ void Engine::Init() {
         return;
     }
 
-    window = SDL_CreateWindow("Incogine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+    window = SDL_CreateWindow(PROJECT_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
