@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "LLDB (macOS x86_64)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/Incogine",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "preLaunchTask": "CMake: build",
+            "initCommands": [
+                "settings set target.process.python-os-plugin-path ${workspaceFolder}/.vscode"
+            ]
+        }
+    ]
+}
