@@ -1,6 +1,8 @@
 #include <iostream>
 #include <SDL2/SDL.h>
 
+#define MIN_WIDTH 1280
+#define MIN_HEIGHT 720
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 720
 

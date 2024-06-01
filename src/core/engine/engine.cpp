@@ -8,7 +8,8 @@ void Engine::Init() {
         return;
     }
 
-    window = SDL_CreateWindow("Incogine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow("Incogine", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
         SDL_Quit();
@@ -54,6 +55,22 @@ void Engine::Events() {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
             Quit();
+        }
+
+        if (event.type == SDL_WINDOWEVENT) {
+            if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+                int width = event.window.data1;
+                int height = event.window.data2;
+
+                if (width < MIN_WIDTH) width = MIN_WIDTH;
+                if (height < MIN_HEIGHT) height = MIN_HEIGHT;
+
+                if (width / 16 != height / 9) {
+                    height = width * 9 / 16;
+                }
+
+                SDL_SetWindowSize(window, width, height);
+            }
         }
     }
 }
