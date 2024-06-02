@@ -1,9 +1,12 @@
 #include <iostream>
 #include <string>
 #include <SDL2/SDL.h>
+#include <SDL_ttf.h>
 #include <fbxsdk.h>
 
 #include "../components/components.h"
+
+#include "../../fonts/main_font.h"
 
 #define MIN_WIDTH 1280
 #define MIN_HEIGHT 720
@@ -29,6 +32,7 @@ class Engine {
 
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
+        inline TTF_Font* GetMainFont() { return mainfont; }
         
         float getfps() { return 60.0f; }
 
@@ -44,6 +48,7 @@ class Engine {
         bool isRunning;
         SDL_Window* window;
         SDL_Renderer* renderer;
+        TTF_Font* mainfont;
         static Engine* instance;
 
 };

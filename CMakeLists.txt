@@ -2,8 +2,14 @@ cmake_minimum_required(VERSION 3.26.3)
 project(Incogine)
 
 # SDL2
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
 find_package(SDL2 REQUIRED COMPONENTS SDL2)
 include_directories(${SDL2_INCLUDE_DIRS})
+
+# SDL2_ttf
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
+find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
+include_directories(${SDL2_TTF_INCLUDE_DIRS})
 
 # OpenGL
 find_package(OpenGL REQUIRED)
@@ -33,6 +39,16 @@ if(WIN32)
     target_link_libraries(Incogine PRIVATE d3d11 d3dcompiler)
     target_link_libraries(Incogine PRIVATE d3d12 d3dcompiler)
 endif()
+
+set(FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/main_font.ttf")
+set(PARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse.py")
+
+add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
+    COMMAND python3 ${PARSER_SCRIPT} ${FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
+    DEPENDS ${FONT_FILE} ${PARSER_SCRIPT}
+    COMMENT "Generating font.h from fontuse.ttf"
+)
 
 
 # Read the project.xml file directly in CMakeLists.txt
@@ -66,10 +82,11 @@ add_definitions("-DPROJECT_DESCRIPTION=${PROJECT_DESCRIPTION}")
 
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
 file(GLOB_RECURSE SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
-add_executable(Incogine ${SOURCES})
-target_link_libraries(Incogine PRIVATE SDL2::SDL2)
+add_executable(Incogine ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
+target_link_libraries(Incogine PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf)
 target_link_libraries(Incogine PRIVATE ${OPENGL_LIBRARIES})
 target_link_libraries(Incogine PRIVATE ${FBX_LIBRARY})
 

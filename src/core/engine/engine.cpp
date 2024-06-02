@@ -35,6 +35,22 @@ void Engine::Init() {
         return;
     }
 
+    if (TTF_Init() == -1) {
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return;
+    }
+
+    mainfont = TTF_OpenFontRW(SDL_RWFromConstMem(_mainfont_data, _mainfont_size), 1, 24);
+    if (mainfont == nullptr) {
+        std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return;
+    }
+
     isRunning = true;
 }
 
@@ -43,6 +59,8 @@ void Engine::Quit() {
 }
 
 void Engine::Cleanup() {
+    TTF_CloseFont(mainfont);
+    TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
