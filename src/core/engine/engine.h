@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <SDL2/SDL.h>
+#include <fbxsdk.h>
 
 #include "../components/components.h"
 
