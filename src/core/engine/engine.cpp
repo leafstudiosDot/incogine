@@ -45,10 +45,37 @@ void Engine::Init() {
     mainfont = TTF_OpenFontRW(SDL_RWFromConstMem(_mainfont_data, _mainfont_size), 1, 24);
     if (mainfont == nullptr) {
         std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+        TTF_Quit();
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return;
+    }
+
+    if (devmode) {
+        SDL_Color devmode_color = {255, 255, 255, 128};
+        devmode_surface = TTF_RenderText_Blended(mainfont, "Development Mode", devmode_color);
+        if (!devmode_surface) {
+            TTF_CloseFont(mainfont);
+            TTF_Quit();
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return;
+        }
+
+        devmode_texture = SDL_CreateTextureFromSurface(renderer, devmode_surface);
+        if (!devmode_texture) {
+            SDL_FreeSurface(devmode_surface);
+            TTF_CloseFont(mainfont);
+            TTF_Quit();
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return;
+        }
+        SDL_SetTextureBlendMode(devmode_texture, SDL_BLENDMODE_BLEND);
+
+        devmode_destRect.w = devmode_surface->w;
+        devmode_destRect.h = devmode_surface->h;
     }
 
     isRunning = true;
@@ -59,6 +86,10 @@ void Engine::Quit() {
 }
 
 void Engine::Cleanup() {
+    if (devmode) {
+        SDL_DestroyTexture(devmode_texture);
+        SDL_FreeSurface(devmode_surface);
+    }
     TTF_CloseFont(mainfont);
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
@@ -74,7 +105,11 @@ void Engine::Render() {
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
-    // Render game objects
+    if (devmode) {
+        devmode_destRect.x = windowWidth - devmode_destRect.w;
+        devmode_destRect.y = windowHeight - devmode_destRect.h;
+        SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
+    }
 
     SDL_RenderPresent(renderer);
 }
@@ -99,6 +134,9 @@ void Engine::Events() {
                 }
 
                 SDL_SetWindowSize(window, width, height);
+
+                windowWidth = event.window.data1;
+                windowHeight = event.window.data2;
             }
         }
     }

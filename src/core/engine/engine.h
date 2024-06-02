@@ -51,6 +51,13 @@ class Engine {
         TTF_Font* mainfont;
         static Engine* instance;
 
+        SDL_Surface* devmode_surface;
+        SDL_Texture* devmode_texture;
+        SDL_Rect devmode_destRect;
+
+        int windowWidth = SCREEN_WIDTH;
+        int windowHeight = SCREEN_HEIGHT;
+
 };
 
 #endif
