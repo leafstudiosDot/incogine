@@ -6,7 +6,7 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/build/Incogine",
-            "args": [],
+            "args": ["-dev"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

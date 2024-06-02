@@ -2,6 +2,8 @@
 #include <string>
 #include <SDL2/SDL.h>
 
+#include "../components/components.h"
+
 #define MIN_WIDTH 1280
 #define MIN_HEIGHT 720
 #define SCREEN_WIDTH 1280
@@ -29,10 +31,13 @@ class Engine {
         
         float getfps() { return 60.0f; }
 
-        inline static Engine* Instance() { return instance = (instance != nullptr) ? instance : new Engine(); }
+        inline static Engine* Instance(int argc, char* argv[]) { return instance = (instance != nullptr) ? instance : new Engine(argc, argv); }
 
     private:
-        Engine() {}
+        Engine(int argc, char* argv[]) {
+            devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
+            debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
+        }
         bool debugMode;
         bool devmode;
         bool isRunning;

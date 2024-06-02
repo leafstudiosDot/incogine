@@ -1,4 +1,5 @@
 #include "engine.h"
+using namespace std;
 
 Engine* Engine::instance = nullptr;
 
@@ -8,7 +9,17 @@ void Engine::Init() {
         return;
     }
 
-    window = SDL_CreateWindow(PROJECT_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+    char projectName[256];
+
+    if (devmode) {
+        snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
+    } else if (debugMode) {
+        snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
+    } else {
+        snprintf(projectName, sizeof(projectName), "%s", PROJECT_NAME);
+    }
+
+    window = SDL_CreateWindow(projectName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
