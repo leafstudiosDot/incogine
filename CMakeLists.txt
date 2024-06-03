@@ -40,14 +40,14 @@ if(WIN32)
     target_link_libraries(Incogine PRIVATE d3d12 d3dcompiler)
 endif()
 
-set(FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/main_font.ttf")
-set(PARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse.py")
+set(MAIN_FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/main_font.ttf")
+set(MAIN_FONTPARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse_main.py")
 
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
-    COMMAND python3 ${PARSER_SCRIPT} ${FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
-    DEPENDS ${FONT_FILE} ${PARSER_SCRIPT}
-    COMMENT "Generating font.h from fontuse.ttf"
+    COMMAND python3 ${MAIN_FONTPARSER_SCRIPT} ${MAIN_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
+    DEPENDS ${MAIN_FONT_FILE} ${MAIN_FONTPARSER_SCRIPT}
+    COMMENT "Generating main_font.h from main_font.ttf"
 )
 
 

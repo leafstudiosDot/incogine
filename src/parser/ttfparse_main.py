@@ -4,13 +4,13 @@ def write_header(data, filename):
     with open(filename, 'w') as f:
         f.write("#ifndef FONT_H\n")
         f.write("#define FONT_H\n\n")
-        f.write("const unsigned char _font_data[] = {")
+        f.write("const unsigned char _mainfont_data[] = {")
         for i, byte in enumerate(data):
             f.write(hex(byte) + ",")
             if (i + 1) % 12 == 0:
                 f.write("\n")
         f.write("\n};\n")
-        f.write("const unsigned int _font_size = {};\n\n".format(len(data)))
+        f.write("const unsigned int _mainfont_size = {};\n\n".format(len(data)))
         f.write("#endif // FONT_H\n")
 
 def main():
