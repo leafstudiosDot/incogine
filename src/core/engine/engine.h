@@ -2,11 +2,14 @@
 #include <string>
 #include <SDL2/SDL.h>
 #include <SDL_ttf.h>
-#include <fbxsdk.h>
+//#include <fbxsdk.h>
 
 #include "../components/components.h"
 
 #include "../../fonts/main_font.h"
+
+#include "../scenes/scenes.h"
+#include "../../scenes/MainScene.h"
 
 #define MIN_WIDTH 1280
 #define MIN_HEIGHT 720
@@ -57,6 +60,7 @@ class Engine {
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
+        SceneManager sceneManager;
 
 };
 

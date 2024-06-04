@@ -79,6 +79,7 @@ void Engine::Init() {
     }
 
     isRunning = true;
+    sceneManager.SetScene(new MainScene());
 }
 
 void Engine::Quit() {
@@ -98,7 +99,7 @@ void Engine::Cleanup() {
 }
 
 void Engine::Update() {
-
+    sceneManager.UpdateScene();
 }
 
 void Engine::Render() {
@@ -110,6 +111,8 @@ void Engine::Render() {
         devmode_destRect.y = windowHeight - devmode_destRect.h;
         SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
     }
+
+    sceneManager.RenderScene();
 
     SDL_RenderPresent(renderer);
 }
