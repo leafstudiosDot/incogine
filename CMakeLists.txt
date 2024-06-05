@@ -11,6 +11,11 @@ list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.fra
 find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
 include_directories(${SDL2_TTF_INCLUDE_DIRS})
 
+# SDL2_image
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
+find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
+include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+
 # OpenGL
 find_package(OpenGL REQUIRED)
 include_directories(${OPENGL_INCLUDE_DIR})
@@ -82,7 +87,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
 file(GLOB_RECURSE SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 
 add_executable(Incogine ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
-target_link_libraries(Incogine PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf)
+target_link_libraries(Incogine PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
 target_link_libraries(Incogine PRIVATE ${OPENGL_LIBRARIES})
 target_link_libraries(Incogine PRIVATE ${FBX_LIBRARY})
 
