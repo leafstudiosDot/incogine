@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.26.3)
+
+if(APPLE)
+    set(CMAKE_C_COMPILER "/usr/bin/gcc")
+    set(CMAKE_CXX_COMPILER "/usr/bin/g++")
+endif()
+
 project(Incogine)
 
 # SDL2
@@ -84,7 +90,17 @@ add_definitions("-DPROJECT_DESCRIPTION=${PROJECT_DESCRIPTION}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
-file(GLOB_RECURSE SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+
+file(GLOB_RECURSE CPP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
+file(GLOB_RECURSE H_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
+set(SOURCES ${CPP_SOURCES} ${H_SOURCES})
+
+foreach(_source IN ITEMS ${SOURCES})
+    get_filename_component(_source_path "${_source}" PATH)
+    string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" _group_path "${_source_path}")
+    string(REPLACE "/" "\\" _group_path "${_group_path}")
+    source_group("${_group_path}" FILES "${_source}")
+endforeach()
 
 add_executable(Incogine ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
 target_link_libraries(Incogine PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
