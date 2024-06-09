@@ -1,4 +1,5 @@
 #include "MainScene.h"
+#include "core/engine/engine.h"
 
 void MainScene::Start() {
     // Scene initialized, calls at the initialization of the scene
