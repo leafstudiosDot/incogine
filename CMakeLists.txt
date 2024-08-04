@@ -7,20 +7,53 @@ endif()
 
 project(Incogine)
 
-# SDL2
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
-find_package(SDL2 REQUIRED COMPONENTS SDL2)
-include_directories(${SDL2_INCLUDE_DIRS})
+if(EMSCRIPTEN)
+    set(PLATFORM "Web")
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
+elseif(WIN32)
+    set(PLATFORM "Windows")
+elseif(APPLE)
+    set(PLATFORM "macOS")
+elseif(MIRA)
+    set(PLATFORM "mira")
+else()
+    set(PLATFORM "Unknown")
+endif()
+message(STATUS "Building for platform: ${PLATFORM}")
 
-# SDL2_ttf
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
-find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
-include_directories(${SDL2_TTF_INCLUDE_DIRS})
+set(TARGET_NAME "Incogine")
 
-# SDL2_image
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
-find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
-include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+if(PLATFORM STREQUAL "Web")
+    set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/system")
+
+    find_package(SDL2 REQUIRED)
+    find_package(SDL2_ttf REQUIRED)
+    find_package(SDL2_image REQUIRED)
+
+    include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        SUFFIX ".html"
+        LINK_FLAGS "-s USE_SDL=2 --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
+    )
+endif()
+
+if (APPLE)
+    # SDL2
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
+    find_package(SDL2 REQUIRED COMPONENTS SDL2)
+    include_directories(${SDL2_INCLUDE_DIRS})
+
+    # SDL2_ttf
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
+    find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
+    include_directories(${SDL2_TTF_INCLUDE_DIRS})
+
+    # SDL2_image
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
+    find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
+    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+endif()
 
 # OpenGL
 find_package(OpenGL REQUIRED)
@@ -29,7 +62,6 @@ include_directories(${OPENGL_INCLUDE_DIR})
 # FBX
 set(FBX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/reqs/include/fbx")
 set(FBX_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug/libfbxsdk.a")
-
 include_directories(${FBX_INCLUDE_DIR})
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug)
 
@@ -47,8 +79,6 @@ endif()
 if(WIN32)
     find_package(D3D11 REQUIRED)
     find_package(D3D12 REQUIRED)
-    target_link_libraries(Incogine PRIVATE d3d11 d3dcompiler)
-    target_link_libraries(Incogine PRIVATE d3d12 d3dcompiler)
 endif()
 
 set(MAIN_FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/main_font.ttf")
@@ -111,4 +141,9 @@ if (APPLE)
     find_library(COREFOUNDATION_LIBRARY CoreFoundation)
     target_link_libraries(Incogine PRIVATE ${COREFOUNDATION_LIBRARY})
     target_link_libraries(Incogine PRIVATE ${METAL_LIBRARY})
+endif()
+
+if(WIN32)
+    target_link_libraries(${TARGET_NAME} PRIVATE d3d11 d3dcompiler)
+    target_link_libraries(${TARGET_NAME} PRIVATE d3d12 d3dcompiler)
 endif()
