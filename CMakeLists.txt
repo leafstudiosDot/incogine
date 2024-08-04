@@ -14,6 +14,7 @@ elseif(WIN32)
     set(PLATFORM "Windows")
 elseif(APPLE)
     set(PLATFORM "macOS")
+    #set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
 elseif(MIRA)
     set(PLATFORM "mira")
 else()
@@ -146,4 +147,19 @@ endif()
 if(WIN32)
     target_link_libraries(${TARGET_NAME} PRIVATE d3d11 d3dcompiler)
     target_link_libraries(${TARGET_NAME} PRIVATE d3d12 d3dcompiler)
+endif()
+
+# Bundle properties
+if(APPLE)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME}
+        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        MACOSX_BUNDLE_SHORT_VERSION_STRING ${INCOGINE_VERSION}
+        MACOSX_BUNDLE_LONG_VERSION_STRING ${INCOGINE_VERSION}
+        MACOSX_BUNDLE_COPYRIGHT "© 2024 leafstudiosDot"
+    )
+    set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
+    set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(${TARGET_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
 endif()
