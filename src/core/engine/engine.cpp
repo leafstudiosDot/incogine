@@ -79,7 +79,7 @@ void Engine::Init() {
     }
 
     isRunning = true;
-    sceneManager.SetScene(new MainScene());
+    sceneManager.SetScene(new Splash());
 }
 
 void Engine::Quit() {
@@ -143,4 +143,8 @@ void Engine::Events() {
             }
         }
     }
+}
+
+void Engine::SetScene(Scene* scene) {
+    sceneManager.SetScene(scene);
 }

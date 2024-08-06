@@ -5,7 +5,7 @@
             "name": "LLDB (macOS x86_64)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/build/Incogine",
+            "program": "${workspaceFolder}/build/Incogine.app/Contents/MacOS/Incogine",
             "args": ["-dev"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",

@@ -10,6 +10,8 @@
 #include "../../fonts/main_font.h"
 
 #include "../scenes/scenes.h"
+
+#include "../../scenes/splash/splash.h"
 #include "../../scenes/MainScene.h"
 
 #define MIN_WIDTH 1280
@@ -30,6 +32,8 @@ class Engine {
         void Render();
         void Events();
 
+        void SetScene(Scene* scene);
+        
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
