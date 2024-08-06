@@ -82,6 +82,8 @@ if(WIN32)
     find_package(D3D12 REQUIRED)
 endif()
 
+
+# Fonts
 set(MAIN_FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/main_font.ttf")
 set(MAIN_FONTPARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse_main.py")
 
@@ -93,6 +95,24 @@ add_custom_command(
 )
 
 
+# SVG
+set(SVG_PARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/svgparse.py")
+file(GLOB SVG_FILES "${CMAKE_SOURCE_DIR}/*.svg")
+
+foreach(SVG_FILE ${SVG_FILES})
+    get_filename_component(SVG_FILENAME ${SVG_FILE} NAME_WE)
+    add_custom_command(
+        OUTPUT "${SVG_FILENAME}_svgdata.h"
+        COMMAND python3 ${SVG_PARSER_SCRIPT} ${CMAKE_SOURCE_DIR}/src/parser/svgparse.py ${SVG_FILE}
+        DEPENDS ${SVG_FILE}
+        COMMENT "Generating header for ${SVG_FILE}"
+    )
+    list(APPEND SVG_HEADERS "${CMAKE_BINARY_DIR}/${SVG_FILENAME}_svgdata.h")
+endforeach()
+add_custom_target(generate_headers ALL DEPENDS ${SVG_HEADERS})
+
+
+# Project Settings (project.xml)
 file(READ "${CMAKE_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
 
 string(REGEX MATCH "<name>(.+)</name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
