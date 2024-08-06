@@ -3,6 +3,7 @@ A leafstudiosDot engine. Now open source!
 
 ## Dependencies
 - CMake
+- Python3 (Python 3.11+)
 - C++17
 - SDL2
 - SDL2_image
