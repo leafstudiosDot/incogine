@@ -33,7 +33,7 @@ class Engine {
         void Events();
 
         void SetScene(Scene* scene);
-        
+
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
@@ -46,18 +46,13 @@ class Engine {
 
         inline static Engine* Instance(int argc, char* argv[]) { return instance = (instance != nullptr) ? instance : new Engine(argc, argv); }
 
-    private:
-        Engine(int argc, char* argv[]) {
-            devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
-            debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
-        }
+    protected:
         bool debugMode;
         bool devmode;
         bool isRunning;
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
-        static Engine* instance;
 
         SDL_Surface* devmode_surface;
         SDL_Texture* devmode_texture;
@@ -66,6 +61,11 @@ class Engine {
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
         SceneManager sceneManager;
+
+    private:
+        Engine(int argc, char* argv[]);
+
+        static Engine* instance;
 
 };
 

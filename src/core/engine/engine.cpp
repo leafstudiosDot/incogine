@@ -1,6 +1,11 @@
 #include "engine.h"
 using namespace std;
 
+Engine::Engine(int argc, char* argv[]) {
+    devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
+    debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
+}
+
 Engine* Engine::instance = nullptr;
 
 void Engine::Init() {
