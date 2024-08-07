@@ -2,9 +2,14 @@
 #include <fstream>
 #include <string>
 #include <SDL2/SDL.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 using namespace std;
+
+#ifdef _WIN32
+    #include <direct.h>
+    #else
+    #include <sys/stat.h>
+    #include <sys/types.h>
+#endif
 
 class SaveData {
     private:
@@ -24,13 +29,23 @@ class SaveData {
         bool createDirectory() {
             char* _path = SDL_GetPrefPath(PROJECT_AUTHOR, PROJECT_NAME);
 
-            if (mkdir(_path, 0755) == 0) {
-                return true;
-            } else if (errno == EEXIST) {
-                return directoryExists();
-            } else {
-                return false;
-            }
+            #ifdef _WIN32
+                if (_mkdir(_path) == 0) {
+                    return true;
+                } else if (errno == EEXIST) {
+                    return directoryExists();
+                } else {
+                    return false;
+                }
+            #else
+                if (mkdir(_path, 0755) == 0) {
+                    return true;
+                } else if (errno == EEXIST) {
+                    return directoryExists();
+                } else {
+                    return false;
+                }
+            #endif
         }
     public:
         SaveData(string filename);

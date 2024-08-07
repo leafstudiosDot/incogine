@@ -12,9 +12,9 @@ SaveData::SaveData(string filename) {
 }
 
 bool SaveData::Save(const string &data) {
-
+    return false;
 }
 
 bool SaveData::Load() {
-
+    return false;
 }

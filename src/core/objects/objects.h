@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <stdexcept>
 #include "../components/components.h"
 
 #ifndef OBJECTS_H
