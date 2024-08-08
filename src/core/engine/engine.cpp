@@ -15,16 +15,20 @@ void Engine::Init() {
     }
 
     char projectName[256];
+    char windowName[1024];
 
     if (devmode) {
-        snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s [DEV]", WINDOW_NAME);
     } else if (debugMode) {
-        snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s [DEBUG]", WINDOW_NAME);
     } else {
-        snprintf(projectName, sizeof(projectName), "%s", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s", WINDOW_NAME);
     }
 
-    window = SDL_CreateWindow(projectName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+    window = SDL_CreateWindow(windowName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;

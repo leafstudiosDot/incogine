@@ -171,6 +171,8 @@ file(READ "${CMAKE_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
 
 string(REGEX MATCH "<name>(.+)</name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_NAME "${CMAKE_MATCH_1}")
+string(REGEX MATCH "<window_name>(.+)</window_name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
+set(WINDOW_NAME "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<version>(.+)</version>" PROJECT_VERSION_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_VERSION "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<description>(.+)</description>" PROJECT_DESCRIPTION_MATCH "${PROJECT_XML_CONTENT}")
@@ -179,19 +181,24 @@ string(REGEX MATCH "<incogine_version>(.+)</incogine_version>" INCOGINE_VERSION_
 set(INCOGINE_VERSION "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<author>(.+)</author>" PROJECT_AUTHOR_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_AUTHOR "${CMAKE_MATCH_1}")
+string(REGEX MATCH "<copyright>(.+)</copyright>" PROJECT_AUTHOR_MATCH "${PROJECT_XML_CONTENT}")
+set(PROJECT_COPYRIGHT "${CMAKE_MATCH_1}")
 
-set(PROJECT_NAME_RAW ${PROJECT_NAME})
-set(PROJECT_NAME "\"${PROJECT_NAME}\"")
-set(PROJECT_VERSION "\"${PROJECT_VERSION}\"")
-set(PROJECT_AUTHOR "\"${PROJECT_AUTHOR}\"")
-set(INCOGINE_VERSION "\"${INCOGINE_VERSION}\"")
-set(PROJECT_DESCRIPTION "\"${PROJECT_DESCRIPTION}\"")
+set(PROJECT_NAME ${PROJECT_NAME})
+set(WINDOW_NAME ${WINDOW_NAME})
+set(PROJECT_VERSION ${PROJECT_VERSION})
+set(PROJECT_AUTHOR ${PROJECT_AUTHOR})
+set(INCOGINE_VERSION ${INCOGINE_VERSION})
+set(PROJECT_DESCRIPTION ${PROJECT_DESCRIPTION})
+set(PROJECT_COPYRIGHT ${PROJECT_COPYRIGHT})
 
-add_definitions("-DPROJECT_NAME=${PROJECT_NAME}")
-add_definitions("-DPROJECT_VERSION=${PROJECT_VERSION}")
-add_definitions("-DPROJECT_AUTHOR=${PROJECT_AUTHOR}")
-add_definitions("-DINCOGINE_VERSION=${INCOGINE_VERSION}")
-add_definitions("-DPROJECT_DESCRIPTION=${PROJECT_DESCRIPTION}")
+add_definitions("-DPROJECT_NAME=\"${PROJECT_NAME}\"")
+add_definitions("-DWINDOW_NAME=\"${WINDOW_NAME}\"")
+add_definitions("-DPROJECT_VERSION=\"${PROJECT_VERSION}\"")
+add_definitions("-DPROJECT_AUTHOR=\"${PROJECT_AUTHOR}\"")
+add_definitions("-DINCOGINE_VERSION=\"${INCOGINE_VERSION}\"")
+add_definitions("-DPROJECT_DESCRIPTION=\"${PROJECT_DESCRIPTION}\"")
+add_definitions("-DPROJECT_COPYRIGHT=\"${PROJECT_COPYRIGHT}\"")
 
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -208,58 +215,58 @@ foreach(_source IN ITEMS ${SOURCES})
     source_group("${_group_path}" FILES "${_source}")
 endforeach()
 
-add_executable(${PROJECT_NAME_RAW} ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
+add_executable(${PROJECT_NAME} ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
 
 if (APPLE)
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${OPENGL_LIBRARIES})
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${FBX_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
 
     find_library(COREFOUNDATION_LIBRARY CoreFoundation)
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${COREFOUNDATION_LIBRARY})
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${METAL_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${METAL_LIBRARY})
 endif()
 
 if(WIN32)
-    target_include_directories(${PROJECT_NAME_RAW}
+    target_include_directories(${PROJECT_NAME}
         PRIVATE
         "${SDL2_PATH}/include"
         "${SDL2_IMAGE_PATH}/include"
         "${SDL2_TTF_PATH}/include"
     )
 
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE SDL2 SDL2main SDL2_ttf SDL2_image)
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${OPENGL_LIBRARIES})
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE ${FBX_LIBRARY})
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2 SDL2main SDL2_ttf SDL2_image)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
 
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE d3d11 d3dcompiler)
-    target_link_libraries(${PROJECT_NAME_RAW} PRIVATE d3d12 d3dcompiler)
+    target_link_libraries(${PROJECT_NAME} PRIVATE d3d11 d3dcompiler)
+    target_link_libraries(${PROJECT_NAME} PRIVATE d3d12 d3dcompiler)
 
-    add_custom_command(TARGET ${PROJECT_NAME_RAW} POST_BUILD
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${SDL2_LIB_DIR}/SDL2.dll $<TARGET_FILE_DIR:Incogine>)
-    add_custom_command(TARGET ${PROJECT_NAME_RAW} POST_BUILD
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${SDL2_IMAGE_LIB_DIR}/SDL2_image.dll" $<TARGET_FILE_DIR:${PROJECT_NAME_RAW}>)
-    add_custom_command(TARGET ${PROJECT_NAME_RAW} POST_BUILD
+        "${SDL2_IMAGE_LIB_DIR}/SDL2_image.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${SDL2_TTF_LIB_DIR}/SDL2_ttf.dll" $<TARGET_FILE_DIR:${PROJECT_NAME_RAW}>)
+        "${SDL2_TTF_LIB_DIR}/SDL2_ttf.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 endif()
 
 
 # macOS Bundle properties
 if(APPLE)
-    set_target_properties(${PROJECT_NAME_RAW} PROPERTIES
+    set_target_properties(${PROJECT_NAME} PROPERTIES
         MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_BUNDLE_NAME ${PROJECT_NAME_RAW}
+        MACOSX_BUNDLE_BUNDLE_NAME ${WINDOW_NAME}
         MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
         MACOSX_BUNDLE_SHORT_VERSION_STRING ${INCOGINE_VERSION}
         MACOSX_BUNDLE_LONG_VERSION_STRING ${INCOGINE_VERSION}
-        MACOSX_BUNDLE_COPYRIGHT "© 2024 leafstudiosDot"
+        MACOSX_BUNDLE_COPYRIGHT "${PROJECT_COPYRIGHT}\nIncogine © 2024 leafstudiosDot"
     )
     set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
     set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-    target_sources(${PROJECT_NAME_RAW} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
 endif()
 
 # Windows Bundle properties
@@ -271,14 +278,14 @@ if(WIN32)
     endif()
 
     add_custom_command(
-        TARGET ${PROJECT_NAME_RAW}
+        TARGET ${PROJECT_NAME}
         PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/bundle/windows/icon.ico ${CMAKE_BINARY_DIR}
         COMMENT "Copying icon file"
     )
 
     add_custom_command(
-        TARGET ${PROJECT_NAME_RAW}
+        TARGET ${PROJECT_NAME}
         PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/bundle/windows/resource.rc ${CMAKE_BINARY_DIR}
         COMMENT "Copying resource script file"
@@ -296,12 +303,12 @@ if(WIN32)
         DEPENDS ${CMAKE_BINARY_DIR}/resource.res
     )
 
-    add_dependencies(${PROJECT_NAME_RAW} compile_resource)
-    target_sources(${PROJECT_NAME_RAW} PRIVATE ${CMAKE_BINARY_DIR}/resource.res)
+    add_dependencies(${PROJECT_NAME} compile_resource)
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.res)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug
-            COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME_RAW}.exe -dev
+            COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe -dev
             COMMENT "Running application with -dev argument"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )

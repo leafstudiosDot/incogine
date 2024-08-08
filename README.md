@@ -44,3 +44,8 @@ $ cd build
 $ emcmake cmake ..
 $ emmake make
 ```
+
+
+## Notes
+### Can I use the space at <name> in project.xml like `My First Game`?
+Make sure the name key in project.xml has no spaces like `<name>Incogine</name>`, not `<name>Incogine Engine</name>` so it means you should name that like `<name>MyFirstGame</name>`.
