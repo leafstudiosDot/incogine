@@ -12,6 +12,8 @@ if(EMSCRIPTEN)
     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
 elseif(WIN32)
     set(PLATFORM "Windows")
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "WindowsStore")
+    set(PLATFORM "UWP")
 elseif(APPLE)
     set(PLATFORM "macOS")
     #set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
@@ -123,6 +125,15 @@ if(WIN32)
     set(CMAKE_PREFIX_PATH ${WindowsSDKDir})
     set(D3D12_DIR ${WindowsSDKDir})
     set(D3D11_DIR ${WindowsSDKDir})
+endif()
+
+# UWP
+if(${CMAKE_SYSTEM_NAME} STREQUAL "WindowsStore")
+    add_definitions(-DWINAPI_FAMILY=WINAPI_FAMILY_APP)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /APPCONTAINER")
+    set(CMAKE_TARGET_PLATFORM "UWP")
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 endif()
 
 
@@ -253,10 +264,52 @@ endif()
 
 # Windows Bundle properties
 if(WIN32)
+    find_program(CMAKE_RC_COMPILER NAMES rc.exe)
+
+    if(NOT CMAKE_RC_COMPILER)
+        message(FATAL_ERROR "Resource compiler (rc.exe) not found. Please ensure Visual Studio is installed and configured correctly.")
+    endif()
+
+    add_custom_command(
+        TARGET ${PROJECT_NAME_RAW}
+        PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/bundle/windows/icon.ico ${CMAKE_BINARY_DIR}
+        COMMENT "Copying icon file"
+    )
+
+    add_custom_command(
+        TARGET ${PROJECT_NAME_RAW}
+        PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/bundle/windows/resource.rc ${CMAKE_BINARY_DIR}
+        COMMENT "Copying resource script file"
+    )
+
+    add_custom_command(
+        OUTPUT ${CMAKE_BINARY_DIR}/resource.res
+        COMMAND ${CMAKE_RC_COMPILER} /fo ${CMAKE_BINARY_DIR}/resource.res ${CMAKE_BINARY_DIR}/resource.rc
+        DEPENDS ${CMAKE_BINARY_DIR}/resource.rc
+        COMMENT "Compiling resource file"
+    )
+
+    add_custom_target(
+        compile_resource ALL
+        DEPENDS ${CMAKE_BINARY_DIR}/resource.res
+    )
+
+    add_dependencies(${PROJECT_NAME_RAW} compile_resource)
+    target_sources(${PROJECT_NAME_RAW} PRIVATE ${CMAKE_BINARY_DIR}/resource.res)
+
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug
             COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME_RAW}.exe -dev
             COMMENT "Running application with -dev argument"
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
     endif()
+
+    add_custom_target(run ALL
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+        COMMAND ${CMAKE_COMMAND} --target run_debug
+        COMMENT "Build and run the application"
+    )
 endif()
