@@ -1,42 +1,34 @@
-import os
 import sys
+import os
+import cairosvg
+import base64
 
-def svg_to_hex_array(svg_file):
-    with open(svg_file, 'rb') as f:
-        content = f.read()
+def parse(svg_file, output_header):
+    image_name = os.path.splitext(os.path.basename(svg_file))[0].replace(' ', '_')
+    
+    png_file = image_name + ".png"
+    cairosvg.svg2png(url=svg_file, write_to=png_file)
+    
+    with open(png_file, "rb") as f:
+        png_data = f.read()
 
-    hex_array = ', '.join(f'0x{byte:02x}' for byte in content)
-    size = len(content)
-    return hex_array, size
+    array_content = ', '.join(f'0x{byte:02x}' for byte in png_data)
 
-def generate_c_header(svg_file):
-    file_name = os.path.splitext(os.path.basename(svg_file))[0]
-    hex_array, size = svg_to_hex_array(svg_file)
+    with open(output_header, "w") as f:
+        f.write("#ifndef PNG_IMAGE_H\n")
+        f.write("#define PNG_IMAGE_H\n\n")
+        f.write(f"const unsigned char {image_name}_data[] = {{\n    {array_content}\n}};\n\n")
+        f.write(f"const unsigned int {image_name}_size = {len(png_data)};\n")
+        f.write("#endif // PNG_IMAGE_H\n")
 
-    header_content = f"""
-        #ifndef {file_name.upper()}_DATA_H
-        #define {file_name.upper()}_DATA_H
-
-        const unsigned char {file_name}_data[] = {{
-            {hex_array}
-        }};
-
-        const unsigned int {file_name}_size = {size};
-
-        #endif // {file_name.upper()}_DATA_H
-        """
-
-    header_file = f"{file_name}_data.h"
-    with open(header_file, 'w') as f:
-        f.write(header_content)
-
-    print(f"Generated {header_file}")
+    os.remove(png_file)
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 svgparse.py <svg_files>")
+    if len(sys.argv) != 3:
+        print("Usage: python3 svgparse.py <input.svg> <output.h>")
         sys.exit(1)
-
-    svg_files = sys.argv[1:]
-    for svg_file in svg_files:
-        generate_c_header(svg_file)
+    
+    svg_file = sys.argv[1]
+    output_header = sys.argv[2]
+    
+    parse(svg_file, output_header)
