@@ -1,5 +1,7 @@
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <vector>
 #include <SDL2/SDL.h>
 #include <SDL_ttf.h>
 #include <SDL_image.h>
