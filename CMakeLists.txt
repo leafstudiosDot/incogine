@@ -7,6 +7,9 @@ endif()
 
 project(Incogine)
 
+# Python3
+find_package(Python3 REQUIRED)
+
 if(EMSCRIPTEN)
     set(PLATFORM "Web")
     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
@@ -15,8 +18,11 @@ elseif(WIN32)
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "WindowsStore")
     set(PLATFORM "UWP")
 elseif(APPLE)
-    set(PLATFORM "macOS")
-    #set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64")
+    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(PLATFORM "iOS")
+    else()
+        set(PLATFORM "macOS")
+    endif()
 elseif(MIRA)
     set(PLATFORM "mira")
 else()
@@ -81,25 +87,47 @@ if (WIN32)
 endif()
 
 if (APPLE)
-    # SDL2
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
-    find_package(SDL2 REQUIRED COMPONENTS SDL2)
-    include_directories(${SDL2_INCLUDE_DIRS})
+    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # SDL2
+        set(SDL2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework/Resources/CMake)
+        find_package(SDL2 REQUIRED)
+        include_directories(${SDL2_INCLUDE_DIRS})
 
-    # SDL2_ttf
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
-    find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
-    include_directories(${SDL2_TTF_INCLUDE_DIRS})
+        # SDL2_ttf
+        set(SDL2_ttf_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework/Resources/CMake)
+        find_package(SDL2_ttf REQUIRED)
+        include_directories(${SDL2_TTF_INCLUDE_DIRS})
 
-    # SDL2_image
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
-    find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
-    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+        # SDL2_image
+        set(SDL2_image_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework/Resources/CMake)
+        find_package(SDL2_image REQUIRED)
+        include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+    else()
+        # SDL2
+        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
+        find_package(SDL2 REQUIRED COMPONENTS SDL2)
+        include_directories(${SDL2_INCLUDE_DIRS})
+
+        # SDL2_ttf
+        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
+        find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
+        include_directories(${SDL2_TTF_INCLUDE_DIRS})
+
+        # SDL2_image
+        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
+        find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
+        include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+    endif()
 endif()
 
 # OpenGL
-find_package(OpenGL REQUIRED)
-include_directories(${OPENGL_INCLUDE_DIR})
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # Do nothing
+else()
+    find_package(OpenGL REQUIRED)
+    include_directories(${OPENGL_INCLUDE_DIR})
+    link_directories(${OPENGL_gl_LIBRARY})
+endif()
 
 # FBX
 if (APPLE)
@@ -114,7 +142,7 @@ endif()
 #find_package(Vulkan REQUIRED)
 #include_directories(${Vulkan_INCLUDE_DIRS})
 
-# Metal (macOS)
+# Metal (iOS/macOS)
 if(APPLE)
     find_library(METAL_LIBRARY Metal)
 endif()
@@ -171,8 +199,10 @@ file(READ "${CMAKE_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
 
 string(REGEX MATCH "<name>(.+)</name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_NAME "${CMAKE_MATCH_1}")
-string(REGEX MATCH "<window_name>(.+)</window_name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
+string(REGEX MATCH "<window_name>(.+)</window_name>" WINDOW_NAME_MATCH "${PROJECT_XML_CONTENT}")
 set(WINDOW_NAME "${CMAKE_MATCH_1}")
+string(REGEX MATCH "<identifier>(.+)</identifier>" IDENTIFIER_MATCH "${PROJECT_XML_CONTENT}")
+set(BUNDLE_IDENTIFIER "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<version>(.+)</version>" PROJECT_VERSION_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_VERSION "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<description>(.+)</description>" PROJECT_DESCRIPTION_MATCH "${PROJECT_XML_CONTENT}")
@@ -181,11 +211,12 @@ string(REGEX MATCH "<incogine_version>(.+)</incogine_version>" INCOGINE_VERSION_
 set(INCOGINE_VERSION "${CMAKE_MATCH_1}")
 string(REGEX MATCH "<author>(.+)</author>" PROJECT_AUTHOR_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_AUTHOR "${CMAKE_MATCH_1}")
-string(REGEX MATCH "<copyright>(.+)</copyright>" PROJECT_AUTHOR_MATCH "${PROJECT_XML_CONTENT}")
+string(REGEX MATCH "<copyright>(.+)</copyright>" COPYRIGHT_MATCH "${PROJECT_XML_CONTENT}")
 set(PROJECT_COPYRIGHT "${CMAKE_MATCH_1}")
 
 set(PROJECT_NAME ${PROJECT_NAME})
 set(WINDOW_NAME ${WINDOW_NAME})
+set(BUNDLE_IDENTIFIER ${BUNDLE_IDENTIFIER})
 set(PROJECT_VERSION ${PROJECT_VERSION})
 set(PROJECT_AUTHOR ${PROJECT_AUTHOR})
 set(INCOGINE_VERSION ${INCOGINE_VERSION})
@@ -194,6 +225,7 @@ set(PROJECT_COPYRIGHT ${PROJECT_COPYRIGHT})
 
 add_definitions("-DPROJECT_NAME=\"${PROJECT_NAME}\"")
 add_definitions("-DWINDOW_NAME=\"${WINDOW_NAME}\"")
+add_definitions("-DBUNDLE_IDENTIFIER=\"${BUNDLE_IDENTIFIER}\"")
 add_definitions("-DPROJECT_VERSION=\"${PROJECT_VERSION}\"")
 add_definitions("-DPROJECT_AUTHOR=\"${PROJECT_AUTHOR}\"")
 add_definitions("-DINCOGINE_VERSION=\"${INCOGINE_VERSION}\"")
@@ -218,9 +250,17 @@ endforeach()
 add_executable(${PROJECT_NAME} ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
 
 if (APPLE)
-    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
+    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # Find OpenGL ES for iOS
+        find_library(OpenGLES_LIBRARIES OpenGLES)
+        include_directories(${OPENGL_INCLUDE_DIR})
+
+        target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image ${FBX_LIBRARY} ${OpenGLES_LIBRARIES})
+    else()
+        target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
+    endif()
 
     find_library(COREFOUNDATION_LIBRARY CoreFoundation)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIBRARY})
@@ -254,19 +294,48 @@ if(WIN32)
 endif()
 
 
-# macOS Bundle properties
+# Apple macOS/iOS Bundle properties
 if(APPLE)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        MACOSX_BUNDLE TRUE
-        MACOSX_BUNDLE_BUNDLE_NAME ${WINDOW_NAME}
-        MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-        MACOSX_BUNDLE_SHORT_VERSION_STRING ${INCOGINE_VERSION}
-        MACOSX_BUNDLE_LONG_VERSION_STRING ${INCOGINE_VERSION}
-        MACOSX_BUNDLE_COPYRIGHT "${PROJECT_COPYRIGHT}\nIncogine © 2024 leafstudiosDot"
-    )
-    set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
-    set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
+    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
+
+        set(APP_ASSETS 
+            ${CMAKE_SOURCE_DIR}/bundle/ios/Assets.xcassets
+            ${CMAKE_SOURCE_DIR}/bundle/ios/LaunchScreen.storyboard
+        )
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${APP_ASSETS} $<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets.xcassets
+        )
+
+        add_custom_command(
+            OUTPUT ${CMAKE_BINARY_DIR}/Info.plist
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/src/parser/ios_infoplist_gen.py
+                "${WINDOW_NAME}" "${PROJECT_NAME}" "${BUNDLE_IDENTIFIER}" "${PROJECT_VERSION}" "${PROJECT_NAME}"
+            DEPENDS ${CMAKE_SOURCE_DIR}/src/parser/ios_infoplist_gen.py
+            COMMENT "Generating Info.plist"
+        )
+        add_custom_target(InfoPlist ALL DEPENDS ${CMAKE_BINARY_DIR}/Info.plist)
+        add_dependencies(${PROJECT_NAME} InfoPlist)
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
+        )
+    else()
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_BUNDLE_NAME ${WINDOW_NAME}
+            MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+            MACOSX_BUNDLE_SHORT_VERSION_STRING ${INCOGINE_VERSION}
+            MACOSX_BUNDLE_LONG_VERSION_STRING ${INCOGINE_VERSION}
+            MACOSX_BUNDLE_COPYRIGHT "${PROJECT_COPYRIGHT}\nIncogine © 2024 leafstudiosDot"
+        )
+        set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
+        set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+        target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
+    endif()
 endif()
 
 # Windows Bundle properties
