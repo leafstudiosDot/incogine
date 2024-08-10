@@ -2,6 +2,7 @@
 <project>
     <name>Incogine</name>
     <window_name>Incogine</window_name>
+    <identifier>com.leafstudiosDot.Incogine</identifier>
     <version>0.0.0.1</version>
     <description>Made with Incogine</description>
     <incogine_version>0.0.0.1</incogine_version>

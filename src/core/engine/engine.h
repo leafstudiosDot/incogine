@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 #include <SDL2/SDL.h>
+#if defined(__APPLE__) && defined(__IPHONEOS__)
+    #include <SDL2/SDL_main.h>
+#endif
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 //#include <fbxsdk.h>

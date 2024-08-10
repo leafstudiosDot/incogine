@@ -151,6 +151,22 @@ void Engine::Events() {
                 windowHeight = event.window.data2;
             }
         }
+
+        #if defined(__APPLE__) && defined(__IPHONEOS__)
+            if (e.type == SDL_APP_WILLENTERBACKGROUND) {
+                // TODO: Incogine is going to background
+            }
+            else if (e.type == SDL_APP_DIDENTERFOREGROUND) {
+                // TODO: Incogine is coming to foreground
+            }
+            else if (e.type == SDL_APP_TERMINATING) {
+                // TODO: Incogine is about to terminate
+                Quit();
+            }
+            else if (e.type == SDL_APP_LOWMEMORY) {
+                // TODO: Low memory warning
+            }
+        #endif
     }
 }
 
