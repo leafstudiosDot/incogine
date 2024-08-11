@@ -9,6 +9,7 @@
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 //#include <fbxsdk.h>
+#include "version.h"
 
 #include "../components/components.h"
 
