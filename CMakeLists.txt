@@ -23,6 +23,12 @@ elseif(APPLE)
     else()
         set(PLATFORM "macOS")
     endif()
+elseif(ANDROID)
+    set(PLATFORM "Android")
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/reqs/android_ndk/build/cmake/android.toolchain.cmake")
+    set(ANDROID_ABI "arm64-v8a")
+    set(ANDROID_PLATFORM_LEVEL "android-26")
+    set(CMAKE_ANDROID_NDK_TOOLCHAIN_VERSION clang)
 elseif(MIRA)
     set(PLATFORM "mira")
 else()
@@ -162,6 +168,23 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "WindowsStore")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /APPCONTAINER")
     set(CMAKE_TARGET_PLATFORM "UWP")
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+endif()
+
+# Android
+if(ANDROID)
+    find_library(ANDROID_LOG_LIB log)
+    find_library(ANDROID_NATIVE_APP_GLUE_LIB android_native_app_glue)
+    find_library(OPENGL_LIB GLESv3)
+    find_library(EGL_LIB EGL)
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${ANDROID_LOG_LIB}
+        ${ANDROID_NATIVE_APP_GLUE_LIB}
+        ${OPENGL_LIB}
+        ${EGL_LIB}
+    )
+
+    add_definitions("-DANDROID")
 endif()
 
 
