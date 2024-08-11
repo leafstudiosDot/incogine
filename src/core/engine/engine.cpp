@@ -150,23 +150,42 @@ void Engine::Events() {
                 windowWidth = event.window.data1;
                 windowHeight = event.window.data2;
             }
+
+            switch (event.window.event) {
+                case SDL_WINDOWEVENT_MINIMIZED:
+                    // Incogine is minimized (Windows/macOS/Linux)
+                    inBackground = true;
+                    break;
+                case SDL_WINDOWEVENT_MAXIMIZED:
+                    // Incogine is restored (Windows/macOS/Linux)
+                    inBackground = false;
+                    break;
+                case SDL_WINDOWEVENT_CLOSE:
+                    // Incogine is about to terminate (Windows/macOS/Linux)
+                    Quit();
+                    break;
+                default:
+                    break;
+            }
         }
 
-        #if defined(__APPLE__) && defined(__IPHONEOS__)
-            if (e.type == SDL_APP_WILLENTERBACKGROUND) {
-                // TODO: Incogine is going to background
-            }
-            else if (e.type == SDL_APP_DIDENTERFOREGROUND) {
-                // TODO: Incogine is coming to foreground
-            }
-            else if (e.type == SDL_APP_TERMINATING) {
-                // TODO: Incogine is about to terminate
+        switch(event.type) {
+            case SDL_APP_WILLENTERBACKGROUND:
+                // Incogine is going to background (Android/iOS)
+                inBackground = true;
+                break;
+            case SDL_APP_DIDENTERFOREGROUND:
+                // Incogine is coming to foreground (Android/iOS)
+                inBackground = false;
+                break;
+            case SDL_APP_TERMINATING:
+                // Incogine is about to terminate (Android/iOS)
                 Quit();
-            }
-            else if (e.type == SDL_APP_LOWMEMORY) {
-                // TODO: Low memory warning
-            }
-        #endif
+                break;
+            case SDL_APP_LOWMEMORY:
+                // Low memory warning (Android/iOS)
+                break;
+        }
     }
 }
 

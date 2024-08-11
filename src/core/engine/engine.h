@@ -43,6 +43,7 @@ class Engine {
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
+        inline bool inBackground() { return inBackground; }
 
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
@@ -56,6 +57,7 @@ class Engine {
         bool debugMode;
         bool devmode;
         bool isRunning;
+        bool inBackground;
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
