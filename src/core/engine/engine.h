@@ -9,6 +9,7 @@
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 //#include <fbxsdk.h>
+//#include "console/console.h"
 #include "version.h"
 
 #include "../components/components.h"
@@ -43,7 +44,7 @@ class Engine {
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
-        inline bool inBackground() { return inBackground; }
+        inline bool checkInBackground() { return inBackground; }
 
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
