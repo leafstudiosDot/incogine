@@ -26,6 +26,7 @@ elseif(APPLE)
 elseif(ANDROID)
     set(PLATFORM "Android")
     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/reqs/android_ndk/build/cmake/android.toolchain.cmake")
+    set(ANDROID_NATIVE_APP_GLUE_LIB "${CMAKE_CURRENT_SOURCE_DIR}/reqs/android_ndk/sources/android/native_app_glue")
     set(ANDROID_ABI "arm64-v8a")
     set(ANDROID_PLATFORM_LEVEL "android-26")
     set(CMAKE_ANDROID_NDK_TOOLCHAIN_VERSION clang)
@@ -126,8 +127,18 @@ if (APPLE)
     endif()
 endif()
 
+if (ANDROID)
+    find_package(SDL2 REQUIRED)
+
+    add_library(SDL2 SHARED IMPORTED)
+    set_target_properties(SDL2 PROPERTIES
+        IMPORTED_LOCATION "${SDL2_PATH}/lib/armeabi-v7a/libSDL2.so"
+        INTERFACE_INCLUDE_DIRECTORIES "${SDL2_PATH}"
+    )
+endif()
+
 # OpenGL
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
     # Do nothing
 else()
     find_package(OpenGL REQUIRED)
@@ -174,15 +185,7 @@ endif()
 if(ANDROID)
     find_library(ANDROID_LOG_LIB log)
     find_library(ANDROID_NATIVE_APP_GLUE_LIB android_native_app_glue)
-    find_library(OPENGL_LIB GLESv3)
-    find_library(EGL_LIB EGL)
-
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${ANDROID_LOG_LIB}
-        ${ANDROID_NATIVE_APP_GLUE_LIB}
-        ${OPENGL_LIB}
-        ${EGL_LIB}
-    )
+    set(OPENGL_LIB GLESv1_CM)
 
     add_definitions("-DANDROID")
 endif()
@@ -411,4 +414,20 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} --target run_debug
         COMMENT "Build and run the application"
     )
+endif()
+
+# Android Bundle properties
+if(ANDROID)
+    target_link_libraries(${PROJECT_NAME}
+        SDL2
+        ${ANDROID_LOG_LIB}
+        #${ANDROID_NATIVE_APP_GLUE_LIB}
+        ${OPENGL_LIB}
+    )
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        LINK_FLAGS "-u ANativeActivity_onCreate"
+    )
+
+    target_compile_definitions(${PROJECT_NAME} PRIVATE -DANDROID)
 endif()
