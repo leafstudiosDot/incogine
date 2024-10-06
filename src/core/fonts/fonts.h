@@ -22,7 +22,7 @@ class Font {
         void Init(SDL_Renderer* renderer);
         void setFont(const char* data, int size);
         void setFontRaw(TTF_Font* font);
-        void renderUI(int x, int y, int modifiedFontSize = 24);
+        void renderUI(const char* content, int x, int y, int modifiedFontSize = 24);
 
         inline TTF_Font* GetFont() { return font; }
 };
