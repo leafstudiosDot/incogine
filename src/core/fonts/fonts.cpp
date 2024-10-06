@@ -10,6 +10,12 @@ Font::~Font() {
     if (fontLoaded) {
         TTF_CloseFont(font);
     }
+    if (surface != nullptr) {
+        SDL_FreeSurface(surface);
+    }
+    if (texture != nullptr) {
+        SDL_DestroyTexture(texture);
+    }
 }
 
 void Font::Init(SDL_Renderer* renderer) {
@@ -18,23 +24,11 @@ void Font::Init(SDL_Renderer* renderer) {
         return;
     }
 
-    surface = TTF_RenderText_Solid(font, text_content, color);
-    if (surface == nullptr) {
-        cerr << "TTF_RenderText_Solid Error: " << TTF_GetError() << endl;
-        return;
-    }
-
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (texture == nullptr) {
-        cerr << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << endl;
-        return;
-    }
-
     this->renderer = renderer;
 }
 
-void Font::setFont(char* data, int size) {
-    font = TTF_OpenFontRW(SDL_RWFromConstMem(data, size), 1, 24);
+void Font::setFont(const char* data, int size) {
+    font = TTF_OpenFontRW(SDL_RWFromConstMem(data, size), 1, fontSize);
     if (font == nullptr) {
         cerr << "TTF_OpenFont Error: " << TTF_GetError() << endl;
         return;
@@ -48,7 +42,23 @@ void Font::setFontRaw(TTF_Font* font) {
     fontLoaded = true;
 }
 
-void Font::renderUI(int x, int y) {
+void Font::renderUI(int x, int y, int modifiedFontSize) {
+    fontSize = modifiedFontSize;
+    surface = TTF_RenderText_Solid(font, text_content, color);
+    if (surface == nullptr) {
+        cerr << "TTF_RenderText_Solid Error: " << TTF_GetError() << endl;
+        return;
+    }
+
+    texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture == nullptr) {
+        cerr << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << endl;
+        return;
+    }
+
     SDL_Rect destRect = {x, y, surface->w, surface->h};
     SDL_RenderCopy(renderer, texture, nullptr, &destRect);
+
+    SDL_FreeSurface(surface);
+    SDL_DestroyTexture(texture);
 }
