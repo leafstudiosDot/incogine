@@ -4,6 +4,7 @@ using namespace std;
 Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr) {
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
+    sceneManager = new SceneManager(*renderer);
 }
 
 Engine* Engine::instance = nullptr;

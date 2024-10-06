@@ -42,7 +42,13 @@ void Font::setFontRaw(TTF_Font* font) {
     fontLoaded = true;
 }
 
-void Font::renderUI(int x, int y, int modifiedFontSize) {
+void Font::renderUI(const char* content, int x, int y, int modifiedFontSize) {
+    if (!fontLoaded || renderer == nullptr) {
+        std::cerr << "Font or Renderer is not initialized in Font::renderUI" << std::endl;
+        return;
+    }
+
+    text_content = const_cast<char*>(content);
     fontSize = modifiedFontSize;
     surface = TTF_RenderText_Solid(font, text_content, color);
     if (surface == nullptr) {
