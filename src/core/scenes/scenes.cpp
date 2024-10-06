@@ -1,6 +1,6 @@
 #include "scenes.h"
 
-SceneManager::SceneManager() : currentScene(nullptr) {}
+SceneManager::SceneManager(SDL_Renderer& renderer) : currentScene(nullptr) {}
 
 SceneManager::~SceneManager() {
     if (currentScene != nullptr) {
@@ -14,6 +14,7 @@ void SceneManager::SetScene(Scene* scene) {
     }
     currentScene = scene;
     currentScene->Start();
+    currentScene->StartInitialized = true;
 }
 
 void SceneManager::UpdateScene() {

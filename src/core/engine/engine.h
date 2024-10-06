@@ -69,7 +69,7 @@ class Engine {
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
-        SceneManager sceneManager;
+        SceneManager* sceneManager;
 
     private:
         Engine(int argc, char* argv[]);
