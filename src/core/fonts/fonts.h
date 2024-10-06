@@ -16,7 +16,7 @@ class Font {
         ~Font();
 
         void Init(SDL_Renderer* renderer);
-        void setFont(char* data, int size);
+        void setFont(const char* data, int size);
         void setFontRaw(TTF_Font* font);
         void renderUI(int x, int y);
 

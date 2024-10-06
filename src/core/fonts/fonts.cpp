@@ -33,7 +33,7 @@ void Font::Init(SDL_Renderer* renderer) {
     this->renderer = renderer;
 }
 
-void Font::setFont(char* data, int size) {
+void Font::setFont(const char* data, int size) {
     font = TTF_OpenFontRW(SDL_RWFromConstMem(data, size), 1, 24);
     if (font == nullptr) {
         cerr << "TTF_OpenFont Error: " << TTF_GetError() << endl;
