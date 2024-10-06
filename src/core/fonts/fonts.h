@@ -2,6 +2,9 @@
 #include <SDL_ttf.h>
 using namespace std;
 
+#ifndef FONTS_H
+#define FONTS_H
+
 class Font {
     private:
         TTF_Font* font;
@@ -11,6 +14,7 @@ class Font {
         char* text_content;
         SDL_Color color = {255, 255, 255};
         SDL_Renderer* renderer;
+        int fontSize = 24;
     public:
         Font();
         ~Font();
@@ -18,7 +22,9 @@ class Font {
         void Init(SDL_Renderer* renderer);
         void setFont(const char* data, int size);
         void setFontRaw(TTF_Font* font);
-        void renderUI(int x, int y);
+        void renderUI(int x, int y, int modifiedFontSize = 24);
 
         inline TTF_Font* GetFont() { return font; }
 };
+
+#endif
