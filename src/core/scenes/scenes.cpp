@@ -13,8 +13,11 @@ void SceneManager::SetScene(Scene* scene) {
         delete currentScene;
     }
     currentScene = scene;
-    currentScene->Start();
-    currentScene->StartInitialized = true;
+    if (currentScene != nullptr) {
+        currentScene->renderer = renderer;
+        currentScene->Start();
+        currentScene->StartInitialized = true;
+    }
 }
 
 void SceneManager::UpdateScene() {
@@ -29,7 +32,7 @@ void SceneManager::RenderScene() {
     }
 }
 
-Scene::Scene() {
+Scene::Scene() : renderer(nullptr) {
     
 }
 

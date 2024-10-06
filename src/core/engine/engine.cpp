@@ -88,7 +88,9 @@ void Engine::Init() {
     }
 
     isRunning = true;
-    sceneManager->SetScene(new Splash());
+    if (sceneManager != nullptr) {
+        sceneManager->SetScene(new Splash());
+    }
 }
 
 void Engine::Quit() {
@@ -108,7 +110,9 @@ void Engine::Cleanup() {
 }
 
 void Engine::Update() {
-    sceneManager->UpdateScene();
+    if (sceneManager != nullptr) {
+        sceneManager->UpdateScene();
+    }
 }
 
 void Engine::Render() {
@@ -121,7 +125,9 @@ void Engine::Render() {
         SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
     }
 
-    sceneManager->RenderScene();
+    if (sceneManager != nullptr) {
+        sceneManager->RenderScene();
+    }
 
     SDL_RenderPresent(renderer);
 }
