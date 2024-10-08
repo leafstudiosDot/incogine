@@ -50,7 +50,7 @@ void Font::renderUI(const char* content, int x, int y, int modifiedFontSize) {
 
     text_content = const_cast<char*>(content);
     fontSize = modifiedFontSize;
-    surface = TTF_RenderText_Solid(font, text_content, color);
+    surface = TTF_RenderText_Blended(font, text_content, color);
     if (surface == nullptr) {
         cerr << "TTF_RenderText_Solid Error: " << TTF_GetError() << endl;
         return;
@@ -67,4 +67,8 @@ void Font::renderUI(const char* content, int x, int y, int modifiedFontSize) {
 
     SDL_FreeSurface(surface);
     SDL_DestroyTexture(texture);
+}
+
+SDL_Color Font::setColor(SDL_Color newColor) {
+    return color = newColor;
 }
