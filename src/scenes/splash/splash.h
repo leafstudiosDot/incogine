@@ -9,6 +9,8 @@
 class Splash : public Scene {
     private:
         Font font;
+        int frames;
+        int splashopacity;
     public:
         Splash();
         ~Splash();

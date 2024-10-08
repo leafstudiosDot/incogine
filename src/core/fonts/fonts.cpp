@@ -7,14 +7,14 @@ Font::Font() {
 }
 
 Font::~Font() {
-    if (fontLoaded) {
-        TTF_CloseFont(font);
+    if (texture != nullptr) {
+        SDL_DestroyTexture(texture);
     }
     if (surface != nullptr) {
         SDL_FreeSurface(surface);
     }
-    if (texture != nullptr) {
-        SDL_DestroyTexture(texture);
+    if (fontLoaded) {
+        TTF_CloseFont(font);
     }
 }
 
@@ -69,6 +69,9 @@ void Font::renderUI(const char* content, int x, int y, int modifiedFontSize) {
     SDL_DestroyTexture(texture);
 }
 
-SDL_Color Font::setColor(SDL_Color newColor) {
-    return color = newColor;
+void Font::setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA) {
+    color.r = newColorR;
+    color.g = newColorG;
+    color.b = newColorB;
+    color.a = newColorA;
 }
