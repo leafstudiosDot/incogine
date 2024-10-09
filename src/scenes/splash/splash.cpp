@@ -29,22 +29,10 @@ void Splash::Update() {
     // Scene update, calls every frame
     frames++;
     if (frames >= 100 && frames < 300) {
-        if (splashopacity >= 245) {
-            splashopacity = 255;
-        } else {
-            splashopacity += 4;
-        }
-    }
-
-    if (frames >= 400 && frames <= 500) {
-        if (splashopacity <= 0) {
-            splashopacity = 0;
-        } else {
-            splashopacity -= 2;
-        }
-    }
-
-    if (frames >= 540) {
+        splashopacity = std::min(splashopacity + 4, 255);
+    } else if (frames >= 400 && frames <= 500) {
+        splashopacity = std::max(splashopacity - 2, 0);
+    } else if (frames >= 540) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
     }
 }
