@@ -29,14 +29,14 @@ void Splash::Update() {
     // Scene update, calls every frame
     frames++;
     if (frames >= 100 && frames < 300) {
-        if (splashopacity >= 254) {
+        if (splashopacity >= 245) {
             splashopacity = 255;
         } else {
-            splashopacity += 2;
+            splashopacity += 4;
         }
     }
 
-    if (frames >= 300) {
+    if (frames >= 400 && frames <= 500) {
         if (splashopacity <= 0) {
             splashopacity = 0;
         } else {
@@ -44,13 +44,13 @@ void Splash::Update() {
         }
     }
 
-    if (frames >= 440) {
+    if (frames >= 540) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
     }
 }
 
 void Splash::Render() {
     // Scene render
-    font.renderUI("Splash Scene", 10, 10, 24);
+    font.renderUI("Powered by Incogine", (Engine::Instance(0, nullptr)->GetWindowSize().width/2) - 120, (Engine::Instance(0, nullptr)->GetWindowSize().width/4), 24);
     font.setColor(splashopacity, splashopacity, splashopacity, splashopacity);
 }
