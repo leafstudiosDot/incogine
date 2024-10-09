@@ -29,6 +29,11 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+struct WindowSize {
+    int width;
+    int height;
+};
+
 class Engine {
     public:
         void Init();
@@ -45,6 +50,7 @@ class Engine {
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
         inline bool checkInBackground() { return inBackground; }
+        inline WindowSize GetWindowSize() { return windowSize; };
 
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
@@ -69,6 +75,7 @@ class Engine {
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
+        WindowSize windowSize = {windowWidth, windowHeight};
         SceneManager* sceneManager;
 
     private:
