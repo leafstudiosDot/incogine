@@ -111,6 +111,9 @@ void Engine::Cleanup() {
 }
 
 void Engine::Update() {
+    windowSize.width = windowWidth;
+    windowSize.height = windowHeight;
+
     if (sceneManager != nullptr) {
         sceneManager->UpdateScene();
     }
