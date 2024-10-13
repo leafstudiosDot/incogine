@@ -1,5 +1,4 @@
 #include "image.h"
-using namespace std;
 
 Image::Image(SDL_Renderer* renderer) : renderer(renderer), texture(nullptr) {
     //loadFromMemory(image_data, image_size);

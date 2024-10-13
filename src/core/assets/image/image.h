@@ -1,6 +1,7 @@
-#include "../../engine/engine.h"
-
+#include <SDL2/SDL.h>
 #include <SDL_image.h>
+#include <iostream>
+#include <string>
 using namespace std;
 
 class Image {
