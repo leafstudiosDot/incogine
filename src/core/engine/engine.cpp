@@ -4,6 +4,7 @@ using namespace std;
 Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr) {
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
+    skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
     sceneManager = new SceneManager(*renderer);
 }
 
@@ -90,7 +91,11 @@ void Engine::Init() {
 
     isRunning = true;
     if (sceneManager != nullptr) {
-        sceneManager->SetScene(new Splash());
+        if (skipSplash) {
+            sceneManager->SetScene(new MainScene());
+        } else {
+            sceneManager->SetScene(new Splash());
+        }
     }
 }
 

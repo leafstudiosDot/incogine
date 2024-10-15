@@ -65,6 +65,7 @@ class Engine {
         bool devmode;
         bool isRunning;
         bool inBackground;
+        bool skipSplash;
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
