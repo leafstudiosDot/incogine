@@ -234,6 +234,7 @@ add_custom_target(generate_headers ALL DEPENDS ${SVG_HEADERS})
 
 
 # Project Settings (project.xml)
+file(GLOB PROJECT_XML "${CMAKE_SOURCE_DIR}/src/project.xml")
 file(READ "${CMAKE_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
 
 string(REGEX MATCH "<name>(.+)</name>" PROJECT_NAME_MATCH "${PROJECT_XML_CONTENT}")
@@ -277,6 +278,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
 
 file(GLOB_RECURSE CPP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 file(GLOB_RECURSE H_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
+file(GLOB_RECURSE FILE_ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/*)
 set(SOURCES ${CPP_SOURCES} ${H_SOURCES})
 
 foreach(_source IN ITEMS ${SOURCES})
@@ -286,7 +288,20 @@ foreach(_source IN ITEMS ${SOURCES})
     source_group("${_group_path}" FILES "${_source}")
 endforeach()
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
+set(ASSETS_SOURCES ${FILE_ASSETS})
+foreach(_assetfile IN ITEMS ${FILE_ASSETS})
+    get_filename_component(_assetfile_path "${_assetfile}" PATH)
+    string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" _group_path "${_assetfile_path}")
+    string(REPLACE "/" "\\" _group_path "${_group_path}")
+    source_group("Assets" FILES "${_assetfile}")
+endforeach()
+
+if(PROJECT_XML)
+    source_group("" FILES ${PROJECT_XML})
+    list(APPEND SOURCES ${PROJECT_XML})
+endif()
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
 
 if (APPLE)
     if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
@@ -422,11 +437,11 @@ if(WIN32)
         )
     endif()
 
-    add_custom_target(run ALL
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
-        COMMAND ${CMAKE_COMMAND} --target run_debug
-        COMMENT "Build and run the application"
-    )
+    #add_custom_target(run ALL
+    #    COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}
+    #    COMMAND ${CMAKE_COMMAND} --target run_debug
+    #    COMMENT "Build and run the application"
+    #)
 endif()
 
 # Android Bundle properties
