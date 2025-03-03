@@ -1,9 +1,16 @@
 #include <iostream>
+#include <stdexcept>
 #include <string>
+#include <vector>
 #include <SDL2/SDL.h>
+#if defined(__APPLE__) && defined(__IPHONEOS__)
+    #include <SDL2/SDL_main.h>
+#endif
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 //#include <fbxsdk.h>
+//#include "console/console.h"
+#include "version.h"
 
 #include "../components/components.h"
 
@@ -22,6 +29,11 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+struct WindowSize {
+    int width;
+    int height;
+};
+
 class Engine {
     public:
         void Init();
@@ -37,6 +49,8 @@ class Engine {
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
+        inline bool checkInBackground() { return inBackground; }
+        inline WindowSize GetWindowSize() { return windowSize; };
 
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
@@ -50,6 +64,8 @@ class Engine {
         bool debugMode;
         bool devmode;
         bool isRunning;
+        bool inBackground;
+        bool skipSplash;
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
@@ -60,7 +76,8 @@ class Engine {
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
-        SceneManager sceneManager;
+        WindowSize windowSize = {windowWidth, windowHeight};
+        SceneManager* sceneManager;
 
     private:
         Engine(int argc, char* argv[]);

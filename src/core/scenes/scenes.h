@@ -1,11 +1,14 @@
 #include <iostream>
+#include <SDL2/SDL.h>
 
 #ifndef SCENE_H
 #define SCENE_H
 
 class Scene {
-    private:
-
+    friend class SceneManager;
+    protected:
+        SDL_Renderer* renderer;
+        bool StartInitialized = false;
     public:
         Scene();
         virtual ~Scene();
@@ -20,10 +23,12 @@ class Scene {
 #define SCENEMANAGER_H
 
 class SceneManager {
+    protected:
+        SDL_Renderer* renderer;
     private:
         Scene* currentScene;
     public:
-        SceneManager();
+        SceneManager(SDL_Renderer& renderer);
         ~SceneManager();
         void SetScene(Scene* scene);
         void UpdateScene();

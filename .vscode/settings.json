@@ -72,6 +72,17 @@
         "__tree": "cpp",
         "fstream": "cpp",
         "iomanip": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "hash_map": "cpp",
+        "set": "cpp",
+        "unordered_set": "cpp",
+        "span": "cpp",
+        "format": "cpp",
+        "text_encoding": "cpp",
+        "numeric": "cpp",
+        "deque": "cpp",
+        "print": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     }
 }

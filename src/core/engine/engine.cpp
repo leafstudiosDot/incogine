@@ -1,9 +1,11 @@
 #include "engine.h"
 using namespace std;
 
-Engine::Engine(int argc, char* argv[]) {
+Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr) {
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
+    skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
+    sceneManager = new SceneManager(*renderer);
 }
 
 Engine* Engine::instance = nullptr;
@@ -15,16 +17,20 @@ void Engine::Init() {
     }
 
     char projectName[256];
+    char windowName[1024];
 
     if (devmode) {
-        snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s [DEV]", WINDOW_NAME);
     } else if (debugMode) {
-        snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s [DEBUG]", WINDOW_NAME);
     } else {
-        snprintf(projectName, sizeof(projectName), "%s", PROJECT_NAME);
+        //snprintf(projectName, sizeof(projectName), "%s", PROJECT_NAME);
+        snprintf(windowName, sizeof(windowName), "%s", WINDOW_NAME);
     }
 
-    window = SDL_CreateWindow(projectName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
+    window = SDL_CreateWindow(windowName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
         std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
@@ -84,7 +90,13 @@ void Engine::Init() {
     }
 
     isRunning = true;
-    sceneManager.SetScene(new Splash());
+    if (sceneManager != nullptr) {
+        if (skipSplash) {
+            sceneManager->SetScene(new MainScene());
+        } else {
+            sceneManager->SetScene(new Splash());
+        }
+    }
 }
 
 void Engine::Quit() {
@@ -104,7 +116,12 @@ void Engine::Cleanup() {
 }
 
 void Engine::Update() {
-    sceneManager.UpdateScene();
+    windowSize.width = windowWidth;
+    windowSize.height = windowHeight;
+
+    if (sceneManager != nullptr) {
+        sceneManager->UpdateScene();
+    }
 }
 
 void Engine::Render() {
@@ -117,7 +134,9 @@ void Engine::Render() {
         SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
     }
 
-    sceneManager.RenderScene();
+    if (sceneManager != nullptr) {
+        sceneManager->RenderScene();
+    }
 
     SDL_RenderPresent(renderer);
 }
@@ -146,10 +165,45 @@ void Engine::Events() {
                 windowWidth = event.window.data1;
                 windowHeight = event.window.data2;
             }
+
+            switch (event.window.event) {
+                case SDL_WINDOWEVENT_MINIMIZED:
+                    // Incogine is minimized (Windows/macOS/Linux)
+                    inBackground = true;
+                    break;
+                case SDL_WINDOWEVENT_MAXIMIZED:
+                    // Incogine is restored (Windows/macOS/Linux)
+                    inBackground = false;
+                    break;
+                case SDL_WINDOWEVENT_CLOSE:
+                    // Incogine is about to terminate (Windows/macOS/Linux)
+                    Quit();
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        switch(event.type) {
+            case SDL_APP_WILLENTERBACKGROUND:
+                // Incogine is going to background (Android/iOS)
+                inBackground = true;
+                break;
+            case SDL_APP_DIDENTERFOREGROUND:
+                // Incogine is coming to foreground (Android/iOS)
+                inBackground = false;
+                break;
+            case SDL_APP_TERMINATING:
+                // Incogine is about to terminate (Android/iOS)
+                Quit();
+                break;
+            case SDL_APP_LOWMEMORY:
+                // Low memory warning (Android/iOS)
+                break;
         }
     }
 }
 
 void Engine::SetScene(Scene* scene) {
-    sceneManager.SetScene(scene);
+    sceneManager->SetScene(scene);
 }
