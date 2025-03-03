@@ -412,7 +412,7 @@ if(WIN32)
     )
 
     add_dependencies(${PROJECT_NAME} compile_resource)
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.res)
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug
