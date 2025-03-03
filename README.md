@@ -14,8 +14,14 @@ A leafstudiosDot engine. Now open source!
 ## Build
 > Recommended using Visual Studio Code with CMake Tools extension.
 
-### Windows
-[Coming soon]
+### Windows (Visual Studio IDE)
+1. Run the following commands in the project root directory:
+```
+$ mkdir build
+$ cd build
+$ cmake ..
+```
+2. Open `build/Incogine.sln` with Visual Studio IDE (or Visual Studio 2022)
 
 ### Windows (Terminal compiler), macOS/Linux or others
 For Terminal compilers, run the following commands in the project root directory:
