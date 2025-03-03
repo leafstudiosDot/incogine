@@ -5,8 +5,15 @@ using namespace std;
 #ifndef FONTS_H
 #define FONTS_H
 
+struct FontSize {
+	int width;
+	int height;
+};
+
 class Font {
     private:
+        const char* data;
+        int size;
         TTF_Font* font;
         bool fontLoaded;
         SDL_Surface* surface;
@@ -14,7 +21,8 @@ class Font {
         char* text_content;
         SDL_Color color = {255, 255, 255};
         SDL_Renderer* renderer;
-        int fontSize = 24;
+        int fontSize;
+        FontSize fontWidth;
     public:
         Font();
         ~Font();
@@ -22,8 +30,11 @@ class Font {
         void Init(SDL_Renderer* renderer);
         void setFont(const char* data, int size);
         void setFontRaw(TTF_Font* font);
-        void renderUI(const char* content, int x, int y, int modifiedFontSize = 24);
+        void renderUI(int x, int y);
         void setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA);
+		void setFontSize(int newSize);
+		void setTextContent(const char* content);
+		FontSize getFontWidth();
 
         inline TTF_Font* GetFont() { return font; }
 };

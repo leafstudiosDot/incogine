@@ -18,6 +18,9 @@ void Splash::Start() {
     font.setColor(0, 0, 0, 0);
 
     font.setFont(reinterpret_cast<const char*>(_mainfont_data), _mainfont_size);
+    font.setTextContent("Powered by Incogine");
+
+    font.setFontSize(32);
     if (!font.GetFont()) {
         std::cerr << "Failed to load font in Splash::Start" << std::endl;
     }
@@ -39,6 +42,9 @@ void Splash::Update() {
 
 void Splash::Render() {
     // Scene render
-    font.renderUI("Powered by Incogine", (Engine::Instance(0, nullptr)->GetWindowSize().width/2) - 120, (Engine::Instance(0, nullptr)->GetWindowSize().width/4), 24);
+    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
+    font.setFontSize(scaledFontSize);
+
     font.setColor(splashopacity, splashopacity, splashopacity, splashopacity);
 }
