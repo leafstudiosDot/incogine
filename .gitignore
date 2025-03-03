@@ -1,4 +1,6 @@
 reqs
 build/*
 !build/build.sh
+build-linux/*
+out
 src/fonts/main_font.h
