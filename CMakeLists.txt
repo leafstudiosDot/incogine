@@ -230,7 +230,7 @@ foreach(SVG_FILE ${SVG_FILES})
     )
     list(APPEND SVG_HEADERS "${CMAKE_BINARY_DIR}/${SVG_FILENAME}_svgdata.h")
 endforeach()
-add_custom_target(generate_headers ALL DEPENDS ${SVG_HEADERS})
+#add_custom_target(generate_headers ALL DEPENDS ${SVG_HEADERS})
 
 
 # Project Settings (project.xml)
@@ -421,12 +421,6 @@ if(WIN32)
         COMMENT "Compiling resource file"
     )
 
-    add_custom_target(
-        compile_resource ALL
-        DEPENDS ${CMAKE_BINARY_DIR}/resource.res
-    )
-
-    add_dependencies(${PROJECT_NAME} compile_resource)
     target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
