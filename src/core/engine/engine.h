@@ -46,10 +46,13 @@ class Engine {
 
         void SetScene(Scene* scene);
 
+        void ToggleFullscreen();
+
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
         inline bool running() { return isRunning; }
         inline bool checkInBackground() { return inBackground; }
+		inline bool inFullScreen() { return fullScreenMode; }
         inline WindowSize GetWindowSize() { return windowSize; };
 
         inline SDL_Window* GetWindow() { return window; }
@@ -66,6 +69,8 @@ class Engine {
         bool isRunning;
         bool inBackground;
         bool skipSplash;
+        bool winFocused;
+        bool fullScreenMode = false;
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
@@ -76,6 +81,11 @@ class Engine {
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
+
+        // After full screen toggle
+		int windowedWidth = SCREEN_WIDTH;
+		int windowedHeight = SCREEN_HEIGHT;
+
         WindowSize windowSize = {windowWidth, windowHeight};
         SceneManager* sceneManager;
 

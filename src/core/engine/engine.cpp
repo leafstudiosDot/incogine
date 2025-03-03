@@ -1,7 +1,7 @@
 #include "engine.h"
 using namespace std;
 
-Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr) {
+Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) {
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
     skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
@@ -167,6 +167,15 @@ void Engine::Events() {
             }
 
             switch (event.window.event) {
+                // Core Window SDL events
+                case SDL_WINDOWEVENT_FOCUS_GAINED:
+                    // Window focused at Incogine (Windows/macOS/Linux)
+                    winFocused = true;
+                    break;
+                case SDL_WINDOWEVENT_FOCUS_LOST:
+                    // Window isn't focused at Incogine (Windows/macOS/Linux)
+                    winFocused = false;
+                    break;
                 case SDL_WINDOWEVENT_MINIMIZED:
                     // Incogine is minimized (Windows/macOS/Linux)
                     inBackground = true;
@@ -179,12 +188,17 @@ void Engine::Events() {
                     // Incogine is about to terminate (Windows/macOS/Linux)
                     Quit();
                     break;
-                default:
-                    break;
             }
         }
 
         switch(event.type) {
+            case SDL_KEYDOWN:
+				if (event.key.keysym.sym == SDLK_F12 && winFocused) { // F12 key
+                    ToggleFullscreen();
+                }
+                break;
+
+			// Core SDL events
             case SDL_APP_WILLENTERBACKGROUND:
                 // Incogine is going to background (Android/iOS)
                 inBackground = true;
@@ -206,4 +220,16 @@ void Engine::Events() {
 
 void Engine::SetScene(Scene* scene) {
     sceneManager->SetScene(scene);
+}
+
+void Engine::ToggleFullscreen() {
+    fullScreenMode = !fullScreenMode;
+    if (fullScreenMode) {
+		windowedHeight = windowHeight;
+		windowedWidth = windowWidth;
+        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    } else {
+        SDL_SetWindowSize(window, windowedWidth, windowedHeight);
+        SDL_SetWindowFullscreen(window, 0);
+    }
 }
