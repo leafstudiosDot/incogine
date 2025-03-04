@@ -193,7 +193,7 @@ void Engine::Events() {
 
         switch(event.type) {
             case SDL_KEYDOWN:
-				if (event.key.keysym.sym == SDLK_F12 && winFocused) { // F12 key
+				if (event.key.keysym.sym == SDLK_F11 && winFocused) { // F11 key
                     ToggleFullscreen();
                 }
                 break;
