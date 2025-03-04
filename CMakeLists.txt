@@ -7,6 +7,20 @@ endif()
 
 project(Incogine)
 
+# Project Scripts (Incogine Puroko)
+set(PROJSNAME Puroko)
+file(GLOB PROJST_SOURCES "src/project/*.cpp")
+file(GLOB PROJST_HEADERS "src/project/*.h")
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_library(${PROJSNAME} SHARED ${PROJST_SOURCES} ${PROJST_HEADERS})
+else()
+    add_library(${PROJSNAME} STATIC ${PROJST_SOURCES} ${PROJST_HEADERS})
+endif()
+
+target_include_directories(${PROJSNAME} PUBLIC src/project)
+
+
 # Python3
 find_package(Python3 REQUIRED)
 
@@ -302,6 +316,13 @@ if(PROJECT_XML)
 endif()
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
+target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJSNAME})
+add_dependencies(${PROJECT_NAME} ${PROJSNAME})
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_FILE:${PROJSNAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
+)
 
 if (APPLE)
     if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
