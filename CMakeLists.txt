@@ -9,16 +9,28 @@ project(Incogine)
 
 # Project Scripts (Incogine Puroko)
 set(PROJSNAME Puroko)
-file(GLOB PROJST_SOURCES "src/project/*.cpp")
-file(GLOB PROJST_HEADERS "src/project/*.h")
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_library(${PROJSNAME} SHARED ${PROJST_SOURCES} ${PROJST_HEADERS})
-else()
-    add_library(${PROJSNAME} STATIC ${PROJST_SOURCES} ${PROJST_HEADERS})
-endif()
+file(GLOB_RECURSE PROJST_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/project/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/project/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/*.h
+)
 
-target_include_directories(${PROJSNAME} PUBLIC src/project)
+file(GLOB_RECURSE _RM_PROJST_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/splash/*
+)
+list(REMOVE_ITEM PROJST_SOURCES ${_RM_PROJST_SOURCES})
+add_library(${PROJSNAME} STATIC ${PROJST_SOURCES})
+
+target_include_directories(${PROJSNAME} PUBLIC ${PROJST_SOURCES})
+
+foreach(_projfiles IN ITEMS ${PROJST_SOURCES})
+    get_filename_component(_source_path "${_projfiles}" PATH)
+    string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}" "" _group_path "${_source_path}")
+    string(REPLACE "/" "\\" _group_path "${_group_path}")
+    source_group("${_group_path}" FILES "${_projfiles}")
+endforeach()
 
 
 # Python3
@@ -293,6 +305,16 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
 file(GLOB_RECURSE CPP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp)
 file(GLOB_RECURSE H_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/*.h)
 file(GLOB_RECURSE FILE_ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/*)
+
+file(GLOB_RECURSE RM_PRT_SRC
+${CMAKE_CURRENT_SOURCE_DIR}/src/project/*
+)
+
+list(REMOVE_ITEM CPP_SOURCES ${RM_PRT_SRC})
+list(REMOVE_ITEM CPP_SOURCES ${RM_PRT_SRC})
+list(REMOVE_ITEM H_SOURCES ${RM_PRT_SRC})
+list(REMOVE_ITEM H_SOURCES ${RM_PRT_SRC})
+
 set(SOURCES ${CPP_SOURCES} ${H_SOURCES})
 
 foreach(_source IN ITEMS ${SOURCES})
