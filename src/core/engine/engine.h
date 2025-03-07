@@ -74,6 +74,7 @@ class Engine {
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
+        TTF_Font* fpsfont;
         float fps = 0.0f;
 
         SDL_Surface* devmode_surface;
@@ -103,6 +104,8 @@ class Engine {
         Engine(int argc, char* argv[]);
 
         static Engine* instance;
+
+        char* fpsConvert(float fps);
 
 };
 

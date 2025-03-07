@@ -64,6 +64,16 @@ void Engine::Init() {
     }
 
     if (devmode) {
+        fpsfont = TTF_OpenFontRW(SDL_RWFromConstMem(_mainfont_data, _mainfont_size), 1, 15);
+        if (fpsfont == nullptr) {
+            std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+            TTF_Quit();
+            SDL_DestroyRenderer(renderer);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return;
+        }
+
         SDL_Color devmode_color = {255, 255, 255, 128};
         devmode_surface = TTF_RenderText_Blended(mainfont, "Development Mode", devmode_color);
         if (!devmode_surface) {
@@ -117,6 +127,7 @@ void Engine::Cleanup() {
         }
     }
     TTF_CloseFont(mainfont);
+    TTF_CloseFont(fpsfont);
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -155,9 +166,9 @@ void Engine::Render() {
 
         // FPS UI
         SDL_Color dbfps_color = { 255, 255, 255, 128 };
-        dbfps_surface = TTF_RenderText_Blended(mainfont, to_string(getfps()).c_str(), dbfps_color);
+        dbfps_surface = TTF_RenderText_Blended(fpsfont, (std::string(fpsConvert(getfps())) + "fps").c_str(), dbfps_color);
         if (!dbfps_surface) {
-            TTF_CloseFont(mainfont);
+            TTF_CloseFont(fpsfont);
             TTF_Quit();
             SDL_DestroyWindow(window);
             SDL_Quit();
@@ -167,7 +178,7 @@ void Engine::Render() {
         dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
         if (!dbfps_texture) {
             SDL_FreeSurface(dbfps_surface);
-            TTF_CloseFont(mainfont);
+            TTF_CloseFont(fpsfont);
             TTF_Quit();
             SDL_DestroyWindow(window);
             SDL_Quit();
@@ -178,8 +189,8 @@ void Engine::Render() {
         dbfps_destRect.w = dbfps_surface->w;
         dbfps_destRect.h = dbfps_surface->h;
 
-		dbfps_destRect.x = windowWidth - dbfps_destRect.w;
-		dbfps_destRect.y = 0;
+		dbfps_destRect.x = windowWidth - dbfps_destRect.w - 15;
+		dbfps_destRect.y = 15;
 		SDL_RenderCopy(renderer, dbfps_texture, nullptr, &dbfps_destRect);
         SDL_DestroyTexture(dbfps_texture);
         SDL_FreeSurface(dbfps_surface);
@@ -283,4 +294,14 @@ void Engine::ToggleFullscreen() {
         SDL_SetWindowSize(window, windowedWidth, windowedHeight);
         SDL_SetWindowFullscreen(window, 0);
     }
+}
+
+char* Engine::fpsConvert(float fps) {
+    static char buffer[32];
+    if (fps == static_cast<int>(fps)) {
+        snprintf(buffer, sizeof(buffer), "%d", static_cast<int>(fps));
+    } else {
+        snprintf(buffer, sizeof(buffer), "%.2f", fps);
+    }
+    return buffer;
 }
