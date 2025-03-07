@@ -125,9 +125,9 @@ void Engine::Cleanup() {
             dbfps_surface = nullptr;
             SDL_FreeSurface(dbfps_surface);
         }
+        TTF_CloseFont(fpsfont);
     }
     TTF_CloseFont(mainfont);
-    TTF_CloseFont(fpsfont);
     TTF_Quit();
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
