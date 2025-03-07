@@ -107,6 +107,14 @@ void Engine::Cleanup() {
     if (devmode) {
         SDL_DestroyTexture(devmode_texture);
         SDL_FreeSurface(devmode_surface);
+        if (dbfps_texture != nullptr) {
+            SDL_DestroyTexture(dbfps_texture);
+            dbfps_texture = nullptr;
+        }
+        if (dbfps_surface != nullptr) {
+            dbfps_surface = nullptr;
+            SDL_FreeSurface(dbfps_surface);
+        }
     }
     TTF_CloseFont(mainfont);
     TTF_Quit();
@@ -122,6 +130,18 @@ void Engine::Update() {
     if (sceneManager != nullptr) {
         sceneManager->UpdateScene();
     }
+
+    // FPS
+    frameCount++;
+    Uint32 currentTime = SDL_GetTicks();
+    Uint32 deltaTime = currentTime - lastTime;
+
+    if (deltaTime >= 1000) {
+        fps = frameCount / (deltaTime / 1000.0f);
+        frameCount = 0;
+        lastTime = currentTime;
+        //cout << "FPS: " << fps << endl;
+    }
 }
 
 void Engine::Render() {
@@ -132,6 +152,37 @@ void Engine::Render() {
         devmode_destRect.x = windowWidth - devmode_destRect.w;
         devmode_destRect.y = windowHeight - devmode_destRect.h;
         SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
+
+        // FPS UI
+        SDL_Color dbfps_color = { 255, 255, 255, 128 };
+        dbfps_surface = TTF_RenderText_Blended(mainfont, to_string(getfps()).c_str(), dbfps_color);
+        if (!dbfps_surface) {
+            TTF_CloseFont(mainfont);
+            TTF_Quit();
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return;
+        }
+
+        dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
+        if (!dbfps_texture) {
+            SDL_FreeSurface(dbfps_surface);
+            TTF_CloseFont(mainfont);
+            TTF_Quit();
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return;
+        }
+        SDL_SetTextureBlendMode(dbfps_texture, SDL_BLENDMODE_BLEND);
+
+        dbfps_destRect.w = dbfps_surface->w;
+        dbfps_destRect.h = dbfps_surface->h;
+
+		dbfps_destRect.x = windowWidth - dbfps_destRect.w;
+		dbfps_destRect.y = 0;
+		SDL_RenderCopy(renderer, dbfps_texture, nullptr, &dbfps_destRect);
+        SDL_DestroyTexture(dbfps_texture);
+        SDL_FreeSurface(dbfps_surface);
     }
 
     if (sceneManager != nullptr) {

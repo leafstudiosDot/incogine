@@ -59,7 +59,7 @@ class Engine {
         inline SDL_Renderer* GetRenderer() { return renderer; }
         inline TTF_Font* GetMainFont() { return mainfont; }
         
-        float getfps() { return 60.0f; }
+        float getfps() { return fps; }
 
         inline static Engine* Instance(int argc, char* argv[]) { return instance = (instance != nullptr) ? instance : new Engine(argc, argv); }
 
@@ -74,10 +74,20 @@ class Engine {
         SDL_Window* window;
         SDL_Renderer* renderer;
         TTF_Font* mainfont;
+        float fps = 0.0f;
 
         SDL_Surface* devmode_surface;
         SDL_Texture* devmode_texture;
         SDL_Rect devmode_destRect;
+
+        // FPS
+        Uint32 lastTime = SDL_GetTicks();
+        Uint32 frameCount = 0;
+
+        SDL_Surface* dbfps_surface;
+        SDL_Texture* dbfps_texture;
+        SDL_Rect dbfps_destRect;
+
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
