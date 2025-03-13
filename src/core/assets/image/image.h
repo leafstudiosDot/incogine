@@ -1,4 +1,4 @@
-#include <SDL2/SDL.h>
+#include <SDL/SDL.h>
 #include <SDL_image.h>
 #include <iostream>
 #include <string>
@@ -9,12 +9,12 @@ public:
     Image(SDL_Renderer* renderer);
     ~Image();
 
-    void render(int x, int y);
+    void render(float x, float y);
 
 private:
     SDL_Renderer* renderer;
     SDL_Texture* texture;
-    int width, height;
+    float width, height;
 
     void loadFromMemory(const unsigned char* data, unsigned int size);
 };

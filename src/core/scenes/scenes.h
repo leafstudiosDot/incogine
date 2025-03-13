@@ -1,5 +1,5 @@
 #include <iostream>
-#include <SDL2/SDL.h>
+#include <SDL/SDL.h>
 
 #ifndef SCENE_H
 #define SCENE_H

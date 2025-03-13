@@ -42,7 +42,8 @@ void Splash::Update() {
 
 void Splash::Render() {
     // Scene render
-    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    //font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2.8), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
     int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
     font.setFontSize(scaledFontSize);
 
