@@ -30,6 +30,9 @@ void Engine::Init() {
         snprintf(windowName, sizeof(windowName), "%s", WINDOW_NAME);
     }
 
+	if (devmode) {
+		cout << "Creating Window..." << endl;
+	}
     window = SDL_CreateWindow(windowName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
     if (window == nullptr) {
@@ -38,6 +41,9 @@ void Engine::Init() {
         return;
     }
 
+    if (devmode) {
+        cout << "Linking Renderer..." << endl;
+    }
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (renderer == nullptr) {
         std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
@@ -46,6 +52,9 @@ void Engine::Init() {
         return;
     }
 
+    if (devmode) {
+        cout << "Initializing Fonts..." << endl;
+    }
     if (TTF_Init() == -1) {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
@@ -100,6 +109,10 @@ void Engine::Init() {
     }
 
     isRunning = true;
+
+    if (devmode) {
+        cout << "Scene loading..." << endl;
+    }
     if (sceneManager != nullptr) {
         if (skipSplash) {
             sceneManager->SetScene(new MainScene());
