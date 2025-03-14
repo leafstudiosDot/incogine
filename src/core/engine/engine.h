@@ -11,6 +11,7 @@
 //#include <fbxsdk.h>
 //#include "console/console.h"
 #include "version.h"
+#include "math.h"
 
 #include "../components/components.h"
 
