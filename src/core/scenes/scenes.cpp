@@ -1,4 +1,5 @@
 #include "scenes.h"
+#include "../engine/engine.h"
 
 SceneManager::SceneManager(SDL_Renderer& renderer) : currentScene(nullptr) {}
 
@@ -14,6 +15,9 @@ void SceneManager::SetScene(Scene* scene) {
     }
     currentScene = scene;
     if (currentScene != nullptr) {
+        if (Engine::Instance(0, nullptr)->inDevMode()) {
+			cout << "Entering scene: " << currentScene->GetSceneName() << endl;
+        }
         currentScene->renderer = renderer;
         currentScene->Start();
         currentScene->StartInitialized = true;
@@ -32,9 +36,9 @@ void SceneManager::RenderScene() {
     }
 }
 
-Scene::Scene() : renderer(nullptr) {
-    
-}
+/*Scene::Scene(const string& name = "Scene") : sceneName(name), renderer(nullptr) {
+	this->sceneName = sceneName;
+}*/
 
 Scene::~Scene() {
 

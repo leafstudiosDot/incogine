@@ -1,7 +1,7 @@
 #include "MainScene.h"
 #include "core/engine/engine.h"
 
-MainScene::MainScene() {
+MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
 }
 

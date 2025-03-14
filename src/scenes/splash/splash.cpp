@@ -2,7 +2,7 @@
 #include "../../core/engine/engine.h"
 #include "../../scenes/MainScene.h"
 
-Splash::Splash() {
+Splash::Splash() : Scene("Splash") {
     // Scene constructor
     font.Init(Engine::Instance(0, nullptr)->GetRenderer());
     splashopacity = 0;

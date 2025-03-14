@@ -1,5 +1,8 @@
 #include <iostream>
 #include <SDL/SDL.h>
+#include <string>
+
+using namespace std;
 
 #ifndef SCENE_H
 #define SCENE_H
@@ -9,12 +12,15 @@ class Scene {
     protected:
         SDL_Renderer* renderer;
         bool StartInitialized = false;
+        string sceneName;
     public:
-        Scene();
+        Scene(const std::string& name = "Scene") : sceneName(name), renderer(nullptr) {}
         virtual ~Scene();
         virtual void Start() = 0;
         virtual void Update() = 0;
         virtual void Render() = 0;
+
+        const string& GetSceneName() const { return sceneName; }
 };
 
 #endif
