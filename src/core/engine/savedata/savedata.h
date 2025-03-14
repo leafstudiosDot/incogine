@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <SDL2/SDL.h>
+#include <SDL/SDL.h>
 using namespace std;
 
 #ifdef _WIN32

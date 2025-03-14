@@ -15,8 +15,8 @@ Font::~Font() {
 }
 
 void Font::Init(SDL_Renderer* renderer) {
-    if (TTF_Init() == -1) {
-        cerr << "TTF_Init Error: " << TTF_GetError() << endl;
+    if (!TTF_Init()) {
+        cerr << "TTF_Init Error: " << SDL_GetError() << endl;
         return;
     }
 
@@ -42,24 +42,24 @@ void Font::setFontSize(int newSize) {
         TTF_CloseFont(font);
     }
 
-    font = TTF_OpenFontRW(SDL_RWFromConstMem(data, size), 1, fontSize);
+    font = TTF_OpenFontIO(SDL_IOFromConstMem(data, size), 1, fontSize);
     if (font == nullptr) {
-        std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+        std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
         fontLoaded = false;
     } else {
         fontLoaded = true;
     }
 }
 
-void Font::renderUI(int x, int y) {
+void Font::renderUI(float x, float y) {
     if (!fontLoaded || renderer == nullptr) {
         std::cerr << "Font or Renderer is not initialized in Font::renderUI" << std::endl;
         return;
     }
 
-    surface = TTF_RenderText_Blended(font, text_content, color);
+    surface = TTF_RenderText_Blended(font, text_content, 0, color);
     if (surface == nullptr) {
-        cerr << "TTF_RenderText_Solid Error: " << TTF_GetError() << endl;
+        cerr << "TTF_RenderText_Blended Error: " << SDL_GetError() << endl;
         return;
     }
 
@@ -70,10 +70,10 @@ void Font::renderUI(int x, int y) {
     }
 
     if (texture != nullptr) {
-        SDL_Rect destRect = {x, y, surface->w, surface->h};
-        SDL_RenderCopy(renderer, texture, nullptr, &destRect);
+        SDL_FRect destRect = {x, y, surface->w, surface->h};
+        SDL_RenderTexture(renderer, texture, nullptr, &destRect);
 
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         SDL_DestroyTexture(texture);
     }
 }
@@ -83,8 +83,8 @@ void Font::setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 new
 }
 
 FontSize Font::getFontWidth() {
-	int textWidth, textHeight;
-    TTF_SizeText(font, text_content, &textWidth, &textHeight);
+	float textWidth = 0, textHeight = 0;
+    //TTF_GetTextSize(font, text_content, &textWidth, &textHeight);
     fontWidth.width = textWidth;
     fontWidth.height = textHeight;
 	return fontWidth;

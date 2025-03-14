@@ -11,10 +11,10 @@ Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) 
 Engine* Engine::instance = nullptr;
 
 void Engine::Init() {
-    if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+    /*if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
         return;
-    }
+    }*/
 
     char projectName[256];
     char windowName[1024];
@@ -30,13 +30,13 @@ void Engine::Init() {
         snprintf(windowName, sizeof(windowName), "%s", WINDOW_NAME);
     }
 
+
 	if (devmode) {
 		cout << "Creating Window..." << endl;
 	}
-    window = SDL_CreateWindow(windowName, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_WIDTH, SCREEN_HEIGHT,
-        SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL);
-    if (window == nullptr) {
-        std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
+
+    if (!SDL_CreateWindowAndRenderer(windowName, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "WinAndRenErr: %s", SDL_GetError());
         SDL_Quit();
         return;
     }
@@ -44,27 +44,23 @@ void Engine::Init() {
     if (devmode) {
         cout << "Linking Renderer..." << endl;
     }
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (renderer == nullptr) {
-        std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return;
+
+    // VSync always on
+    if (!SDL_SetRenderVSync(renderer, 1))
+    {
+        SDL_Log("Could not enable VSync! SDL error: %s\n", SDL_GetError());
     }
 
-    if (devmode) {
-        cout << "Initializing Fonts..." << endl;
-    }
-    if (TTF_Init() == -1) {
+    if (!TTF_Init()) {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return;
     }
 
-    mainfont = TTF_OpenFontRW(SDL_RWFromConstMem(_mainfont_data, _mainfont_size), 1, 24);
+    mainfont = TTF_OpenFontIO(SDL_IOFromConstMem(_mainfont_data, _mainfont_size), 1, 24);
     if (mainfont == nullptr) {
-        std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+        std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
         TTF_Quit();
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
@@ -73,9 +69,9 @@ void Engine::Init() {
     }
 
     if (devmode) {
-        fpsfont = TTF_OpenFontRW(SDL_RWFromConstMem(_mainfont_data, _mainfont_size), 1, 15);
+        fpsfont = TTF_OpenFontIO(SDL_IOFromConstMem(_mainfont_data, _mainfont_size), 1, 15);
         if (fpsfont == nullptr) {
-            std::cerr << "TTF_OpenFont Error: " << TTF_GetError() << std::endl;
+            std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
             TTF_Quit();
             SDL_DestroyRenderer(renderer);
             SDL_DestroyWindow(window);
@@ -84,7 +80,7 @@ void Engine::Init() {
         }
 
         SDL_Color devmode_color = {255, 255, 255, 128};
-        devmode_surface = TTF_RenderText_Blended(mainfont, "Development Mode", devmode_color);
+        devmode_surface = TTF_RenderText_Blended(mainfont, "Development Mode", 0, devmode_color);
         if (!devmode_surface) {
             TTF_CloseFont(mainfont);
             TTF_Quit();
@@ -95,7 +91,7 @@ void Engine::Init() {
 
         devmode_texture = SDL_CreateTextureFromSurface(renderer, devmode_surface);
         if (!devmode_texture) {
-            SDL_FreeSurface(devmode_surface);
+            SDL_DestroySurface(devmode_surface);
             TTF_CloseFont(mainfont);
             TTF_Quit();
             SDL_DestroyWindow(window);
@@ -129,14 +125,14 @@ void Engine::Quit() {
 void Engine::Cleanup() {
     if (devmode) {
         SDL_DestroyTexture(devmode_texture);
-        SDL_FreeSurface(devmode_surface);
+        SDL_DestroySurface(devmode_surface);
         if (dbfps_texture != nullptr) {
             SDL_DestroyTexture(dbfps_texture);
             dbfps_texture = nullptr;
         }
         if (dbfps_surface != nullptr) {
             dbfps_surface = nullptr;
-            SDL_FreeSurface(dbfps_surface);
+            SDL_DestroySurface(dbfps_surface);
         }
         TTF_CloseFont(fpsfont);
     }
@@ -151,14 +147,14 @@ void Engine::Update() {
     windowSize.width = windowWidth;
     windowSize.height = windowHeight;
 
+    currentTime = SDL_GetTicks();
+    deltaTime = currentTime - lastTime;
+
     if (sceneManager != nullptr) {
         sceneManager->UpdateScene();
     }
 
-    // FPS
     frameCount++;
-    Uint32 currentTime = SDL_GetTicks();
-    Uint32 deltaTime = currentTime - lastTime;
 
     if (deltaTime >= 1000) {
         fps = frameCount / (deltaTime / 1000.0f);
@@ -169,17 +165,17 @@ void Engine::Update() {
 }
 
 void Engine::Render() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
     if (devmode) {
         devmode_destRect.x = windowWidth - devmode_destRect.w;
         devmode_destRect.y = windowHeight - devmode_destRect.h;
-        SDL_RenderCopy(renderer, devmode_texture, nullptr, &devmode_destRect);
+        SDL_RenderTexture(renderer, devmode_texture, nullptr, &devmode_destRect);
 
         // FPS UI
         SDL_Color dbfps_color = { 255, 255, 255, 128 };
-        dbfps_surface = TTF_RenderText_Blended(fpsfont, (std::string(fpsConvert(getfps())) + "fps").c_str(), dbfps_color);
+        dbfps_surface = TTF_RenderText_Blended(fpsfont, (std::string(fpsConvert(getfps())) + "fps").c_str(), 0, dbfps_color);
         if (!dbfps_surface) {
             TTF_CloseFont(fpsfont);
             TTF_Quit();
@@ -190,7 +186,7 @@ void Engine::Render() {
 
         dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
         if (!dbfps_texture) {
-            SDL_FreeSurface(dbfps_surface);
+            SDL_DestroySurface(dbfps_surface);
             TTF_CloseFont(fpsfont);
             TTF_Quit();
             SDL_DestroyWindow(window);
@@ -204,9 +200,9 @@ void Engine::Render() {
 
 		dbfps_destRect.x = windowWidth - dbfps_destRect.w - 15;
 		dbfps_destRect.y = 15;
-		SDL_RenderCopy(renderer, dbfps_texture, nullptr, &dbfps_destRect);
+		SDL_RenderTexture(renderer, dbfps_texture, nullptr, &dbfps_destRect);
         SDL_DestroyTexture(dbfps_texture);
-        SDL_FreeSurface(dbfps_surface);
+        SDL_DestroySurface(dbfps_surface);
     }
 
     if (sceneManager != nullptr) {
@@ -218,76 +214,74 @@ void Engine::Render() {
 
 void Engine::Events() {
     SDL_Event event;
+    int winWidth;
+    int winHeight;
     while (SDL_PollEvent(&event)) {
-        if (event.type == SDL_QUIT) {
+        if (event.type == SDL_EVENT_QUIT) {
             Quit();
         }
 
-        if (event.type == SDL_WINDOWEVENT) {
-            if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                int width = event.window.data1;
-                int height = event.window.data2;
+        switch(event.type) {
+            case SDL_EVENT_WINDOW_RESIZED:
+                winWidth = event.window.data1;
+                winHeight = event.window.data2;
 
-                if (width < MIN_WIDTH) width = MIN_WIDTH;
-                if (height < MIN_HEIGHT) height = MIN_HEIGHT;
+                if (winWidth < MIN_WIDTH) winWidth = MIN_WIDTH;
+                if (winHeight < MIN_HEIGHT) winHeight = MIN_HEIGHT;
 
-                if (width / 16 != height / 9) {
-                    height = width * 9 / 16;
+                if (winWidth / 16 != winHeight / 9) {
+                    winHeight = winWidth * 9 / 16;
                 }
 
-                SDL_SetWindowSize(window, width, height);
+                SDL_SetWindowSize(window, winWidth, winHeight);
 
                 windowWidth = event.window.data1;
                 windowHeight = event.window.data2;
-            }
+                break;
 
-            switch (event.window.event) {
-                // Core Window SDL events
-                case SDL_WINDOWEVENT_FOCUS_GAINED:
-                    // Window focused at Incogine (Windows/macOS/Linux)
-                    winFocused = true;
-                    break;
-                case SDL_WINDOWEVENT_FOCUS_LOST:
-                    // Window isn't focused at Incogine (Windows/macOS/Linux)
-                    winFocused = false;
-                    break;
-                case SDL_WINDOWEVENT_MINIMIZED:
-                    // Incogine is minimized (Windows/macOS/Linux)
-                    inBackground = true;
-                    break;
-                case SDL_WINDOWEVENT_MAXIMIZED:
-                    // Incogine is restored (Windows/macOS/Linux)
-                    inBackground = false;
-                    break;
-                case SDL_WINDOWEVENT_CLOSE:
-                    // Incogine is about to terminate (Windows/macOS/Linux)
-                    Quit();
-                    break;
-            }
-        }
-
-        switch(event.type) {
-            case SDL_KEYDOWN:
-				if (event.key.keysym.sym == SDLK_F11 && winFocused) { // F11 key
+            case SDL_EVENT_KEY_DOWN:
+				if (event.key.key == SDLK_F11 && winFocused) { // F11 key
                     ToggleFullscreen();
                 }
                 break;
 
 			// Core SDL events
-            case SDL_APP_WILLENTERBACKGROUND:
+            case SDL_EVENT_WILL_ENTER_BACKGROUND:
                 // Incogine is going to background (Android/iOS)
                 inBackground = true;
                 break;
-            case SDL_APP_DIDENTERFOREGROUND:
+            case SDL_EVENT_DID_ENTER_FOREGROUND:
                 // Incogine is coming to foreground (Android/iOS)
                 inBackground = false;
                 break;
-            case SDL_APP_TERMINATING:
+            case SDL_EVENT_TERMINATING:
                 // Incogine is about to terminate (Android/iOS)
                 Quit();
                 break;
-            case SDL_APP_LOWMEMORY:
+            case SDL_EVENT_LOW_MEMORY:
                 // Low memory warning (Android/iOS)
+                break;
+
+            // Core Window SDL events
+            case SDL_EVENT_WINDOW_FOCUS_GAINED:
+                // Window focused at Incogine (Windows/macOS/Linux)
+                winFocused = true;
+                break;
+            case SDL_EVENT_WINDOW_FOCUS_LOST:
+                // Window isn't focused at Incogine (Windows/macOS/Linux)
+                winFocused = false;
+                break;
+            case SDL_EVENT_WINDOW_MINIMIZED:
+                // Incogine is minimized (Windows/macOS/Linux)
+                inBackground = true;
+                break;
+            case SDL_EVENT_WINDOW_MAXIMIZED:
+                // Incogine is restored (Windows/macOS/Linux)
+                inBackground = false;
+                break;
+            case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+                // Incogine is about to terminate (Windows/macOS/Linux)
+                Quit();
                 break;
         }
     }
@@ -302,10 +296,10 @@ void Engine::ToggleFullscreen() {
     if (fullScreenMode) {
 		windowedHeight = windowHeight;
 		windowedWidth = windowWidth;
-        SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        SDL_SetWindowFullscreen(window, true);
     } else {
-        SDL_SetWindowSize(window, windowedWidth, windowedHeight);
-        SDL_SetWindowFullscreen(window, 0);
+        //SDL_SetWindowSize(window, windowedWidth, windowedHeight);
+        SDL_SetWindowFullscreen(window, false);
     }
 }
 

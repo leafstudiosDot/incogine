@@ -79,57 +79,57 @@ message(STATUS "Building for platform: ${PLATFORM}")
 if(PLATFORM STREQUAL "Web")
     set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/system")
 
-    find_package(SDL2 REQUIRED)
-    find_package(SDL2_ttf REQUIRED)
-    find_package(SDL2_image REQUIRED)
+    find_package(SDL3 REQUIRED)
+    find_package(SDL3_ttf REQUIRED)
+    find_package(SDL3_image REQUIRED)
 
-    include_directories(${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+    include_directories(${SDL3_INCLUDE_DIRS} ${SDL3_TTF_INCLUDE_DIRS} ${SDL3_IMAGE_INCLUDE_DIRS})
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
         SUFFIX ".html"
-        LINK_FLAGS "-s USE_SDL=2 --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
+        LINK_FLAGS "-s USE_SDL=3 --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
     )
 endif()
 
 if (WIN32)
-    # SDL2
-    set(SDL2_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL2")
+    # SDL3
+    set(SDL3_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3")
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(SDL2_LIB_DIR ${SDL2_PATH}/lib/x64)
-        set(SDL2_BIN_DIR ${SDL2_PATH}/bin/x64)
+        set(SDL3_LIB_DIR ${SDL3_PATH}/lib/x64)
+        set(SDL3_BIN_DIR ${SDL3_PATH}/bin/x64)
     else()
-        set(SDL2_LIB_DIR ${SDL2_PATH}/lib/x86)
-        set(SDL2_BIN_DIR ${SDL2_PATH}/bin/x86)
+        set(SDL3_LIB_DIR ${SDL3_PATH}/lib/x86)
+        set(SDL3_BIN_DIR ${SDL3_PATH}/bin/x86)
     endif()
 
-    include_directories(${SDL2_PATH}/include)
-    link_directories(${SDL2_LIB_DIR})
+    include_directories(${SDL3_PATH}/include)
+    link_directories(${SDL3_LIB_DIR})
 
-    # SDL2_ttf
-    set(SDL2_TTF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL2_ttf")
+    # SDL3_ttf
+    set(SDL3_TTF_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_ttf")
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(SDL2_TTF_LIB_DIR ${SDL2_TTF_PATH}/lib/x64)
-        set(SDL2_TTF_BIN_DIR ${SDL2_TTF_PATH}/bin/x64)
+        set(SDL3_TTF_LIB_DIR ${SDL3_TTF_PATH}/lib/x64)
+        set(SDL3_TTF_BIN_DIR ${SDL3_TTF_PATH}/bin/x64)
     else()
-        set(SDL2_TTF_LIB_DIR ${SDL2_TTF_PATH}/lib/x86)
-        set(SDL2_TTF_BIN_DIR ${SDL2_TTF_PATH}/bin/x86)
+        set(SDL3_TTF_LIB_DIR ${SDL3_TTF_PATH}/lib/x86)
+        set(SDL3_TTF_BIN_DIR ${SDL3_TTF_PATH}/bin/x86)
     endif()
 
-    include_directories(${SDL2_TTF_PATH}/include)
-    link_directories(${SDL2_TTF_LIB_DIR})
+    include_directories(${SDL3_TTF_PATH}/include)
+    link_directories(${SDL3_TTF_LIB_DIR})
 
-    # SDL2_image
-    set(SDL2_IMAGE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL2_image")
+    # SDL3_image
+    set(SDL3_IMAGE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_image")
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        set(SDL2_IMAGE_LIB_DIR ${SDL2_IMAGE_PATH}/lib/x64)
-        set(SDL2_IMAGE_BIN_DIR ${SDL2_IMAGE_PATH}/bin/x64)
+        set(SDL3_IMAGE_LIB_DIR ${SDL3_IMAGE_PATH}/lib/x64)
+        set(SDL3_IMAGE_BIN_DIR ${SDL3_IMAGE_PATH}/bin/x64)
     else()
-        set(SDL2_IMAGE_LIB_DIR ${SDL2_IMAGE_PATH}/lib/x86)
-        set(SDL2_IMAGE_BIN_DIR ${SDL2_IMAGE_PATH}/bin/x86)
+        set(SDL3_IMAGE_LIB_DIR ${SDL3_IMAGE_PATH}/lib/x86)
+        set(SDL3_IMAGE_BIN_DIR ${SDL3_IMAGE_PATH}/bin/x86)
     endif()
         
-    include_directories(${SDL2_IMAGE_PATH}/include)
-    link_directories(${SDL2_IMAGE_LIB_DIR})
+    include_directories(${SDL3_IMAGE_PATH}/include)
+    link_directories(${SDL3_IMAGE_LIB_DIR})
 endif()
 
 if (APPLE)
@@ -367,12 +367,12 @@ endif()
 if(WIN32)
     target_include_directories(${PROJECT_NAME}
         PRIVATE
-        "${SDL2_PATH}/include"
-        "${SDL2_IMAGE_PATH}/include"
-        "${SDL2_TTF_PATH}/include"
+        "${SDL3_PATH}/include"
+        "${SDL3_IMAGE_PATH}/include"
+        "${SDL3_TTF_PATH}/include"
     )
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE SDL2 SDL2main SDL2_ttf SDL2_image)
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL3 SDL3_ttf SDL3_image)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
     target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
 
@@ -381,13 +381,13 @@ if(WIN32)
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${SDL2_LIB_DIR}/SDL2.dll $<TARGET_FILE_DIR:Incogine>)
+        ${SDL3_LIB_DIR}/SDL3.dll $<TARGET_FILE_DIR:Incogine>)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${SDL2_IMAGE_LIB_DIR}/SDL2_image.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+        "${SDL3_IMAGE_LIB_DIR}/SDL3_image.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${SDL2_TTF_LIB_DIR}/SDL2_ttf.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+        "${SDL3_TTF_LIB_DIR}/SDL3_ttf.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 endif()
 
 

@@ -33,7 +33,7 @@ void Splash::Update() {
     frames++;
     if (frames >= 100 && frames < 300) {
         splashopacity = std::min(splashopacity + 4, 255);
-    } else if (frames >= 400 && frames <= 500) {
+    } else if (frames >= 400 && frames <= 520) {
         splashopacity = std::max(splashopacity - 2, 0);
     } else if (frames >= 540) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
@@ -42,7 +42,8 @@ void Splash::Update() {
 
 void Splash::Render() {
     // Scene render
-    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    //font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2.8), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
     int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
     font.setFontSize(scaledFontSize);
 

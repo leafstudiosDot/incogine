@@ -6,8 +6,8 @@ using namespace std;
 #define FONTS_H
 
 struct FontSize {
-	int width;
-	int height;
+	float width;
+	float height;
 };
 
 class Font {
@@ -30,7 +30,7 @@ class Font {
         void Init(SDL_Renderer* renderer);
         void setFont(const char* data, int size);
         void setFontRaw(TTF_Font* font);
-        void renderUI(int x, int y);
+        void renderUI(float x, float y);
         void setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA);
 		void setFontSize(int newSize);
 		void setTextContent(const char* content);
