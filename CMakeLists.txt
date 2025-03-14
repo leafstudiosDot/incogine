@@ -468,10 +468,18 @@ if(WIN32)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug
-            COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe -dev
+            COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe -dev --skipSplash
             COMMENT "Running application with -dev argument"
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         )
+    endif()
+
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug (with Splash scene)")
+    add_custom_target(run_debug
+        COMMAND ${CMAKE_COMMAND} ${CMAKE_BINARY_DIR}/${PROJECT_NAME}.exe -dev
+        COMMENT "Running application with -dev argument along with a splash scene"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
     endif()
 
     #add_custom_target(run ALL
