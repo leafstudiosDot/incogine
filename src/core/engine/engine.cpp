@@ -133,14 +133,14 @@ void Engine::Update() {
     windowSize.width = windowWidth;
     windowSize.height = windowHeight;
 
+    currentTime = SDL_GetTicks();
+    deltaTime = currentTime - lastTime;
+
     if (sceneManager != nullptr) {
         sceneManager->UpdateScene();
     }
 
-    // FPS
     frameCount++;
-    Uint32 currentTime = SDL_GetTicks();
-    Uint32 deltaTime = currentTime - lastTime;
 
     if (deltaTime >= 1000) {
         fps = frameCount / (deltaTime / 1000.0f);
@@ -151,7 +151,7 @@ void Engine::Update() {
 }
 
 void Engine::Render() {
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
     if (devmode) {
@@ -282,10 +282,10 @@ void Engine::ToggleFullscreen() {
     if (fullScreenMode) {
 		windowedHeight = windowHeight;
 		windowedWidth = windowWidth;
-        SDL_SetWindowFullscreen(window, 1);
+        SDL_SetWindowFullscreen(window, true);
     } else {
-        SDL_SetWindowSize(window, windowedWidth, windowedHeight);
-        SDL_SetWindowFullscreen(window, 0);
+        //SDL_SetWindowSize(window, windowedWidth, windowedHeight);
+        SDL_SetWindowFullscreen(window, false);
     }
 }
 

@@ -33,7 +33,7 @@ void Splash::Update() {
     frames++;
     if (frames >= 100 && frames < 300) {
         splashopacity = std::min(splashopacity + 4, 255);
-    } else if (frames >= 400 && frames <= 500) {
+    } else if (frames >= 400 && frames <= 520) {
         splashopacity = std::max(splashopacity - 2, 0);
     } else if (frames >= 540) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());

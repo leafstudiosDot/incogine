@@ -82,8 +82,10 @@ class Engine {
         SDL_FRect devmode_destRect;
 
         // FPS
-        Uint32 lastTime = SDL_GetTicks();
-        Uint32 frameCount = 0;
+        Uint64 currentTime;
+        double deltaTime = 0.0f;
+        Uint64 lastTime = SDL_GetTicks();
+        Uint64 frameCount = 0;
 
         SDL_Surface* dbfps_surface;
         SDL_Texture* dbfps_texture;
