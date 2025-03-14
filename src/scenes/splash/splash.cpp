@@ -5,7 +5,6 @@
 Splash::Splash() {
     // Scene constructor
     font.Init(Engine::Instance(0, nullptr)->GetRenderer());
-    frames = 0;
     splashopacity = 0;
 }
 
@@ -30,12 +29,15 @@ void Splash::Start() {
 
 void Splash::Update() {
     // Scene update, calls every frame
-    frames++;
-    if (frames >= 100 && frames < 300) {
+    deltaTime = Engine::Instance(0, nullptr)->getDeltaTime() / 1000.0f;
+
+    elapsedTime += deltaTime;
+
+    if (elapsedTime >= LogoOne_startFadeIn && elapsedTime < LogoOne_endFadeIn) {
         splashopacity = std::min(splashopacity + 4, 255);
-    } else if (frames >= 400 && frames <= 520) {
+    } else if (elapsedTime >= LogoOne_startFadeOut && elapsedTime <= LogoOne_endFadeOut) {
         splashopacity = std::max(splashopacity - 2, 0);
-    } else if (frames >= 540) {
+    } else if (elapsedTime >= LogoOne_switchSceneTime) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
     }
 }

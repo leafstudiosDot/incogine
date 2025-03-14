@@ -148,18 +148,21 @@ void Engine::Update() {
     windowSize.height = windowHeight;
 
     currentTime = SDL_GetTicks();
-    deltaTime = currentTime - lastTime;
+    frameDelta = currentTime - lastTime;
+    deltaTime = frameDelta;
+    lastTime = currentTime;
 
     if (sceneManager != nullptr) {
         sceneManager->UpdateScene();
     }
 
     frameCount++;
-
-    if (deltaTime >= 1000) {
-        fps = frameCount / (deltaTime / 1000.0f);
+    static double accumTime = 0.0;
+    accumTime += frameDelta;
+    if (accumTime >= 1000) {
+        fps = frameCount / (accumTime / 1000.0f);
         frameCount = 0;
-        lastTime = currentTime;
+        accumTime = 0.0;
         //cout << "FPS: " << fps << endl;
     }
 }

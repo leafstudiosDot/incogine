@@ -59,6 +59,7 @@ class Engine {
         inline SDL_Renderer* GetRenderer() { return renderer; }
         inline TTF_Font* GetMainFont() { return mainfont; }
         
+		inline double getDeltaTime() { return deltaTime; }
         float getfps() { return fps; }
 
         inline static Engine* Instance(int argc, char* argv[]) { return instance = (instance != nullptr) ? instance : new Engine(argc, argv); }
@@ -84,6 +85,7 @@ class Engine {
         // FPS
         Uint64 currentTime;
         double deltaTime = 0.0f;
+		double frameDelta = 0.0f;
         Uint64 lastTime = SDL_GetTicks();
         Uint64 frameCount = 0;
 
