@@ -58,6 +58,7 @@ class Engine {
         inline SDL_Window* GetWindow() { return window; }
         inline SDL_Renderer* GetRenderer() { return renderer; }
         inline TTF_Font* GetMainFont() { return mainfont; }
+        inline SDL_Event GetEventProvider() { return event; };
         
 		inline double getDeltaTime() { return deltaTime; }
         float getfps() { return fps; }
@@ -74,6 +75,7 @@ class Engine {
         bool fullScreenMode = false;
         SDL_Window* window;
         SDL_Renderer* renderer;
+        SDL_Event event;
         TTF_Font* mainfont;
         TTF_Font* fpsfont;
         float fps = 0.0f;

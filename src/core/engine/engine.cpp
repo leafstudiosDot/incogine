@@ -216,9 +216,13 @@ void Engine::Render() {
 }
 
 void Engine::Events() {
-    SDL_Event event;
     int winWidth;
     int winHeight;
+
+    if (sceneManager != nullptr) {
+        sceneManager->EventScene();
+    }
+
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_EVENT_QUIT) {
             Quit();

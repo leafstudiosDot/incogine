@@ -12,6 +12,7 @@ class MainScene : public Scene {
         void Start() override;
         void Update() override;
         void Render() override;
+        void Events() override;
 };
 
 #endif

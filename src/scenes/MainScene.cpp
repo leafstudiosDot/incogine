@@ -20,3 +20,7 @@ void MainScene::Update() {
 void MainScene::Render() {
     // Scene render
 }
+
+void MainScene::Events() {
+	// Scene events
+}

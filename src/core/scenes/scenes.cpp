@@ -36,9 +36,15 @@ void SceneManager::RenderScene() {
     }
 }
 
-/*Scene::Scene(const string& name = "Scene") : sceneName(name), renderer(nullptr) {
-	this->sceneName = sceneName;
-}*/
+void SceneManager::EventScene() {
+	if (currentScene != nullptr) {
+		currentScene->Events();
+	}
+}
+
+Scene::Scene(const string& name = "Scene") : sceneName(name), renderer(nullptr) {
+    event = Engine::Instance(0, nullptr)->GetEventProvider();
+}
 
 Scene::~Scene() {
 

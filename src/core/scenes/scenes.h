@@ -1,6 +1,6 @@
 #include <iostream>
-#include <SDL/SDL.h>
 #include <string>
+#include <SDL/SDL.h>
 
 using namespace std;
 
@@ -13,12 +13,15 @@ class Scene {
         SDL_Renderer* renderer;
         bool StartInitialized = false;
         string sceneName;
+        SDL_Event event;
+
     public:
-        Scene(const std::string& name = "Scene") : sceneName(name), renderer(nullptr) {}
+        Scene(const std::string& name);
         virtual ~Scene();
         virtual void Start() = 0;
         virtual void Update() = 0;
         virtual void Render() = 0;
+        virtual void Events() {}; // Optional
 
         const string& GetSceneName() const { return sceneName; }
 };
@@ -39,6 +42,7 @@ class SceneManager {
         void SetScene(Scene* scene);
         void UpdateScene();
         void RenderScene();
+        void EventScene();
 };
 
 #endif
