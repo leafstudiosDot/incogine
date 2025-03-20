@@ -5,10 +5,10 @@
 
 class Cube : public Object {
     private:
-        Position pos;
 
     public:
-        Cube() : Object(Position(0, 0, 0)), pos(0, 0, 0) {}
+        Cube() : Object(Position(0, 0, 0), Scale(1, 1, 1), Rotation(0, 0, 0)) {}
+        ~Cube();
 };
 
 #endif

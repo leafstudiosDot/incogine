@@ -12,6 +12,8 @@ class Component {
         string component_name;
     public:
         Component(Object* linkedobj);
+        void setComponentName(string name);
+        string getComponentName();
 };
 
 #endif
