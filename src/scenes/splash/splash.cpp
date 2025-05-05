@@ -40,14 +40,14 @@ void Splash::Update() {
     if (elapsedTime >= LogoOne_startFadeIn && elapsedTime < LogoOne_endFadeIn) {
         splashopacity = std::min(splashopacity + 4, 255);
         float t = (elapsedTime - LogoOne_startFadeIn) / (LogoOne_endFadeIn - LogoOne_startFadeIn);
-        float easedT = cubicBezier(t, 0.25f, 0.1f, 0.25f, 1.0f);
+        float easedT = cubicBezier(t, 0.0f, 0.5f, 0.0f, 1.0f);
         LogoOne_newY = lerp(LogoOne_startY, LogoOne_centerY, easedT);
     } else if (elapsedTime >= LogoOne_endFadeIn && elapsedTime < LogoOne_startFadeOut) {
         LogoOne_newY = LogoOne_centerY;
     } else if (elapsedTime >= LogoOne_startFadeOut && elapsedTime <= LogoOne_endFadeOut) {
         splashopacity = std::max(splashopacity - 2, 0);
         float t = (elapsedTime - LogoOne_startFadeOut) / (LogoOne_endFadeOut - LogoOne_startFadeOut);
-        float easedT = cubicBezier(t, 0.25f, 0.1f, 0.25f, 1.0f);
+        float easedT = cubicBezier(t, 1.0f, 0.0f, 1.0f, 0.5f);
         LogoOne_newY = lerp(LogoOne_centerY, LogoOne_endY, easedT);
     } else if (elapsedTime >= LogoOne_switchSceneTime) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
