@@ -10,6 +10,7 @@ A leafstudiosDot engine. Now open source!
 - SDL2_ttf
 
 ## Get Started
+Soon
 
 ## Build
 > Recommended using Visual Studio Code with CMake Tools extension.
