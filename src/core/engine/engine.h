@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <locale>
+#include <codecvt>
 #include <SDL/SDL.h>
 #if defined(__APPLE__) && defined(__IPHONEOS__)
     #include <SDL2/SDL_main.h>

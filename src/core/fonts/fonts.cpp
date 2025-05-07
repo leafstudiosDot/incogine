@@ -91,5 +91,38 @@ FontSize Font::getFontWidth() {
 }
 
 void Font::setTextContent(const char* content) {
-	text_content = const_cast<char*>(content);
+    utf8_text = content;
+    text_content = utf8_text.c_str();
+}
+
+void Font::setTextContent(const wchar_t* content) {
+    std::wstring wstr(content);
+
+    utf8_text.clear();
+    for (wchar_t wc : wstr) {
+        encode_utf8_char(static_cast<uint32_t>(wc), utf8_text);
+    }
+
+    text_content = utf8_text.c_str();
+}
+
+void Font::encode_utf8_char(uint32_t wc, std::string& out) {
+    if (wc <= 0x7F) {
+        out.push_back(char(wc));
+    }
+    else if (wc <= 0x7FF) {
+        out.push_back(char(0xC0 | ((wc >> 6) & 0x1F)));
+        out.push_back(char(0x80 | (wc & 0x3F)));
+    }
+    else if (wc <= 0xFFFF) {
+        out.push_back(char(0xE0 | ((wc >> 12) & 0x0F)));
+        out.push_back(char(0x80 | ((wc >> 6) & 0x3F)));
+        out.push_back(char(0x80 | (wc & 0x3F)));
+    }
+    else if (wc <= 0x10FFFF) {
+        out.push_back(char(0xF0 | ((wc >> 18) & 0x07)));
+        out.push_back(char(0x80 | ((wc >> 12) & 0x3F)));
+        out.push_back(char(0x80 | ((wc >> 6) & 0x3F)));
+        out.push_back(char(0x80 | (wc & 0x3F)));
+    }
 }
