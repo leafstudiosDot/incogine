@@ -35,6 +35,7 @@ class Font {
         void setFontRaw(TTF_Font* font);
         void renderUI(float x, float y);
         void setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA);
+        void setColor(SDL_Color color);
 		void setFontSize(int newSize);
 		void setTextContent(const char* content);
         void setTextContent(const wchar_t* content);

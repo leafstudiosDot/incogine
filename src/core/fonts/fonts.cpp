@@ -82,6 +82,10 @@ void Font::setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 new
     color = { newColorR, newColorG, newColorB, newColorA };
 }
 
+void Font::setColor(SDL_Color color) {
+    color = color;
+}
+
 FontSize Font::getFontWidth() {
 	float textWidth = 0, textHeight = 0;
     //TTF_GetTextSize(font, text_content, &textWidth, &textHeight);
