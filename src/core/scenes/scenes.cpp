@@ -36,9 +36,9 @@ void SceneManager::RenderScene() {
     }
 }
 
-void SceneManager::EventScene() {
+void SceneManager::EventScene(const SDL_Event& event) {
 	if (currentScene != nullptr) {
-		currentScene->Events();
+		currentScene->Events(event);
 	}
 }
 

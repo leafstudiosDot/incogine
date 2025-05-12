@@ -21,7 +21,7 @@ class Scene {
         virtual void Start() = 0;
         virtual void Update() = 0;
         virtual void Render() = 0;
-        virtual void Events() {}; // Optional
+        virtual void Events(const SDL_Event& event) {}; // Optional
 
         const string& GetSceneName() const { return sceneName; }
 };
@@ -42,7 +42,7 @@ class SceneManager {
         void SetScene(Scene* scene);
         void UpdateScene();
         void RenderScene();
-        void EventScene();
+        void EventScene(const SDL_Event& event);
 };
 
 #endif
