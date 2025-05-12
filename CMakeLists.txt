@@ -15,6 +15,7 @@ file(GLOB_RECURSE PROJST_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/project/*.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/fonts/*.h
 )
 
 file(GLOB_RECURSE _RM_PROJST_SOURCES
@@ -248,6 +249,16 @@ add_custom_command(
     COMMENT "Generating main_font.h from main_font.ttf"
 )
 
+set(JPSUP_FONT_FILE "${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.ttf")
+set(JPSUP_FONTPARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse.py")
+
+add_custom_command(
+    OUTPUT ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h
+    COMMAND python3 ${JPSUP_FONTPARSER_SCRIPT} ${JPSUP_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h _jpsup
+    DEPENDS ${JPSUP_FONT_FILE} ${JPSUP_FONTPARSER_SCRIPT}
+    COMMENT "Generating jpsup_font.h from jpsup_font.ttf"
+)
+
 
 # SVG
 set(SVG_PARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/svgparse.py")
@@ -347,7 +358,7 @@ if(PROJECT_XML)
     list(APPEND SOURCES ${PROJECT_XML})
 endif()
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h)
+add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h)
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJSNAME})
 add_dependencies(${PROJECT_NAME} ${PROJSNAME})
 
