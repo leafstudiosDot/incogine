@@ -171,6 +171,10 @@ void Engine::Render() {
     //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
 
+    if (sceneManager != nullptr) {
+        sceneManager->RenderScene();
+    }
+
     if (devmode) {
         devmode_destRect.x = windowWidth - devmode_destRect.w;
         devmode_destRect.y = windowHeight - devmode_destRect.h;
@@ -206,10 +210,6 @@ void Engine::Render() {
 		SDL_RenderTexture(renderer, dbfps_texture, nullptr, &dbfps_destRect);
         SDL_DestroyTexture(dbfps_texture);
         SDL_DestroySurface(dbfps_surface);
-    }
-
-    if (sceneManager != nullptr) {
-        sceneManager->RenderScene();
     }
 
     SDL_RenderPresent(renderer);
