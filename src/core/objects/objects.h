@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <cmath>
 #include "../components/components.h"
+#include "core/engine/engine.h"
 
 #ifndef OBJECTS_H
 #define OBJECTS_H
@@ -79,19 +80,43 @@ struct Rotation {
     }
 };
 
+struct Color {
+    int r{255};
+    int g{255};
+    int b{255};
+    int a{255};
+
+    Color(int r, int g, int b, int a) : r(r), g(g), b(b), a(a) {}
+
+    // Equality operators
+    bool operator==(const Color& other) const {
+        return r == other.r && g == other.g && b == other.b && a == other.a;
+    }
+
+    bool operator!=(const Color& other) const {
+        return !(*this == other);
+    }
+};
+
 class Object {
     private:
+        string name;
         std::vector<Component> components;
         Position pos;
         Scale scale;
         Rotation rotation;
+        SDL_Renderer* renderer = Engine::Instance(0, nullptr)->GetRenderer();
 
     public:
-        Object(Position pos, Scale scale, Rotation rotation);
+        Object(const std::string& name, Position pos, Scale scale, Rotation rotation);
         ~Object();
 
-        Component& getComponent(int index);
+        // Name
+        void setName(const std::string& newName);
+        std::string getName() const;
 
+        // Component
+        Component& getComponent(int index);
         void addComponent(const Component& component);
 
         // Transform Manipulation
@@ -103,6 +128,8 @@ class Object {
 
         void setRotation(const Rotation& newRotation);
         Rotation getRotation() const;
+
+        void Render();
 };
 
 #endif

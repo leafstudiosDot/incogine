@@ -1,14 +1,21 @@
 #include "../objects.h"
+#include "../../components/sprite/sprite.h"
+#include "../../engine/engine.h"
 
 #ifndef SQUARE_H
 #define SQUARE_H
 
 class Square : public Object {
     private:
-
+        Sprite* sprite;
+		SDL_Renderer* renderer;
     public:
-        Square() : Object(Position(0, 0, 0), Scale(1, 1, 1), Rotation(0, 0, 0)) {}
+        Square(SDL_Renderer* _renderer);
         ~Square();
+
+        void setColor(const Color& color);
+        Color getColor() const;
+        void Render();
 };
 
 #endif

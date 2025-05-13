@@ -1,8 +1,10 @@
 ﻿#include "GameScene.h"
 #include "../../core/engine/engine.h"
+#include "../../fonts/jpsup_font.h"
 
 GameScene::GameScene() : Scene("Game Scene") {
     // Scene constructor
+	pauseMenu = new PauseMenu(Engine::Instance(0, nullptr)->GetRenderer());
     steamfont.Init(Engine::Instance(0, nullptr)->GetRenderer());
 }
 
@@ -25,6 +27,7 @@ void GameScene::Start() {
 
 void GameScene::Update() {
     // Scene update, calls every frame
+	pauseMenu->Update();
 }
 
 void GameScene::Render() {
@@ -33,8 +36,28 @@ void GameScene::Render() {
     steamfont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 4), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
     int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
     steamfont.setFontSize(scaledFontSize);
+
+	pauseMenu->Render();
 }
 
 void GameScene::Events(const SDL_Event& event) {
     // Scene events
+	if (event.type == SDL_EVENT_KEY_DOWN) {
+		SDL_Keycode keycode = event.key.key;
+		switch (keycode) {
+		case SDLK_ESCAPE:
+			pauseMenu->setPaused(!pauseMenu->getPaused());
+
+			if (pauseMenu->getPaused()) {
+				cout << "Game Paused" << endl;
+			} else {
+				cout << "Game Resumed" << endl;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	pauseMenu->Events(event);
 }

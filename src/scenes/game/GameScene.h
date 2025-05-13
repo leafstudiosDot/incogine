@@ -6,12 +6,15 @@
 #include "../../core/fonts/fonts.h"
 #include "../../fonts/jpsup_font.h"
 
+#include "../../project/pausemenu/pausemenu.h"
+
 #ifndef GAMESCENE_H
 #define GAMESCENE_H
 
 class GameScene : public Scene {
     private:
         Font steamfont;
+		PauseMenu* pauseMenu = nullptr;
 
     public:
         GameScene();
