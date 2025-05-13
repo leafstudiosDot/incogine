@@ -42,22 +42,20 @@ void GameScene::Render() {
 
 void GameScene::Events(const SDL_Event& event) {
     // Scene events
-	if (event.type == SDL_EVENT_KEY_DOWN) {
-		SDL_Keycode keycode = event.key.key;
-		switch (keycode) {
-		case SDLK_ESCAPE:
-			pauseMenu->setPaused(!pauseMenu->getPaused());
-
-			if (pauseMenu->getPaused()) {
-				cout << "Game Paused" << endl;
-			} else {
-				cout << "Game Resumed" << endl;
-			}
-			break;
-		default:
-			break;
-		}
-	}
-
-	pauseMenu->Events(event);
+    if (pauseMenu->getPaused()) {
+        pauseMenu->Events(event);
+    } else {
+        if (event.type == SDL_EVENT_KEY_DOWN) {
+            SDL_Keycode keycode = event.key.key;
+            switch (keycode) {
+            case SDLK_ESCAPE:
+                if (!pauseMenu->getPaused()) {
+                    pauseMenu->setPaused(true);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
 }

@@ -6,6 +6,8 @@ MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
     for (int i = 0; i < MainMenuItemCount; ++i) {
         menuFonts[i].Init(Engine::Instance(0, nullptr)->GetRenderer());
+        menuFonts[i].setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
+        menuFonts[i].setTextContent(MainMenuItemNames[i]);
     }
 }
 
@@ -21,8 +23,6 @@ void MainScene::Start() {
 void MainScene::Update() {
     // Scene update, calls every frame
     for (int i = 0; i < MainMenuItemCount; ++i) {
-		menuFonts[i].setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
-		menuFonts[i].setTextContent(MainMenuItemNames[i]);
 		menuFonts[i].setFontSize(((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 32);
     }
 }
