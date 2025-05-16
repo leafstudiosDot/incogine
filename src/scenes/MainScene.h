@@ -2,7 +2,7 @@
 #include "../core/scenes/scenes.h"
 
 #include "../core/fonts/fonts.h"
-#include "../fonts/jpsup_font.h"
+#include <jpsup_font.h>
 
 #ifndef MAINSCENE_H
 #define MAINSCENE_H

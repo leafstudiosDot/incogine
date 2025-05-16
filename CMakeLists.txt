@@ -244,7 +244,7 @@ set(MAIN_FONTPARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse_main.py")
 
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
-    COMMAND python3 ${MAIN_FONTPARSER_SCRIPT} ${MAIN_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
+    COMMAND python3 ${MAIN_FONTPARSER_SCRIPT} ${MAIN_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/main_font
     DEPENDS ${MAIN_FONT_FILE} ${MAIN_FONTPARSER_SCRIPT}
     COMMENT "Generating main_font.h from main_font.ttf"
 )
@@ -254,10 +254,22 @@ set(JPSUP_FONTPARSER_SCRIPT "${CMAKE_SOURCE_DIR}/src/parser/ttfparse.py")
 
 add_custom_command(
     OUTPUT ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h
-    COMMAND python3 ${JPSUP_FONTPARSER_SCRIPT} ${JPSUP_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h _jpsup
+    COMMAND python3 ${JPSUP_FONTPARSER_SCRIPT} ${JPSUP_FONT_FILE} ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font _jpsup
     DEPENDS ${JPSUP_FONT_FILE} ${JPSUP_FONTPARSER_SCRIPT}
     COMMENT "Generating jpsup_font.h from jpsup_font.ttf"
 )
+
+add_custom_target(generate_fonts ALL DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
+    ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h
+)
+
+set(FONT_C_FILES
+    ${CMAKE_SOURCE_DIR}/src/fonts/main_font.c
+    ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.c
+)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
 
 
 # SVG
@@ -358,9 +370,9 @@ if(PROJECT_XML)
     list(APPEND SOURCES ${PROJECT_XML})
 endif()
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h)
+add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${FONT_C_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJSNAME})
-add_dependencies(${PROJECT_NAME} ${PROJSNAME})
+add_dependencies(${PROJECT_NAME} ${PROJSNAME} generate_fonts)
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -452,7 +464,7 @@ if(APPLE)
         )
         set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
         set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-        target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
+        target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns ${FONT_C_FILES})
     endif()
 endif()
 
@@ -485,7 +497,7 @@ if(WIN32)
         COMMENT "Compiling resource file"
     )
 
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc)
+    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc ${FONT_C_FILES})
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug

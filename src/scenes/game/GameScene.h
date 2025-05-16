@@ -4,7 +4,7 @@
 #include "core/components/transform/transform.h"
 
 #include "../../core/fonts/fonts.h"
-#include "../../fonts/jpsup_font.h"
+#include <jpsup_font.h>
 
 #include "../../project/pausemenu/pausemenu.h"
 

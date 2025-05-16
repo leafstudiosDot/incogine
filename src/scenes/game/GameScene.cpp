@@ -1,6 +1,5 @@
 ﻿#include "GameScene.h"
 #include "../../core/engine/engine.h"
-#include "../../fonts/jpsup_font.h"
 
 GameScene::GameScene() : Scene("Game Scene") {
     // Scene constructor

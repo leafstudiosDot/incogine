@@ -4,7 +4,7 @@
 #include "../../core/objects/objects.h"
 #include "../../core/objects/square/square.h"
 #include "../../core/fonts/fonts.h"
-#include "../../fonts/jpsup_font.h"
+#include <jpsup_font.h>
 
 #ifndef PAUSEMENU_H
 #define PAUSEMENU_H
