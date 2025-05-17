@@ -39,6 +39,7 @@ class Font {
 		void setFontSize(int newSize);
 		void setTextContent(const char* content);
         void setTextContent(const wchar_t* content);
+        void setTextContent(const std::string& content);
 		FontSize getFontWidth();
 
         inline TTF_Font* GetFont() { return font; }
