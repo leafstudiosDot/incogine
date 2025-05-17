@@ -1,4 +1,6 @@
 cmake_minimum_required(VERSION 3.26.3)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(APPLE)
     set(CMAKE_C_COMPILER "/usr/bin/gcc")
@@ -259,14 +261,13 @@ add_custom_command(
     COMMENT "Generating jpsup_font.h from jpsup_font.ttf"
 )
 
+file(GLOB ALL_FONT_HEADERS "${CMAKE_SOURCE_DIR}/src/fonts/*.h")
 add_custom_target(generate_fonts ALL DEPENDS
-    ${CMAKE_SOURCE_DIR}/src/fonts/main_font.h
-    ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.h
+    ${ALL_FONT_HEADERS}
 )
-
+file(GLOB ALL_FONT_CS "${CMAKE_SOURCE_DIR}/src/fonts/*.c")
 set(FONT_C_FILES
-    ${CMAKE_SOURCE_DIR}/src/fonts/main_font.c
-    ${CMAKE_SOURCE_DIR}/src/fonts/jpsup_font.c
+    ${ALL_FONT_CS}
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/fonts)
