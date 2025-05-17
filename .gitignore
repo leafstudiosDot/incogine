@@ -3,4 +3,5 @@ build/*
 !build/build.sh
 build-linux/*
 out
-src/fonts/main_font.h
+src/fonts/*.c
+src/fonts/*.h

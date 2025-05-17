@@ -38,11 +38,13 @@ void PauseMenu::Render() {
 		pausedFont.renderUI(50, ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720));
 		pausedFont.setFontSize(scaledFontSize);
 
-		for (int i = 0; i < MainMenuItemCount; ++i) {
+		for (int i = 0; i < PauseMenuItemCount; ++i) {
 			int x = 50;
 			int y = (50 + ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50)));
+			int scaledFontSize_menu = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 30;
 
 			pauseMenuFonts[i].renderUI(x, y);
+			pauseMenuFonts[i].setFontSize(scaledFontSize_menu);
 
 			if (i == pauseMenuSelItem) {
 				pauseMenuFonts[i].setColor(255, 255, 255, 255);

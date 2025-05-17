@@ -83,7 +83,7 @@ void Font::setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 new
 }
 
 void Font::setColor(SDL_Color color) {
-    color = color;
+    this->color = color;
 }
 
 FontSize Font::getFontWidth() {
@@ -107,6 +107,11 @@ void Font::setTextContent(const wchar_t* content) {
         encode_utf8_char(static_cast<uint32_t>(wc), utf8_text);
     }
 
+    text_content = utf8_text.c_str();
+}
+
+void Font::setTextContent(const std::string& content) {
+    utf8_text = content;
     text_content = utf8_text.c_str();
 }
 
