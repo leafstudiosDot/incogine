@@ -19,10 +19,13 @@ Color Square::getColor() const {
 }
 
 void Square::Render() {
-    if (!renderer) { 
+    if (!renderer && Engine::Instance(0, nullptr)->inDevMode()) { 
 		cout << "[Object:" << Object::getName() << "] Renderer is not set for this object" << endl;
-        return;
     };
+
+    if (!renderer) {
+        return;
+    }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, sprite->getColor().r, sprite->getColor().g, sprite->getColor().b, sprite->getColor().a);
