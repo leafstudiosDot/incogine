@@ -4,12 +4,14 @@
 #include <vector>
 #include <locale>
 #include <codecvt>
+#include <GL/glew.h>
 #include <SDL/SDL.h>
 #if defined(__APPLE__) && defined(__IPHONEOS__)
     #include <SDL2/SDL_main.h>
 #endif
 #include <SDL_ttf.h>
 #include <SDL_image.h>
+#include <SDL_opengl.h>
 //#include <fbxsdk.h>
 //#include "console/console.h"
 #include "version.h"
@@ -59,7 +61,7 @@ class Engine {
         inline WindowSize GetWindowSize() { return windowSize; };
 
         inline SDL_Window* GetWindow() { return window; }
-        inline SDL_Renderer* GetRenderer() { return renderer; }
+		inline SDL_GLContext GetGLContext() { return glcontext; }
         inline TTF_Font* GetMainFont() { return mainfont; }
         inline SDL_Event GetEventProvider() { return event; };
         
@@ -77,8 +79,8 @@ class Engine {
         bool winFocused;
         bool fullScreenMode = false;
         SDL_Window* window;
-        SDL_Renderer* renderer;
         SDL_Event event;
+        SDL_GLContext glcontext;
         TTF_Font* mainfont;
         TTF_Font* fpsfont;
         float fps = 0.0f;

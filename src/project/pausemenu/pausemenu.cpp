@@ -1,8 +1,8 @@
 #include "pausemenu.h"
 #include <iostream>
 
-PauseMenu::PauseMenu(SDL_Renderer* renderer) {
-	square = new Square(renderer);
+PauseMenu::PauseMenu() {
+	/*square = new Square(renderer);
 	square->setName("PauseMenuContainer");
 
 	pausedFont.Init(renderer);
@@ -13,7 +13,7 @@ PauseMenu::PauseMenu(SDL_Renderer* renderer) {
 		pauseMenuFonts[i].Init(renderer);
 		pauseMenuFonts[i].setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
 		pauseMenuFonts[i].setTextContent(PauseMenuItemNames[i]);
-	}
+	}*/
 }
 
 PauseMenu::~PauseMenu() {
@@ -21,17 +21,17 @@ PauseMenu::~PauseMenu() {
 }
 
 void PauseMenu::Update() {
-	square->setPosition(Position(0, 0, 0));
+	/*square->setPosition(Position(0, 0, 0));
 	square->setScale(Scale(Engine::Instance(0, nullptr)->GetWindowSize().width, Engine::Instance(0, nullptr)->GetWindowSize().height, 0));
 	square->setColor(Color(0, 0, 0, 128));
 
 	for (int i = 0; i < PauseMenuItemCount; ++i) {
 		pauseMenuFonts[i].setFontSize(((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 32);
-	}
+	}*/
 }
 
 void PauseMenu::Render() {
-	if (this->paused) {
+	/*if (this->paused) {
 		square->Render();
 
 		int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 64;
@@ -52,7 +52,7 @@ void PauseMenu::Render() {
 				pauseMenuFonts[i].setColor(255, 255, 255, 100);
 			}
 		}
-	}
+	}*/
 }
 
 void PauseMenu::Events(const SDL_Event& event) {

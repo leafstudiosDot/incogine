@@ -5,9 +5,7 @@
 MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
     for (int i = 0; i < MainMenuItemCount; ++i) {
-        menuFonts[i].Init(Engine::Instance(0, nullptr)->GetRenderer());
-        menuFonts[i].setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
-        menuFonts[i].setTextContent(MainMenuItemNames[i]);
+
     }
 }
 
@@ -23,7 +21,7 @@ void MainScene::Start() {
 void MainScene::Update() {
     // Scene update, calls every frame
     for (int i = 0; i < MainMenuItemCount; ++i) {
-		menuFonts[i].setFontSize(((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 32);
+		
     }
 }
 
@@ -34,12 +32,12 @@ void MainScene::Render() {
         int x = 50;
         int y = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
 
-		menuFonts[i].renderUI(x, y);
+		//menuFonts[i].renderUI(x, y);
 
 		if (i == menuSelItem) {
-			menuFonts[i].setColor(255, 255, 255, 255);
+			//menuFonts[i].setColor(255, 255, 255, 255);
 		} else {
-			menuFonts[i].setColor(255, 255, 255, 100);
+			//menuFonts[i].setColor(255, 255, 255, 100);
 		}
     }
 }
@@ -74,6 +72,9 @@ void MainScene::Events(const SDL_Event& event) {
 				case SETTINGS:
 
 					break;
+                case CREDITS:
+
+                    break;
 				case EXIT:
 					Engine::Instance(0, nullptr)->Quit();
 					break;

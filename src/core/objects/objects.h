@@ -105,7 +105,7 @@ class Object {
         Position pos;
         Scale scale;
         Rotation rotation;
-        SDL_Renderer* renderer = Engine::Instance(0, nullptr)->GetRenderer();
+        //SDL_Renderer* renderer = Engine::Instance(0, nullptr)->GetRenderer();
 
     public:
         Object(const std::string& name, Position pos, Scale scale, Rotation rotation);

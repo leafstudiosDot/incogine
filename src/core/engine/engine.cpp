@@ -5,7 +5,7 @@ Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) 
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
     skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
-    sceneManager = new SceneManager(*renderer);
+    sceneManager = new SceneManager();
 }
 
 Engine* Engine::instance = nullptr;
@@ -35,24 +35,28 @@ void Engine::Init() {
 		cout << "Creating Window..." << endl;
 	}
 
-    if (!SDL_CreateWindowAndRenderer(windowName, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_RESIZABLE, &window, &renderer)) {
+    window = SDL_CreateWindow(windowName, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+
+    if (!window) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "WinAndRenErr: %s", SDL_GetError());
         SDL_Quit();
         return;
     }
+
+    glcontext = SDL_GL_CreateContext(window);
 
     if (devmode) {
         cout << "Linking Renderer..." << endl;
     }
 
     // VSync always on
-    if (!SDL_SetRenderVSync(renderer, 1))
+    /*if (!SDL_SetRenderVSync(renderer, 1))
     {
         SDL_Log("Could not enable VSync! SDL error: %s\n", SDL_GetError());
-    }
+    }*/
 
     if (!TTF_Init()) {
-        SDL_DestroyRenderer(renderer);
+        //SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return;
@@ -62,13 +66,14 @@ void Engine::Init() {
     if (mainfont == nullptr) {
         std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
         TTF_Quit();
-        SDL_DestroyRenderer(renderer);
+        //SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         SDL_Quit();
         return;
     }
 
     if (devmode) {
+        /*
         fpsfont = TTF_OpenFontIO(SDL_IOFromConstMem(_mainfont_data, _mainfont_size), 1, 15);
         if (fpsfont == nullptr) {
             std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
@@ -102,6 +107,7 @@ void Engine::Init() {
 
         devmode_destRect.w = devmode_surface->w;
         devmode_destRect.h = devmode_surface->h;
+        */
     }
 
     isRunning = true;
@@ -119,6 +125,7 @@ void Engine::Init() {
 }
 
 void Engine::Quit() {
+    SDL_GL_DestroyContext(glcontext);
     isRunning = false;
 }
 
@@ -138,7 +145,7 @@ void Engine::Cleanup() {
     }
     TTF_CloseFont(mainfont);
     TTF_Quit();
-    SDL_DestroyRenderer(renderer);
+    //SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
 }
@@ -168,17 +175,18 @@ void Engine::Update() {
 }
 
 void Engine::Render() {
-    //SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
+    /*SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);*/
 
     if (sceneManager != nullptr) {
         sceneManager->RenderScene();
     }
 
     if (devmode) {
+        /*
         devmode_destRect.x = windowWidth - devmode_destRect.w;
         devmode_destRect.y = windowHeight - devmode_destRect.h;
-        SDL_RenderTexture(renderer, devmode_texture, nullptr, &devmode_destRect);
+        //SDL_RenderTexture(renderer, devmode_texture, nullptr, &devmode_destRect);
 
         // FPS UI
         SDL_Color dbfps_color = { 255, 255, 255, 128 };
@@ -191,7 +199,7 @@ void Engine::Render() {
             return;
         }
 
-        dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
+        //dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
         if (!dbfps_texture) {
             SDL_DestroySurface(dbfps_surface);
             TTF_CloseFont(fpsfont);
@@ -210,9 +218,11 @@ void Engine::Render() {
 		SDL_RenderTexture(renderer, dbfps_texture, nullptr, &dbfps_destRect);
         SDL_DestroyTexture(dbfps_texture);
         SDL_DestroySurface(dbfps_surface);
+        */
     }
 
-    SDL_RenderPresent(renderer);
+    //SDL_RenderPresent(renderer);
+    SDL_GL_SwapWindow(window);
 }
 
 void Engine::Events() {

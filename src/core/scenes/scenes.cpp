@@ -1,7 +1,7 @@
 #include "scenes.h"
 #include "../engine/engine.h"
 
-SceneManager::SceneManager(SDL_Renderer& renderer) : currentScene(nullptr) {}
+SceneManager::SceneManager() : currentScene(nullptr) {}
 
 SceneManager::~SceneManager() {
     if (currentScene != nullptr) {
@@ -18,7 +18,7 @@ void SceneManager::SetScene(Scene* scene) {
         if (Engine::Instance(0, nullptr)->inDevMode()) {
 			cout << "Entering scene: " << currentScene->GetSceneName() << endl;
         }
-        currentScene->renderer = renderer;
+        //currentScene->renderer = renderer;
         currentScene->Start();
         currentScene->StartInitialized = true;
     }

@@ -25,7 +25,7 @@ static constexpr int MainMenuItemCount = sizeof(MainMenuItemNames) / sizeof(Main
 class MainScene : public Scene {
     private:
         int menuSelItem = 0;
-        Font menuFonts[MainMenuItemCount];
+        //Font menuFonts[MainMenuItemCount];
 
     public:
         MainScene();
