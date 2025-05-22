@@ -5,3 +5,4 @@ build-linux/*
 out
 src/fonts/*.c
 src/fonts/*.h
+certs
