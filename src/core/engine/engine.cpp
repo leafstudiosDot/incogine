@@ -30,7 +30,6 @@ void Engine::Init() {
         snprintf(windowName, sizeof(windowName), "%s", WINDOW_NAME);
     }
 
-
 	if (devmode) {
 		cout << "Creating Window..." << endl;
 	}
@@ -38,12 +37,19 @@ void Engine::Init() {
     window = SDL_CreateWindow(windowName, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 
     if (!window) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "WinAndRenErr: %s", SDL_GetError());
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "WinErr: %s", SDL_GetError());
         SDL_Quit();
         return;
     }
 
     glcontext = SDL_GL_CreateContext(window);
+
+    if (!Font::Init()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "FontInitErr: %s", SDL_GetError());
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return;
+    }
 
     if (devmode) {
         cout << "Linking Renderer..." << endl;
@@ -73,6 +79,11 @@ void Engine::Init() {
     }
 
     if (devmode) {
+        if (!devmode_font.setFont(_mainfont_data, _mainfont_size, 24)) {
+            std::cerr << "Failed to load \"Development Mode\" font in Engine::Init" << std::endl;
+        }
+        devmode_font.setColor(255, 255, 255, 255);
+        devmode_font.setTextContent("Development Mode");
         /*
         fpsfont = TTF_OpenFontIO(SDL_IOFromConstMem(_mainfont_data, _mainfont_size), 1, 15);
         if (fpsfont == nullptr) {
@@ -125,13 +136,12 @@ void Engine::Init() {
 }
 
 void Engine::Quit() {
-    SDL_GL_DestroyContext(glcontext);
     isRunning = false;
 }
 
 void Engine::Cleanup() {
     if (devmode) {
-        SDL_DestroyTexture(devmode_texture);
+        /*SDL_DestroyTexture(devmode_texture);
         SDL_DestroySurface(devmode_surface);
         if (dbfps_texture != nullptr) {
             SDL_DestroyTexture(dbfps_texture);
@@ -141,11 +151,12 @@ void Engine::Cleanup() {
             dbfps_surface = nullptr;
             SDL_DestroySurface(dbfps_surface);
         }
-        TTF_CloseFont(fpsfont);
+        TTF_CloseFont(fpsfont);*/
     }
-    TTF_CloseFont(mainfont);
+    //TTF_CloseFont(mainfont);
     TTF_Quit();
     //SDL_DestroyRenderer(renderer);
+    SDL_GL_DestroyContext(glcontext);
     SDL_DestroyWindow(window);
     SDL_Quit();
 }
@@ -177,12 +188,20 @@ void Engine::Update() {
 void Engine::Render() {
     /*SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);*/
+    glViewport(0, 0, windowSize.width, windowSize.height);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (sceneManager != nullptr) {
         sceneManager->RenderScene();
     }
 
     if (devmode) {
+        FontSize sz = devmode_font.getSize();
+        float x = (windowWidth - sz.width) * 0.5f;
+        float y = windowHeight - sz.height - 10.0f;
+        devmode_font.renderUI(x, y);
+
         /*
         devmode_destRect.x = windowWidth - devmode_destRect.w;
         devmode_destRect.y = windowHeight - devmode_destRect.h;

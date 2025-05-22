@@ -19,6 +19,7 @@
 
 #include "../components/components.h"
 
+#include "../fonts/fonts.h"
 #include "../../fonts/main_font.h"
 
 #include "../scenes/scenes.h"
@@ -84,6 +85,8 @@ class Engine {
         TTF_Font* mainfont;
         TTF_Font* fpsfont;
         float fps = 0.0f;
+        Font devmode_font;
+        Font fpstext_font;
 
         SDL_Surface* devmode_surface;
         SDL_Texture* devmode_texture;

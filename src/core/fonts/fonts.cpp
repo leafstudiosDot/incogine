@@ -1,137 +1,133 @@
 #include "fonts.h"
 using namespace std;
 
-Font::Font() {
-    font = nullptr;
-    fontLoaded = false;
-    int fontSize = 24;
-}
+Font::Font() : font(nullptr), fontLoaded(false) {}
 
 Font::~Font() {
-    if (fontLoaded) {
+    if (textTexture) {
+        glDeleteTextures(1, &textTexture);
+    }
+
+    if (fontLoaded && font) {
         TTF_CloseFont(font);
-        font = nullptr;
     }
 }
 
-void Font::Init(SDL_Renderer* renderer) {
+bool Font::Init() {
     if (!TTF_Init()) {
         cerr << "TTF_Init Error: " << SDL_GetError() << endl;
-        return;
+        return false;
     }
-
-    this->renderer = renderer;
+    glEnable(GL_TEXTURE_2D);
+    return true;
 }
 
-void Font::setFont(const char* _data, int _size) {
-	data = _data;
-	size = _size;
-    setFontSize(fontSize);
-}
-
-void Font::setFontRaw(TTF_Font* font) {
-    this->font = font;
-    fontLoaded = true;
-}
-
-void Font::setFontSize(int newSize) {
-    if (fontSize == newSize || data == nullptr) return;
-
-    fontSize = newSize;
-    if (fontLoaded) {
+bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSize) {
+    if (fontLoaded && font) {
         TTF_CloseFont(font);
-    }
-
-    font = TTF_OpenFontIO(SDL_IOFromConstMem(data, size), 1, fontSize);
-    if (font == nullptr) {
-        std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
         fontLoaded = false;
-    } else {
-        fontLoaded = true;
     }
+    SDL_IOStream* rw = SDL_IOFromConstMem(data, dataSize);
+    if (!rw) {
+        std::cerr << "SDL_IOStream from memory failed: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    font = TTF_OpenFontIO(rw, 1, pointSize);
+    if (!font) {
+        SDL_CloseIO(rw);
+        std::cerr << "TTF_OpenFontIO Error: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    fontLoaded = true;
+    return true;
 }
 
 void Font::renderUI(float x, float y) {
-    if (!fontLoaded || renderer == nullptr) {
-        std::cerr << "Font or Renderer is not initialized in Font::renderUI" << std::endl;
+    if (!textTexture) {
+		cout << "Font::renderUI Error: No texture available" << endl;
+        return;
+    };
+
+    // Save matrices
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    GLint vp[4]; glGetIntegerv(GL_VIEWPORT, vp);
+    glOrtho(0, vp[2], vp[3], 0, -1, 1);
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+    // Draw quad
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, textTexture);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4ub(color.r, color.g, color.b, color.a);
+    float x2 = x + fontWidth;
+    float y2 = y + fontHeight;
+    glBegin(GL_QUADS);
+      glTexCoord2f(0,0); glVertex2f(x, y);
+      glTexCoord2f(1,0); glVertex2f(x2, y);
+      glTexCoord2f(1,1); glVertex2f(x2, y2);
+      glTexCoord2f(0,1); glVertex2f(x, y2);
+    glEnd();
+    glDisable(GL_BLEND);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glEnable(GL_DEPTH_TEST);
+    // Restore matrices
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
+}
+
+void Font::setColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
+    color = { r, g, b, a };
+    if (!utf8_text.empty()) updateTexture();
+}
+
+void Font::updateTexture() {
+    if (!fontLoaded || utf8_text.empty()) return;
+    // Free old texture
+    if (textTexture) {
+        glDeleteTextures(1, &textTexture);
+        textTexture = 0;
+    }
+    // Render text to SDL surface
+    SDL_Surface* surf = TTF_RenderText_Blended(font, utf8_text.c_str(), utf8_text.length(), color);
+    if (!surf) {
+        std::cerr << "TTF_RenderText_Blended Error: " << SDL_GetError() << std::endl;
         return;
     }
+    fontWidth = surf->w;
+    fontHeight = surf->h;
+    // Upload to OpenGL texture
+    glGenTextures(1, &textTexture);
+    glBindTexture(GL_TEXTURE_2D, textTexture);
 
-    surface = TTF_RenderText_Blended(font, text_content, 0, color);
-    if (surface == nullptr) {
-        cerr << "TTF_RenderText_Blended Error: " << SDL_GetError() << endl;
-        return;
-    }
+    // Ensure proper row alignment for non-4-byte widths
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    texture = SDL_CreateTextureFromSurface(renderer, surface);
-    if (texture == nullptr) {
-        cerr << "SDL_CreateTextureFromSurface Error: " << SDL_GetError() << endl;
-        return;
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surf->w, surf->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, surf->pixels);
+    // Clamp to edge to avoid bleeding
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    if (texture != nullptr) {
-        SDL_FRect destRect = {x, y, surface->w, surface->h};
-        SDL_RenderTexture(renderer, texture, nullptr, &destRect);
+    // Restore default alignment
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
-        SDL_DestroySurface(surface);
-        SDL_DestroyTexture(texture);
-    }
-}
-
-void Font::setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA) {
-    color = { newColorR, newColorG, newColorB, newColorA };
-}
-
-void Font::setColor(SDL_Color color) {
-    this->color = color;
-}
-
-FontSize Font::getFontWidth() {
-	float textWidth = 0, textHeight = 0;
-    //TTF_GetTextSize(font, text_content, &textWidth, &textHeight);
-    fontWidth.width = textWidth;
-    fontWidth.height = textHeight;
-	return fontWidth;
-}
-
-void Font::setTextContent(const char* content) {
-    utf8_text = content;
-    text_content = utf8_text.c_str();
-}
-
-void Font::setTextContent(const wchar_t* content) {
-    std::wstring wstr(content);
-
-    utf8_text.clear();
-    for (wchar_t wc : wstr) {
-        encode_utf8_char(static_cast<uint32_t>(wc), utf8_text);
-    }
-
-    text_content = utf8_text.c_str();
+    glBindTexture(GL_TEXTURE_2D, 0);
+    SDL_DestroySurface(surf);
 }
 
 void Font::setTextContent(const std::string& content) {
     utf8_text = content;
-    text_content = utf8_text.c_str();
+    updateTexture();
 }
 
-void Font::encode_utf8_char(uint32_t wc, std::string& out) {
-    if (wc <= 0x7F) {
-        out.push_back(char(wc));
-    }
-    else if (wc <= 0x7FF) {
-        out.push_back(char(0xC0 | ((wc >> 6) & 0x1F)));
-        out.push_back(char(0x80 | (wc & 0x3F)));
-    }
-    else if (wc <= 0xFFFF) {
-        out.push_back(char(0xE0 | ((wc >> 12) & 0x0F)));
-        out.push_back(char(0x80 | ((wc >> 6) & 0x3F)));
-        out.push_back(char(0x80 | (wc & 0x3F)));
-    }
-    else if (wc <= 0x10FFFF) {
-        out.push_back(char(0xF0 | ((wc >> 18) & 0x07)));
-        out.push_back(char(0x80 | ((wc >> 12) & 0x3F)));
-        out.push_back(char(0x80 | ((wc >> 6) & 0x3F)));
-        out.push_back(char(0x80 | (wc & 0x3F)));
-    }
+FontSize Font::getSize() const {
+    return { float(fontWidth), float(fontHeight) };
 }
