@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<credits>
+    <project>
+        <header>leafstudiosDot</header>
+        <listname>
+            <name>aliamanuba</name>
+            <role>Lead Developer</role>
+        </listname>
+        <listname>
+            <name>aliamanuba</name>
+            <role>Art</role>
+        </listname>
+        <listname>
+            <name>aliamanuba</name>
+            <role>Music</role>
+        </listname>
+        <subheader>Sponsors</subheader>
+        <gridlist>
+            <name>hodots.</name>
+            <name>Statolumn</name>
+            <name>Project D</name>
+        </gridlist>
+    </project>
+    <incogine>
+        <contributors>
+            <contributor>
+                <name>aliamanuba (TuxPenguin09)</name>
+                <role>Main Developer</role>
+                <service>
+                    <name>GitHub</name>
+                    <name>GitLab</name>
+                </service>
+            </contributor>
+        </contributors>
+    </incogine>
+</credits>

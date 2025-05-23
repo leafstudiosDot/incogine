@@ -11,6 +11,7 @@ enum MainMenuItems {
     NEWGAME,
     LOADGAME,
     SETTINGS,
+    CREDITS,
     EXIT
 };
 
@@ -18,6 +19,7 @@ static constexpr const char* MainMenuItemNames[] = {
     "New Game",
     "Load Game",
     "Settings",
+    "Credits",
     "Exit Game"
 };
 static constexpr int MainMenuItemCount = sizeof(MainMenuItemNames) / sizeof(MainMenuItemNames[0]);
