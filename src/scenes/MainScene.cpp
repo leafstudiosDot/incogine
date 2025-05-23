@@ -34,7 +34,6 @@ void MainScene::Render() {
     for (int i = 0; i < MainMenuItemCount; ++i) {
         // Example: render each menu item at different Y position
         int yindex = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
-		menuFonts[i].renderUI(50, yindex);
 
         int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
         float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
@@ -45,6 +44,8 @@ void MainScene::Render() {
 		} else {
 			menuFonts[i].setColor(255, 255, 255, 100);
 		}
+
+		menuFonts[i].renderUI(50, yindex);
     }
 }
 

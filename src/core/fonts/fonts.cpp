@@ -70,9 +70,12 @@ void Font::renderUI(float x, float y) {
       glTexCoord2f(1,1); glVertex2f(x2, y2);
       glTexCoord2f(0,1); glVertex2f(x, y2);
     glEnd();
+
     glDisable(GL_BLEND);
     glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
     glEnable(GL_DEPTH_TEST);
+
     // Restore matrices
     glPopMatrix();
     glMatrixMode(GL_PROJECTION);

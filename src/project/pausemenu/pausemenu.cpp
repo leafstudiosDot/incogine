@@ -25,9 +25,9 @@ PauseMenu::~PauseMenu() {
 }
 
 void PauseMenu::Update() {
-	/*square->setPosition(Position(0, 0, 0));
+	square->setPosition(Position(0, 0, 0));
 	square->setScale(Scale(Engine::Instance(0, nullptr)->GetWindowSize().width, Engine::Instance(0, nullptr)->GetWindowSize().height, 0));
-	square->setColor(Color(0, 0, 0, 128));*/
+	square->setColor(Color(0, 0, 0, 128));
 
 	pausedFont.setTextContent("Paused");
 
@@ -40,6 +40,8 @@ void PauseMenu::Render() {
 	if (!this->paused) {
 		return;
 	}
+
+	square->Render();
 
 	int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
 	float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
@@ -59,6 +61,7 @@ void PauseMenu::Render() {
 			pauseMenuFonts[i].setColor(255, 255, 255, 100);
 		}
 	}
+
 }
 
 void PauseMenu::Events(const SDL_Event& event) {
