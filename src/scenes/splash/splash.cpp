@@ -14,22 +14,19 @@ Splash::~Splash() {
 
 void Splash::Start() {
     // Scene initialized, calls at the initialization of the scene
-    /*font.setColor(0, 0, 0, 0);
 
-    font.setFont(reinterpret_cast<const char*>(_mainfont_data), _mainfont_size);
-    font.setTextContent("Powered by Incogine");
+    if (!poweredByIncogineFont.setFont(_mainfont_data, _mainfont_size, 48) && Engine::Instance(0, nullptr)->inDevMode()) {
+        std::cerr << "Failed to load startup font in Splash::Start" << std::endl;
+    }
 
-    font.setFontSize(32);
-    if (!font.GetFont()) {
-        std::cerr << "Failed to load font in Splash::Start" << std::endl;
-    }*/
-
+	poweredByIncogineFont.setTextContent("Powered by Incogine");
+	poweredByIncogineFont.setColor(255, 255, 255, 0);
     //Engine::Instance(0, nullptr)->SetScene(new MainScene());
 }
 
 void Splash::Update() {
     // Scene update, calls every frame
-    /*deltaTime = Engine::Instance(0, nullptr)->getDeltaTime() / 1000.0f;
+    deltaTime = Engine::Instance(0, nullptr)->getDeltaTime() / 1000.0f;
 
     elapsedTime += deltaTime;
 
@@ -51,15 +48,17 @@ void Splash::Update() {
         LogoOne_newY = lerp(LogoOne_centerY, LogoOne_endY, easedT);
     } else if (elapsedTime >= LogoOne_switchSceneTime) {
         Engine::Instance(0, nullptr)->SetScene(new MainScene());
-    }*/
+    }
 }
 
 void Splash::Render() {
     // Scene render
-    //font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
-    /*font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 2.8), (LogoOne_newY));
-    int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
-    font.setFontSize(scaledFontSize);
+	poweredByIncogineFont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) - (poweredByIncogineFont.getSize().width / 2), LogoOne_newY);
+	
+    int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+    float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
 
-    font.setColor(splashopacity, splashopacity, splashopacity, splashopacity);*/
+    poweredByIncogineFont.setFontScale(scale);
+
+	poweredByIncogineFont.setColor(splashopacity, splashopacity, splashopacity, splashopacity);
 }

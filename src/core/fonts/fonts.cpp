@@ -13,7 +13,7 @@ Font::~Font() {
     }
 }
 
-bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSize) {
+bool Font::setFont(const unsigned char* data, unsigned int dataSize, double pointSize) {
     if (fontLoaded && font) {
         TTF_CloseFont(font);
         fontLoaded = false;
@@ -29,6 +29,11 @@ bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSi
         std::cerr << "TTF_OpenFontIO Error: " << SDL_GetError() << std::endl;
         return false;
     }
+
+    fontData = data;
+    fontDataSize = dataSize;
+    basePointSize = pointSize;
+    currentPointSize = pointSize;
 
     fontLoaded = true;
     return true;
@@ -158,3 +163,22 @@ void Font::setTextContent(const std::string& content) {
 FontSize Font::getSize() const {
     return { float(fontWidth), float(fontHeight) };
 }
+
+void Font::setFontScale(float scale) {
+    fontScale = scale;
+    double newPointSize = basePointSize * scale;
+    if (abs(newPointSize - currentPointSize) > 0.1) {
+        currentPointSize = newPointSize;
+        if (fontLoaded && font) {
+            TTF_CloseFont(font);
+            fontLoaded = false;
+        }
+
+        font = TTF_OpenFontIO(SDL_IOFromConstMem(fontData, fontDataSize), 1, currentPointSize);
+        if (font) {
+            fontLoaded = true;
+            updateTexture();
+        }
+    }
+}
+
