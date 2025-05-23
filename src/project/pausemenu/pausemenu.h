@@ -24,8 +24,8 @@ class PauseMenu {
     private:
         bool paused = false;
         Square* square = nullptr;
-        //Font pausedFont;
-        //Font pauseMenuFonts[PauseMenuItemCount];
+        Font pausedFont;
+        Font pauseMenuFonts[PauseMenuItemCount];
         int pauseMenuSelItem = 0;
     public:
         PauseMenu();

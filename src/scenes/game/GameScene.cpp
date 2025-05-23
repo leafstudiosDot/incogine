@@ -3,9 +3,7 @@
 
 GameScene::GameScene() : Scene("Game Scene") {
     // Scene constructor
-	//pauseMenu = new PauseMenu(Engine::Instance(0, nullptr)->GetRenderer());
-    //steamfont.Init(Engine::Instance(0, nullptr)->GetRenderer());
-
+	pauseMenu = new PauseMenu();
 }
 
 GameScene::~GameScene() {

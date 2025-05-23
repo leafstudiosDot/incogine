@@ -13,7 +13,7 @@
 
 class GameScene : public Scene {
     private:
-        //Font steamfont;
+        Font steamfont;
 		PauseMenu* pauseMenu = nullptr;
 
     public:
