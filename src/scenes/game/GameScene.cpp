@@ -34,7 +34,7 @@ void GameScene::Render() {
     // Scene render
 
     //steamfont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 4), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
-    int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
+    //int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
     //steamfont.setFontSize(scaledFontSize);
 
 	pauseMenu->Render();

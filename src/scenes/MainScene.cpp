@@ -5,7 +5,11 @@
 MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
     for (int i = 0; i < MainMenuItemCount; ++i) {
-
+        if (!menuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+            if (Engine::Instance(0, nullptr)->inDevMode()) {
+                std::cerr << "Failed to load menu index: " << MainMenuItemNames[i] << " font in Splash::Start" << std::endl;
+            }
+        }
     }
 }
 
@@ -21,7 +25,7 @@ void MainScene::Start() {
 void MainScene::Update() {
     // Scene update, calls every frame
     for (int i = 0; i < MainMenuItemCount; ++i) {
-		
+		menuFonts[i].setTextContent(MainMenuItemNames[i]);
     }
 }
 
@@ -29,15 +33,19 @@ void MainScene::Render() {
     // Scene render
     for (int i = 0; i < MainMenuItemCount; ++i) {
         // Example: render each menu item at different Y position
-        int x = 50;
-        int y = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
+        int yindex = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
 
-		//menuFonts[i].renderUI(x, y);
+		menuFonts[i].renderUI(50, yindex);
+
+        int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+        float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
+
+        menuFonts[i].setFontScale(scale);
 
 		if (i == menuSelItem) {
-			//menuFonts[i].setColor(255, 255, 255, 255);
+			menuFonts[i].setColor(255, 255, 255, 255);
 		} else {
-			//menuFonts[i].setColor(255, 255, 255, 100);
+			menuFonts[i].setColor(255, 255, 255, 100);
 		}
     }
 }
