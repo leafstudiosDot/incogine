@@ -28,8 +28,6 @@ bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSi
         SDL_CloseIO(rw);
         std::cerr << "TTF_OpenFontIO Error: " << SDL_GetError() << std::endl;
         return false;
-    } else {
-        std::cout << "Font loaded successfully" << std::endl;
     }
 
     fontLoaded = true;

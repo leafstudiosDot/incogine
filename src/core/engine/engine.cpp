@@ -64,30 +64,7 @@ void Engine::Init() {
     }
 
     // VSync always on
-    /*if (!SDL_SetRenderVSync(renderer, 1))
-    {
-        SDL_Log("Could not enable VSync! SDL error: %s\n", SDL_GetError());
-    }*/
-
-    SDL_IOStream* fontStream = SDL_IOFromConstMem(_mainfont_data, _mainfont_size);
-    if (!fontStream) {
-        std::cerr << "Failed to create font stream: " << SDL_GetError() << std::endl;
-        TTF_Quit();
-        SDL_GL_DestroyContext(glcontext);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return;
-    }
-    mainfont = TTF_OpenFontIO(fontStream, 1, 24);
-
-    if (mainfont == nullptr) {
-        std::cerr << "TTF_OpenFont Error: " << SDL_GetError() << std::endl;
-        TTF_Quit();
-        SDL_GL_DestroyContext(glcontext);
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return;
-    }
+    SDL_GL_SetSwapInterval(1);
 
     if (devmode) {
         if (!devmode_font.setFont(_mainfont_data, _mainfont_size, 24)) {
@@ -95,6 +72,13 @@ void Engine::Init() {
         }
         devmode_font.setColor(255, 255, 255, 128);
         devmode_font.setTextContent("Development Mode");
+
+        // FPS UI
+		if (!fpstext_font.setFont(_mainfont_data, _mainfont_size, 14)) {
+			std::cerr << "Failed to load \"FPS\" font in Engine::Init" << std::endl;
+		}
+		fpstext_font.setColor(255, 255, 255, 128);
+		fpstext_font.setTextContent("");
     }
 
     isRunning = true;
@@ -131,7 +115,7 @@ void Engine::Update() {
     deltaTime = frameDelta;
     lastTime = currentTime;
 
-    if (sceneManager != nullptr) {
+    if (sceneManager) {
         sceneManager->UpdateScene();
     }
 
@@ -156,45 +140,13 @@ void Engine::Render() {
     }
 
     if (devmode) {
-        FontSize sz = devmode_font.getSize();
-        float x = windowWidth - sz.width;
-        float y = windowHeight - sz.height;
-        devmode_font.renderUI(x, y);
+        FontSize devmode_font_sz = devmode_font.getSize();
+        devmode_font.renderUI((windowWidth - devmode_font_sz.width), (windowHeight - devmode_font_sz.height));
 
-        /*
-        //SDL_RenderTexture(renderer, devmode_texture, nullptr, &devmode_destRect);
-
-        // FPS UI
-        SDL_Color dbfps_color = { 255, 255, 255, 128 };
-        dbfps_surface = TTF_RenderText_Blended(fpsfont, (std::string(fpsConvert(getfps())) + "fps").c_str(), 0, dbfps_color);
-        if (!dbfps_surface) {
-            TTF_CloseFont(fpsfont);
-            TTF_Quit();
-            SDL_DestroyWindow(window);
-            SDL_Quit();
-            return;
-        }
-
-        //dbfps_texture = SDL_CreateTextureFromSurface(renderer, dbfps_surface);
-        if (!dbfps_texture) {
-            SDL_DestroySurface(dbfps_surface);
-            TTF_CloseFont(fpsfont);
-            TTF_Quit();
-            SDL_DestroyWindow(window);
-            SDL_Quit();
-            return;
-        }
-        SDL_SetTextureBlendMode(dbfps_texture, SDL_BLENDMODE_BLEND);
-
-        dbfps_destRect.w = dbfps_surface->w;
-        dbfps_destRect.h = dbfps_surface->h;
-
-		dbfps_destRect.x = windowWidth - dbfps_destRect.w - 15;
-		dbfps_destRect.y = 15;
-		SDL_RenderTexture(renderer, dbfps_texture, nullptr, &dbfps_destRect);
-        SDL_DestroyTexture(dbfps_texture);
-        SDL_DestroySurface(dbfps_surface);
-        */
+		// FPS UI
+		fpstext_font.setTextContent((std::string(fpsConvert(getfps())) + " fps").c_str());
+		FontSize devfps_font_sz = fpstext_font.getSize();
+		fpstext_font.renderUI((windowWidth - devfps_font_sz.width - 15), 15);
     }
 
     SDL_GL_SwapWindow(window);

@@ -63,7 +63,6 @@ class Engine {
 
         inline SDL_Window* GetWindow() { return window; }
 		inline SDL_GLContext GetGLContext() { return glcontext; }
-        inline TTF_Font* GetMainFont() { return mainfont; }
         inline SDL_Event GetEventProvider() { return event; };
         
 		inline double getDeltaTime() { return deltaTime; }
@@ -82,15 +81,9 @@ class Engine {
         SDL_Window* window;
         SDL_Event event;
         SDL_GLContext glcontext;
-        TTF_Font* mainfont;
-        TTF_Font* fpsfont;
         float fps = 0.0f;
         Font devmode_font;
         Font fpstext_font;
-
-        SDL_Surface* devmode_surface;
-        SDL_Texture* devmode_texture;
-        SDL_FRect devmode_destRect;
 
         // FPS
         Uint64 currentTime;
@@ -98,11 +91,6 @@ class Engine {
 		double frameDelta = 0.0f;
         Uint64 lastTime = SDL_GetTicks();
         Uint64 frameCount = 0;
-
-        SDL_Surface* dbfps_surface;
-        SDL_Texture* dbfps_texture;
-        SDL_FRect dbfps_destRect;
-
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;
