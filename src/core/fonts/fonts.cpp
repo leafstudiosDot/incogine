@@ -1,7 +1,7 @@
 #include "fonts.h"
 using namespace std;
 
-Font::Font() : font(nullptr), fontLoaded(false) {}
+Font::Font() : font(nullptr), fontLoaded(false), textTexture(0) {}
 
 Font::~Font() {
     if (textTexture) {
@@ -11,15 +11,6 @@ Font::~Font() {
     if (fontLoaded && font) {
         TTF_CloseFont(font);
     }
-}
-
-bool Font::Init() {
-    if (!TTF_Init()) {
-        cerr << "TTF_Init Error: " << SDL_GetError() << endl;
-        return false;
-    }
-    glEnable(GL_TEXTURE_2D);
-    return true;
 }
 
 bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSize) {
@@ -37,7 +28,10 @@ bool Font::setFont(const unsigned char* data, unsigned int dataSize, int pointSi
         SDL_CloseIO(rw);
         std::cerr << "TTF_OpenFontIO Error: " << SDL_GetError() << std::endl;
         return false;
+    } else {
+        std::cout << "Font loaded successfully" << std::endl;
     }
+
     fontLoaded = true;
     return true;
 }
@@ -57,6 +51,7 @@ void Font::renderUI(float x, float y) {
     glMatrixMode(GL_MODELVIEW);
     glPushMatrix();
     glLoadIdentity();
+
     // Draw quad
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_TEXTURE_2D);
@@ -89,39 +84,73 @@ void Font::setColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a) {
 
 void Font::updateTexture() {
     if (!fontLoaded || utf8_text.empty()) return;
-    // Free old texture
+
     if (textTexture) {
         glDeleteTextures(1, &textTexture);
         textTexture = 0;
     }
-    // Render text to SDL surface
-    SDL_Surface* surf = TTF_RenderText_Blended(font, utf8_text.c_str(), utf8_text.length(), color);
+
+    // Render text to SDL surface (UTF-8 blended)
+    SDL_Color sdl_color = { color.r, color.g, color.b, color.a };
+    SDL_Surface* surf = TTF_RenderText_Blended(font, utf8_text.c_str(), 0, sdl_color);
     if (!surf) {
         std::cerr << "TTF_RenderText_Blended Error: " << SDL_GetError() << std::endl;
         return;
     }
+
     fontWidth = surf->w;
     fontHeight = surf->h;
-    // Upload to OpenGL texture
+
+    // Generate and bind OpenGL texture
     glGenTextures(1, &textTexture);
     glBindTexture(GL_TEXTURE_2D, textTexture);
-
-    // Ensure proper row alignment for non-4-byte widths
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surf->w, surf->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, surf->pixels);
-    // Clamp to edge to avoid bleeding
+    int bytesPerPixel = SDL_BYTESPERPIXEL(surf->format);
+    int rowLength     = surf->pitch / bytesPerPixel;
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
+
+    GLenum format = GL_RGBA;
+    GLenum type   = GL_UNSIGNED_BYTE;
+    GLenum uploadFormat = GL_RGBA;
+
+    switch (surf->format) {
+        case SDL_PIXELFORMAT_ARGB8888:
+            uploadFormat = GL_BGRA;
+            break;
+        case SDL_PIXELFORMAT_RGBA8888:
+            uploadFormat = GL_RGBA;
+            break;
+        case SDL_PIXELFORMAT_ABGR8888:
+            uploadFormat = GL_RGBA;
+            break;
+        case SDL_PIXELFORMAT_BGRA8888:
+            uploadFormat = GL_BGRA;
+            break;
+        default:
+            std::cerr << "Unsupported pixel format: " << SDL_GetPixelFormatName(surf->format) << std::endl;
+            SDL_DestroySurface(surf);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glBindTexture(GL_TEXTURE_2D, 0);
+            return;
+    }
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, surf->w, surf->h, 0,
+                 uploadFormat, type, surf->pixels);
+
+    // Texture parameters
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Restore default alignment
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     SDL_DestroySurface(surf);
 }
+
 
 void Font::setTextContent(const std::string& content) {
     utf8_text = content;
