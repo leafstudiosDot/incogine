@@ -193,6 +193,7 @@ else()
     find_package(OpenGL REQUIRED)
     include_directories(${OPENGL_INCLUDE_DIR})
     link_directories(${OPENGL_gl_LIBRARY})
+    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/reqs/GLEW")
 endif()
 
 # FBX

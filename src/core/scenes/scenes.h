@@ -33,11 +33,10 @@ class Scene {
 
 class SceneManager {
     protected:
-        SDL_Renderer* renderer;
     private:
         Scene* currentScene;
     public:
-        SceneManager(SDL_Renderer& renderer);
+        SceneManager();
         ~SceneManager();
         void SetScene(Scene* scene);
         void UpdateScene();

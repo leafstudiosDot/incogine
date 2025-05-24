@@ -3,8 +3,13 @@
 
 GameScene::GameScene() : Scene("Game Scene") {
     // Scene constructor
-	pauseMenu = new PauseMenu(Engine::Instance(0, nullptr)->GetRenderer());
-    steamfont.Init(Engine::Instance(0, nullptr)->GetRenderer());
+	pauseMenu = new PauseMenu();
+
+    if (steamfont.setFont(_jpsup_font_data, _jpsup_font_size, 32)) {
+        if (Engine::Instance(0, nullptr)->inDevMode()) {
+            std::cerr << "Failed to load menu index: \"Text\" font in GameScene::GameScene" << std::endl;
+        }
+    }
 }
 
 GameScene::~GameScene() {
@@ -13,15 +18,8 @@ GameScene::~GameScene() {
 
 void GameScene::Start() {
     // Scene initialized, calls at the initialization of the scene
-    steamfont.setColor(255, 255, 255, 255);
-
-    steamfont.setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
-    steamfont.setTextContent(L"めいさん");
-
-    steamfont.setFontSize(32);
-    if (!steamfont.GetFont()) {
-        std::cerr << "Failed to load font in GameScene::Start" << std::endl;
-    }
+    steamfont.setTextContent(u8"めいさん");
+	steamfont.setColor(255, 255, 255, 255);
 }
 
 void GameScene::Update() {
@@ -31,10 +29,11 @@ void GameScene::Update() {
 
 void GameScene::Render() {
     // Scene render
+    int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+    float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
+    steamfont.setFontScale(scale);
 
     steamfont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 4), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
-    int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
-    steamfont.setFontSize(scaledFontSize);
 
 	pauseMenu->Render();
 }

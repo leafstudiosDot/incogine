@@ -4,12 +4,14 @@
 #include <vector>
 #include <locale>
 #include <codecvt>
+#include <GL/glew.h>
 #include <SDL/SDL.h>
 #if defined(__APPLE__) && defined(__IPHONEOS__)
     #include <SDL2/SDL_main.h>
 #endif
 #include <SDL_ttf.h>
 #include <SDL_image.h>
+#include <SDL_opengl.h>
 //#include <fbxsdk.h>
 //#include "console/console.h"
 #include "version.h"
@@ -17,6 +19,7 @@
 
 #include "../components/components.h"
 
+#include "../fonts/fonts.h"
 #include "../../fonts/main_font.h"
 
 #include "../scenes/scenes.h"
@@ -59,8 +62,7 @@ class Engine {
         inline WindowSize GetWindowSize() { return windowSize; };
 
         inline SDL_Window* GetWindow() { return window; }
-        inline SDL_Renderer* GetRenderer() { return renderer; }
-        inline TTF_Font* GetMainFont() { return mainfont; }
+		inline SDL_GLContext GetGLContext() { return glcontext; }
         inline SDL_Event GetEventProvider() { return event; };
         
 		inline double getDeltaTime() { return deltaTime; }
@@ -77,15 +79,11 @@ class Engine {
         bool winFocused;
         bool fullScreenMode = false;
         SDL_Window* window;
-        SDL_Renderer* renderer;
         SDL_Event event;
-        TTF_Font* mainfont;
-        TTF_Font* fpsfont;
+        SDL_GLContext glcontext;
         float fps = 0.0f;
-
-        SDL_Surface* devmode_surface;
-        SDL_Texture* devmode_texture;
-        SDL_FRect devmode_destRect;
+        Font devmode_font;
+        Font fpstext_font;
 
         // FPS
         Uint64 currentTime;
@@ -93,11 +91,6 @@ class Engine {
 		double frameDelta = 0.0f;
         Uint64 lastTime = SDL_GetTicks();
         Uint64 frameCount = 0;
-
-        SDL_Surface* dbfps_surface;
-        SDL_Texture* dbfps_texture;
-        SDL_FRect dbfps_destRect;
-
 
         int windowWidth = SCREEN_WIDTH;
         int windowHeight = SCREEN_HEIGHT;

@@ -8,7 +8,7 @@
 
 class Splash : public Scene {
     private:
-        Font font;
+        Font poweredByIncogineFont;
         int splashopacity;
         float deltaTime;
         float elapsedTime = 0.0f;

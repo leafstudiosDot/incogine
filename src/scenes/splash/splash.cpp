@@ -4,7 +4,7 @@
 
 Splash::Splash() : Scene("Splash") {
     // Scene constructor
-    font.Init(Engine::Instance(0, nullptr)->GetRenderer());
+    //font.Init(Engine::Instance(0, nullptr)->GetRenderer());
     splashopacity = 0;
 }
 
@@ -14,16 +14,13 @@ Splash::~Splash() {
 
 void Splash::Start() {
     // Scene initialized, calls at the initialization of the scene
-    font.setColor(0, 0, 0, 0);
 
-    font.setFont(reinterpret_cast<const char*>(_mainfont_data), _mainfont_size);
-    font.setTextContent("Powered by Incogine");
-
-    font.setFontSize(32);
-    if (!font.GetFont()) {
-        std::cerr << "Failed to load font in Splash::Start" << std::endl;
+    if (!poweredByIncogineFont.setFont(_mainfont_data, _mainfont_size, 48) && Engine::Instance(0, nullptr)->inDevMode()) {
+        std::cerr << "Failed to load startup font in Splash::Start" << std::endl;
     }
 
+	poweredByIncogineFont.setTextContent("Powered by Incogine");
+	poweredByIncogineFont.setColor(255, 255, 255, 0);
     //Engine::Instance(0, nullptr)->SetScene(new MainScene());
 }
 
@@ -38,14 +35,14 @@ void Splash::Update() {
 
 	// Powered by Incogine logo
     if (elapsedTime >= LogoOne_startFadeIn && elapsedTime < LogoOne_endFadeIn) {
-        splashopacity = std::min(splashopacity + 4, 255);
+        splashopacity = min(splashopacity + 4, 255);
         float t = (elapsedTime - LogoOne_startFadeIn) / (LogoOne_endFadeIn - LogoOne_startFadeIn);
         float easedT = cubicBezier(t, 0.0f, 0.5f, 0.0f, 1.0f);
         LogoOne_newY = lerp(LogoOne_startY, LogoOne_centerY, easedT);
     } else if (elapsedTime >= LogoOne_endFadeIn && elapsedTime < LogoOne_startFadeOut) {
         LogoOne_newY = LogoOne_centerY;
     } else if (elapsedTime >= LogoOne_startFadeOut && elapsedTime <= LogoOne_endFadeOut) {
-        splashopacity = std::max(splashopacity - 2, 0);
+        splashopacity = max(splashopacity - 2, 0);
         float t = (elapsedTime - LogoOne_startFadeOut) / (LogoOne_endFadeOut - LogoOne_startFadeOut);
         float easedT = cubicBezier(t, 1.0f, 0.0f, 1.0f, 0.5f);
         LogoOne_newY = lerp(LogoOne_centerY, LogoOne_endY, easedT);
@@ -56,10 +53,12 @@ void Splash::Update() {
 
 void Splash::Render() {
     // Scene render
-    //font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2) - (font.getFontWidth().width/2), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
-    font.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width/2.8), (LogoOne_newY));
-    int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 48;
-    font.setFontSize(scaledFontSize);
+	poweredByIncogineFont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) - (poweredByIncogineFont.getSize().width / 2), LogoOne_newY);
+	
+    int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+    float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
 
-    font.setColor(splashopacity, splashopacity, splashopacity, splashopacity);
+    poweredByIncogineFont.setFontScale(scale);
+
+	poweredByIncogineFont.setColor(splashopacity, splashopacity, splashopacity, splashopacity);
 }
