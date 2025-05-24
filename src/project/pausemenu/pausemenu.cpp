@@ -1,18 +1,22 @@
 #include "pausemenu.h"
 #include <iostream>
 
-PauseMenu::PauseMenu(SDL_Renderer* renderer) {
-	square = new Square(renderer);
+PauseMenu::PauseMenu() {
+	square = new Square();
 	square->setName("PauseMenuContainer");
 
-	pausedFont.Init(renderer);
-	pausedFont.setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
-	pausedFont.setTextContent("Paused");
-
 	for (int i = 0; i < PauseMenuItemCount; ++i) {
-		pauseMenuFonts[i].Init(renderer);
-		pauseMenuFonts[i].setFont(reinterpret_cast<const char*>(_jpsup_font_data), _jpsup_font_size);
-		pauseMenuFonts[i].setTextContent(PauseMenuItemNames[i]);
+		if (!pauseMenuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+			if (Engine::Instance(0, nullptr)->inDevMode()) {
+				std::cerr << "Failed to load menu index: " << PauseMenuItemNames[i] << " font in PauseMenu::PauseMenu" << std::endl;
+			}
+		}
+	}
+
+	if (!pausedFont.setFont(_jpsup_font_data, _jpsup_font_size, 48)) {
+		if (Engine::Instance(0, nullptr)->inDevMode()) {
+			std::cerr << "Failed to load \"Paused\" font in PauseMenu::PauseMenu" << std::endl;
+		}
 	}
 }
 
@@ -25,34 +29,39 @@ void PauseMenu::Update() {
 	square->setScale(Scale(Engine::Instance(0, nullptr)->GetWindowSize().width, Engine::Instance(0, nullptr)->GetWindowSize().height, 0));
 	square->setColor(Color(0, 0, 0, 128));
 
+	pausedFont.setTextContent("Paused");
+
 	for (int i = 0; i < PauseMenuItemCount; ++i) {
-		pauseMenuFonts[i].setFontSize(((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 32);
+		pauseMenuFonts[i].setTextContent(PauseMenuItemNames[i]);
 	}
 }
 
 void PauseMenu::Render() {
-	if (this->paused) {
-		square->Render();
+	if (!this->paused) {
+		return;
+	}
 
-		int scaledFontSize = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 64;
-		pausedFont.renderUI(50, ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720));
-		pausedFont.setFontSize(scaledFontSize);
+	square->Render();
 
-		for (int i = 0; i < PauseMenuItemCount; ++i) {
-			int x = 50;
-			int y = (50 + ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50)));
-			int scaledFontSize_menu = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * 30;
+	int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+	float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
+	
+	pausedFont.renderUI(50, 50);
+	pausedFont.setColor(255, 255, 255, 255);
+	pausedFont.setFontScale(scale);
 
-			pauseMenuFonts[i].renderUI(x, y);
-			pauseMenuFonts[i].setFontSize(scaledFontSize_menu);
+	for (int i = 0; i < PauseMenuItemCount; ++i) {
+		int yindex = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
+		pauseMenuFonts[i].renderUI(50, 30 + yindex);
+		pauseMenuFonts[i].setFontScale(scale);
 
-			if (i == pauseMenuSelItem) {
-				pauseMenuFonts[i].setColor(255, 255, 255, 255);
-			} else {
-				pauseMenuFonts[i].setColor(255, 255, 255, 100);
-			}
+		if (i == pauseMenuSelItem) {
+			pauseMenuFonts[i].setColor(255, 255, 255, 255);
+		} else {
+			pauseMenuFonts[i].setColor(255, 255, 255, 100);
 		}
 	}
+
 }
 
 void PauseMenu::Events(const SDL_Event& event) {

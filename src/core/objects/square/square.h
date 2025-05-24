@@ -8,9 +8,8 @@
 class Square : public Object {
     private:
         Sprite* sprite;
-		SDL_Renderer* renderer;
     public:
-        Square(SDL_Renderer* _renderer);
+        Square();
         ~Square();
 
         void setColor(const Color& color);

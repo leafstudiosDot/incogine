@@ -23,13 +23,12 @@ static constexpr int PauseMenuItemCount = sizeof(PauseMenuItemNames) / sizeof(Pa
 class PauseMenu {
     private:
         bool paused = false;
-        SDL_Renderer* renderer;
         Square* square = nullptr;
         Font pausedFont;
         Font pauseMenuFonts[PauseMenuItemCount];
         int pauseMenuSelItem = 0;
     public:
-        PauseMenu(SDL_Renderer* renderer);
+        PauseMenu();
         ~PauseMenu();
 
 		inline bool getPaused() const {

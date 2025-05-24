@@ -1,6 +1,6 @@
 #include "square.h"
 
-Square::Square(SDL_Renderer* _renderer) : Object("Square", Position(0, 0, 0), Scale(1, 1, 1), Rotation(0, 0, 0)), renderer(_renderer) {
+Square::Square() : Object("Square", Position(0, 0, 0), Scale(1, 1, 1), Rotation(0, 0, 0)) {
     sprite = new Sprite(); // Initialize the Sprite component
     sprite->setColor({255, 255, 255, 255}); // Default color: white
     addComponent(*sprite); // Add the Sprite component to the object
@@ -19,23 +19,45 @@ Color Square::getColor() const {
 }
 
 void Square::Render() {
-    if (!renderer && Engine::Instance(0, nullptr)->inDevMode()) { 
-		cout << "[Object:" << Object::getName() << "] Renderer is not set for this object" << endl;
-    };
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    auto& win = Engine::Instance(0, nullptr)->GetWindowSize();
+    glOrtho(0, win.width, win.height, 0, -1, 1);
 
-    if (!renderer) {
-        return;
-    }
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
 
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, sprite->getColor().r, sprite->getColor().g, sprite->getColor().b, sprite->getColor().a);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
 
-    // Get position and scale (assuming your Position/Scale types have x/y)
-    int x = static_cast<float>(getPosition().x);
-    int y = static_cast<float>(getPosition().y);
-    int w = static_cast<float>(getScale().x * 100);
-    int h = static_cast<float>(getScale().y * 100);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    SDL_FRect rect = { x, y, w, h };
-    SDL_RenderFillRect(renderer, &rect);
+    auto c = sprite->getColor();
+    glColor4ub(c.r, c.g, c.b, c.a);
+
+    float x = static_cast<float>(getPosition().x);
+    float y = static_cast<float>(getPosition().y);
+    float w = static_cast<float>(getScale().x * win.width);
+    float h = static_cast<float>(getScale().y * win.height);
+
+    glBegin(GL_QUADS);
+        glVertex2f(x, y);
+        glVertex2f(x + w, y);
+        glVertex2f(x + w, y + h);
+        glVertex2f(x, y + h);
+    glEnd();
+
+    glDisable(GL_BLEND);
+
+	glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+
+    glPopMatrix();
+
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);
 }

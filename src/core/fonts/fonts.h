@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <GL/glew.h>
 #include <SDL_ttf.h>
 using namespace std;
 
@@ -13,34 +14,33 @@ struct FontSize {
 
 class Font {
     private:
-        const char* data;
-        int size;
         TTF_Font* font;
+		const unsigned char* fontData;
+		unsigned int fontDataSize;
         bool fontLoaded;
-        SDL_Surface* surface;
-        SDL_Texture* texture;
         string utf8_text;
-        const char* text_content;
         SDL_Color color = {255, 255, 255};
-        SDL_Renderer* renderer;
-        int fontSize;
-        FontSize fontWidth;
-        void encode_utf8_char(uint32_t wc, std::string& out);
+        const char* text_content;
+        GLuint textTexture;
+        float fontWidth;
+        float fontHeight;
+        float fontScale = 1.0f;
+
+        double basePointSize;
+        double currentPointSize;
+
+        void updateTexture();
     public:
         Font();
         ~Font();
 
-        void Init(SDL_Renderer* renderer);
-        void setFont(const char* data, int size);
-        void setFontRaw(TTF_Font* font);
+        static bool Init();
+        bool setFont(const unsigned char* data, unsigned int dataSize, double pointSize);
         void renderUI(float x, float y);
-        void setColor(Uint8 newColorR, Uint8 newColorG, Uint8 newColorB, Uint8 newColorA);
-        void setColor(SDL_Color color);
-		void setFontSize(int newSize);
-		void setTextContent(const char* content);
-        void setTextContent(const wchar_t* content);
+        void setColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a = 255);
+		FontSize getSize() const;
         void setTextContent(const std::string& content);
-		FontSize getFontWidth();
+        void setFontScale(float scale);
 
         inline TTF_Font* GetFont() { return font; }
 };
