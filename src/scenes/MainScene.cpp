@@ -11,6 +11,8 @@ MainScene::MainScene() : Scene("Main Scene") {
             }
         }
     }
+
+    versionFont.setFont(_jpsup_font_data, _jpsup_font_size, 14);
 }
 
 MainScene::~MainScene() {
@@ -27,16 +29,22 @@ void MainScene::Update() {
     for (int i = 0; i < MainMenuItemCount; ++i) {
 		menuFonts[i].setTextContent(MainMenuItemNames[i]);
     }
+
+    // Version info
+    versionFont.setTextContent("v" + std::string(PROJECT_VERSION));
 }
 
 void MainScene::Render() {
     // Scene render
+    int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
+    float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
+    float scaleR = versionFont.getSize().width + (static_cast<float>(windowHeight) / 720); // 720 is base height
+    float scaleRH = versionFont.getSize().height + (static_cast<float>(windowHeight) / 720); // 720 is base height
+
     for (int i = 0; i < MainMenuItemCount; ++i) {
         // Example: render each menu item at different Y position
         int yindex = ((Engine::Instance(0, nullptr)->GetWindowSize().width / 2) / (float)720) * (100 + (i * 50));
 
-        int windowHeight = Engine::Instance(0, nullptr)->GetWindowSize().height;
-        float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
         menuFonts[i].setFontScale(scale);
 
 		if (i == menuSelItem) {
@@ -47,6 +55,11 @@ void MainScene::Render() {
 
 		menuFonts[i].renderUI(50, yindex);
     }
+
+    // Render version info
+    versionFont.renderUI(Engine::Instance(0, nullptr)->GetWindowSize().width - scaleR - 5, Engine::Instance(0, nullptr)->GetWindowSize().height - scaleRH - 5);
+    versionFont.setColor(255, 255, 255, 255);
+	versionFont.setFontScale(scale);
 }
 
 void MainScene::Events(const SDL_Event& event) {

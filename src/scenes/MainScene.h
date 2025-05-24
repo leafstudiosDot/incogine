@@ -1,5 +1,6 @@
 #include <iostream>
 #include "../core/scenes/scenes.h"
+#include "../core/engine/version.h"
 
 #include "../core/fonts/fonts.h"
 #include <jpsup_font.h>
@@ -28,6 +29,7 @@ class MainScene : public Scene {
     private:
         int menuSelItem = 0;
         Font menuFonts[MainMenuItemCount];
+        Font versionFont;
 
     public:
         MainScene();
