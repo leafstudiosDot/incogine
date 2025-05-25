@@ -140,6 +140,19 @@ if (WIN32)
         
     include_directories(${SDL3_IMAGE_PATH}/include)
     link_directories(${SDL3_IMAGE_LIB_DIR})
+
+    # SDL3_mixer
+    set(SDL3_MIXER_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_mixer")
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(SDL3_MIXER_LIB_DIR ${SDL3_MIXER_PATH}/lib/x64)
+        set(SDL3_MIXER_BIN_DIR ${SDL3_MIXER_PATH}/bin/x64)
+    else()
+        set(SDL3_MIXER_LIB_DIR ${SDL3_MIXER_PATH}/lib/x86)
+        set(SDL3_MIXER_BIN_DIR ${SDL3_MIXER_PATH}/bin/x86)
+    endif()
+
+    include_directories(${SDL3_MIXER_PATH}/include)
+    link_directories(${SDL3_MIXER_LIB_DIR})
 endif()
 
 if (APPLE)
@@ -405,14 +418,20 @@ if(WIN32)
         "${SDL3_PATH}/include"
         "${SDL3_IMAGE_PATH}/include"
         "${SDL3_TTF_PATH}/include"
+        "${SDL3_MIXER_PATH}/include"
     )
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE SDL3 SDL3_ttf SDL3_image)
+    target_link_libraries(${PROJECT_NAME} PRIVATE SDL3 SDL3_ttf SDL3_image SDL3_mixer)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${OPENGL_LIBRARIES})
     target_link_libraries(${PROJECT_NAME} PRIVATE ${FBX_LIBRARY})
 
     target_link_libraries(${PROJECT_NAME} PRIVATE d3d11 d3dcompiler)
     target_link_libraries(${PROJECT_NAME} PRIVATE d3d12 d3dcompiler)
+
+    # Assets Audio Files
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/src/assets/audio" "$<TARGET_FILE_DIR:Incogine>/data/audio")
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -423,6 +442,9 @@ if(WIN32)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${SDL3_TTF_LIB_DIR}/SDL3_ttf.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${SDL3_MIXER_LIB_DIR}/SDL3_mixer.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
 endif()
 
 
