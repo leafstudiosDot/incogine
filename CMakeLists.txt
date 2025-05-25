@@ -431,11 +431,11 @@ if(WIN32)
     # Assets Audio Files
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/src/assets/audio" "$<TARGET_FILE_DIR:Incogine>/data/audio")
+        "${CMAKE_SOURCE_DIR}/src/assets/audio" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/data/audio")
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${SDL3_LIB_DIR}/SDL3.dll $<TARGET_FILE_DIR:Incogine>)
+        ${SDL3_LIB_DIR}/SDL3.dll $<TARGET_FILE_DIR:${PROJECT_NAME}>)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${SDL3_IMAGE_LIB_DIR}/SDL3_image.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
