@@ -11,9 +11,20 @@ namespace fs = std::filesystem;
 class Audio {
 private:
     float width, height;
-    const char* audioFilePath;
+    string audioFilePath;
     Mix_Music* audiomix = nullptr;
 
+    inline fs::path getExecutableDir() {
+        const char* base = SDL_GetBasePath();
+        if (!base) {
+            return fs::current_path();
+        }
+
+        fs::path exeDir = fs::path(base).parent_path();
+
+        SDL_free(const_cast<char*>(base));
+        return exeDir;
+    }
 public:
     Audio(const char* path);
     ~Audio();

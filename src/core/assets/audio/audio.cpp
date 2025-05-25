@@ -8,7 +8,9 @@ Audio::Audio(const char* path) {
 		return;
 	}
 
-	std::string fullPath = std::string("./data/audio/") + path;
+	fs::path fullPath = getExecutableDir() / "data" / "audio" / path;
+	audioFilePath = fullPath.string();
+
 
 	if (Engine::Instance(0, nullptr)->inDevMode()) {
 		std::cout << "Loading audio from: " << fullPath << std::endl;
@@ -16,7 +18,7 @@ Audio::Audio(const char* path) {
 
 	if (!fs::exists(fullPath)) {
 		if (Engine::Instance(0, nullptr)->inDevMode()) {
-			std::cerr << "Audio file does not exist: " << fullPath << std::endl;
+			std::cerr << "Audio file does not exist: " << audioFilePath << std::endl;
 		}
 		return;
 	}
@@ -26,20 +28,13 @@ Audio::Audio(const char* path) {
 		audiomix = nullptr;
 	}
 
-	this->audioFilePath = strdup(fullPath.c_str());
-
-	audiomix = Mix_LoadMUS(audioFilePath);
+	audiomix = Mix_LoadMUS(audioFilePath.c_str());
 	if (!audiomix) {
 		SDL_Log("Mix_LoadMUS failed: %s", SDL_GetError());
 	}
 }
 
 Audio::~Audio() {
-	if (audioFilePath) {
-		free((void*)audioFilePath);
-		audioFilePath = nullptr;
-	}
-
 	if (audiomix) {
 		Mix_FreeMusic(audiomix);
 		audiomix = nullptr;

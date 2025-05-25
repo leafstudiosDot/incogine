@@ -59,6 +59,12 @@ void Engine::Init() {
         return;
     }
 
+    int flags = MIX_INIT_OGG;
+    if ((Mix_Init(flags) & flags) != flags) {
+        SDL_Log("Mix_Init failed: %s", SDL_GetError());
+        // fall through if you don't need OGG, but if you do, bail out
+    }
+
     if (devmode) {
         cout << "Linking Renderer..." << endl;
     }
@@ -101,6 +107,7 @@ void Engine::Quit() {
 
 void Engine::Cleanup() {
     TTF_Quit();
+	Mix_Quit();
     SDL_GL_DestroyContext(glcontext);
     SDL_DestroyWindow(window);
     SDL_Quit();
