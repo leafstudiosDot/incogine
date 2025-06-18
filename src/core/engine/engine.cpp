@@ -76,14 +76,14 @@ void Engine::Init() {
         if (!devmode_font.setFont(_mainfont_data, _mainfont_size, 24)) {
             std::cerr << "Failed to load \"Development Mode\" font in Engine::Init" << std::endl;
         }
-        devmode_font.setColor(255, 255, 255, 128);
+        devmode_font.setColor(128, 128, 128, 200);
         devmode_font.setTextContent("Development Mode");
 
         // FPS UI
 		if (!fpstext_font.setFont(_mainfont_data, _mainfont_size, 14)) {
 			std::cerr << "Failed to load \"FPS\" font in Engine::Init" << std::endl;
 		}
-		fpstext_font.setColor(255, 255, 255, 128);
+		fpstext_font.setColor(0, 128, 255, 200);
 		fpstext_font.setTextContent("");
     }
 
