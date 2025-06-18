@@ -1,6 +1,9 @@
 #include "../components.h"
 #include "../../objects/objects.h"
 
+#ifndef SPRITE_H
+#define SPRITE_H
+
 class Sprite : public Component {
     private:
         string component_name = "Sprite";
@@ -10,3 +13,5 @@ class Sprite : public Component {
         void setColor(const Color& newColor);
         Color getColor() const;
 };
+
+#endif
