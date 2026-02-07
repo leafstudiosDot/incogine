@@ -8,7 +8,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ## License Agreement
 
-By contributing to **Incogine**, you agree that your contributions will be licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. 
+By contributing to **Incogine**, you agree that your contributions will be licensed under the **Incogine License**. 
 
 ### Important Notes on Attribution and License:
 
