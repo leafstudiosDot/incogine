@@ -22,6 +22,7 @@ file(GLOB_RECURSE PROJST_SOURCES
 
 file(GLOB_RECURSE _RM_PROJST_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/splash/*
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scenes/settings/*
 )
 list(REMOVE_ITEM PROJST_SOURCES ${_RM_PROJST_SOURCES})
 add_library(${PROJSNAME} STATIC ${PROJST_SOURCES})
@@ -39,6 +40,7 @@ endforeach()
 # Python3
 find_package(Python3 REQUIRED)
 
+# Platform detection
 if(EMSCRIPTEN)
     set(PLATFORM "Web")
     set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake")
@@ -77,8 +79,10 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
 else()
     set(PLATFORM "Unknown")
 endif()
+
 message(STATUS "Building for platform: ${PLATFORM}")
 
+# Platform dependency setup
 if(PLATFORM STREQUAL "Web")
     set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/system")
 
@@ -92,9 +96,7 @@ if(PLATFORM STREQUAL "Web")
         SUFFIX ".html"
         LINK_FLAGS "-s USE_SDL=3 --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
     )
-endif()
-
-if (WIN32)
+elseif(PLATFORM STREQUAL "Windows")
     if (MSVC)
         add_compile_options(/utf-8)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
@@ -125,7 +127,7 @@ if (WIN32)
         set(SDL3_TTF_BIN_DIR ${SDL3_TTF_PATH}/bin/x86)
     endif()
 
-    include_directories(${SDL3_TTF_PATH}/include)
+    include_directories(${SDL3_TTF_PATH}/include/SDL3_ttf)
     link_directories(${SDL3_TTF_LIB_DIR})
 
     # SDL3_image
@@ -153,43 +155,58 @@ if (WIN32)
 
     include_directories(${SDL3_MIXER_PATH}/include)
     link_directories(${SDL3_MIXER_LIB_DIR})
-endif()
 
-if (APPLE)
-    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
-        # SDL2
-        set(SDL2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework/Resources/CMake)
-        find_package(SDL2 REQUIRED)
-        include_directories(${SDL2_INCLUDE_DIRS})
+    set(WindowsSDKDir "C:/Program Files (x86)/Windows Kits/10")
+    set(CMAKE_PREFIX_PATH ${WindowsSDKDir})
+    set(D3D12_DIR ${WindowsSDKDir})
+    set(D3D11_DIR ${WindowsSDKDir})
+elseif(PLATFORM STREQUAL "UWP")
+    add_definitions(-DWINAPI_FAMILY=WINAPI_FAMILY_APP)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /APPCONTAINER")
+    set(CMAKE_TARGET_PLATFORM "UWP")
+    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+elseif(PLATFORM STREQUAL "iOS")
+    # SDL2
+    set(SDL2_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework/Resources/CMake)
+    find_package(SDL2 REQUIRED)
+    include_directories(${SDL2_INCLUDE_DIRS})
 
-        # SDL2_ttf
-        set(SDL2_ttf_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework/Resources/CMake)
-        find_package(SDL2_ttf REQUIRED)
-        include_directories(${SDL2_TTF_INCLUDE_DIRS})
+    # SDL2_ttf
+    set(SDL2_ttf_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework/Resources/CMake)
+    find_package(SDL2_ttf REQUIRED)
+    include_directories(${SDL2_TTF_INCLUDE_DIRS})
 
-        # SDL2_image
-        set(SDL2_image_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework/Resources/CMake)
-        find_package(SDL2_image REQUIRED)
-        include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
-    else()
-        # SDL2
-        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
-        find_package(SDL2 REQUIRED COMPONENTS SDL2)
-        include_directories(${SDL2_INCLUDE_DIRS})
+    # SDL2_image
+    set(SDL2_image_DIR ${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework/Resources/CMake)
+    find_package(SDL2_image REQUIRED)
+    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+    set(FBX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/reqs/include/fbx")
+    set(FBX_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug/libfbxsdk.a")
+    include_directories(${FBX_INCLUDE_DIR})
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug)
+    find_library(METAL_LIBRARY Metal)
+elseif(PLATFORM STREQUAL "macOS")
+    # SDL2
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
+    find_package(SDL2 REQUIRED COMPONENTS SDL2)
+    include_directories(${SDL2_INCLUDE_DIRS})
 
-        # SDL2_ttf
-        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
-        find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
-        include_directories(${SDL2_TTF_INCLUDE_DIRS})
+    # SDL2_ttf
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
+    find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
+    include_directories(${SDL2_TTF_INCLUDE_DIRS})
 
-        # SDL2_image
-        list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
-        find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
-        include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
-    endif()
-endif()
-
-if (ANDROID)
+    # SDL2_image
+    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
+    find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
+    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+    set(FBX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/reqs/include/fbx")
+    set(FBX_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug/libfbxsdk.a")
+    include_directories(${FBX_INCLUDE_DIR})
+    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug)
+    find_library(METAL_LIBRARY Metal)
+elseif(PLATFORM STREQUAL "Android")
     find_package(SDL2 REQUIRED)
 
     add_library(SDL2 SHARED IMPORTED)
@@ -197,10 +214,16 @@ if (ANDROID)
         IMPORTED_LOCATION "${SDL2_PATH}/lib/armeabi-v7a/libSDL2.so"
         INTERFACE_INCLUDE_DIRECTORIES "${SDL2_PATH}"
     )
+
+    find_library(ANDROID_LOG_LIB log)
+    find_library(ANDROID_NATIVE_APP_GLUE_LIB android_native_app_glue)
+    set(OPENGL_LIB GLESv1_CM)
+
+    add_definitions("-DANDROID")
 endif()
 
 # OpenGL
-if (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "Android")
     # Do nothing
 else()
     find_package(OpenGL REQUIRED)
@@ -209,49 +232,10 @@ else()
     include_directories("${CMAKE_CURRENT_SOURCE_DIR}/reqs/GLEW")
 endif()
 
-# FBX
-if (APPLE)
-    set(FBX_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/reqs/include/fbx")
-    set(FBX_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug/libfbxsdk.a")
-    include_directories(${FBX_INCLUDE_DIR})
-    link_directories(${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/fbx/debug)
-endif()
-
 # Vulkan
 #list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
 #find_package(Vulkan REQUIRED)
 #include_directories(${Vulkan_INCLUDE_DIRS})
-
-# Metal (iOS/macOS)
-if(APPLE)
-    find_library(METAL_LIBRARY Metal)
-endif()
-
-# DirectX (Windows)
-if(WIN32)
-    set(WindowsSDKDir "C:/Program Files (x86)/Windows Kits/10")
-    set(CMAKE_PREFIX_PATH ${WindowsSDKDir})
-    set(D3D12_DIR ${WindowsSDKDir})
-    set(D3D11_DIR ${WindowsSDKDir})
-endif()
-
-# UWP
-if(${CMAKE_SYSTEM_NAME} STREQUAL "WindowsStore")
-    add_definitions(-DWINAPI_FAMILY=WINAPI_FAMILY_APP)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /ZW")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /APPCONTAINER")
-    set(CMAKE_TARGET_PLATFORM "UWP")
-    set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-endif()
-
-# Android
-if(ANDROID)
-    find_library(ANDROID_LOG_LIB log)
-    find_library(ANDROID_NATIVE_APP_GLUE_LIB android_native_app_glue)
-    set(OPENGL_LIB GLESv1_CM)
-
-    add_definitions("-DANDROID")
-endif()
 
 
 # Fonts
@@ -385,6 +369,12 @@ if(PROJECT_XML)
     list(APPEND SOURCES ${PROJECT_XML})
 endif()
 
+file(GLOB CREDITS_XML "${CMAKE_SOURCE_DIR}/src/credits.xml")
+if(CREDITS_XML)
+    source_group("" FILES ${CREDITS_XML})
+    list(APPEND SOURCES ${CREDITS_XML})
+endif()
+
 add_executable(${PROJECT_NAME} ${SOURCES} ${ASSETS_SOURCES} ${FONT_C_FILES})
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJSNAME})
 add_dependencies(${PROJECT_NAME} ${PROJSNAME} generate_fonts)
@@ -394,8 +384,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     $<TARGET_FILE:${PROJSNAME}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
 )
 
-if (APPLE)
-    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
+    if(PLATFORM STREQUAL "iOS")
         # Find OpenGL ES for iOS
         find_library(OpenGLES_LIBRARIES OpenGLES)
         include_directories(${OPENGL_INCLUDE_DIR})
@@ -410,9 +400,7 @@ if (APPLE)
     find_library(COREFOUNDATION_LIBRARY CoreFoundation)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${COREFOUNDATION_LIBRARY})
     target_link_libraries(${PROJECT_NAME} PRIVATE ${METAL_LIBRARY})
-endif()
-
-if(WIN32)
+elseif(PLATFORM STREQUAL "Windows")
     target_include_directories(${PROJECT_NAME}
         PRIVATE
         "${SDL3_PATH}/include"
@@ -445,12 +433,25 @@ if(WIN32)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${SDL3_MIXER_LIB_DIR}/SDL3_mixer.dll" $<TARGET_FILE_DIR:${PROJECT_NAME}>)
+elseif(PLATFORM STREQUAL "Android")
+    target_link_libraries(${PROJECT_NAME}
+        SDL2
+        ${ANDROID_LOG_LIB}
+        #${ANDROID_NATIVE_APP_GLUE_LIB}
+        ${OPENGL_LIB}
+    )
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        LINK_FLAGS "-u ANativeActivity_onCreate"
+    )
+
+    target_compile_definitions(${PROJECT_NAME} PRIVATE -DANDROID)
 endif()
 
 
 # Apple macOS/iOS Bundle properties
-if(APPLE)
-    if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
+    if(PLATFORM STREQUAL "iOS")
         set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
         set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 
@@ -490,10 +491,7 @@ if(APPLE)
         set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
         target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns ${FONT_C_FILES})
     endif()
-endif()
-
-# Windows Bundle properties
-if(WIN32)
+elseif(PLATFORM STREQUAL "Windows")
     find_program(CMAKE_RC_COMPILER NAMES rc.exe)
 
     if(NOT CMAKE_RC_COMPILER)
@@ -544,20 +542,4 @@ if(WIN32)
     #    COMMAND ${CMAKE_COMMAND} --target run_debug
     #    COMMENT "Build and run the application"
     #)
-endif()
-
-# Android Bundle properties
-if(ANDROID)
-    target_link_libraries(${PROJECT_NAME}
-        SDL2
-        ${ANDROID_LOG_LIB}
-        #${ANDROID_NATIVE_APP_GLUE_LIB}
-        ${OPENGL_LIB}
-    )
-
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        LINK_FLAGS "-u ANativeActivity_onCreate"
-    )
-
-    target_compile_definitions(${PROJECT_NAME} PRIVATE -DANDROID)
 endif()

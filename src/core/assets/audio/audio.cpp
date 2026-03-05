@@ -1,5 +1,31 @@
 #include "audio.h"
 
+namespace {
+	MIX_Mixer* gMixer = nullptr;
+
+	MIX_Mixer* getMixer() {
+		if (!gMixer) {
+			if (!MIX_Init()) {
+				SDL_Log("MIX_Init failed: %s", SDL_GetError());
+				return nullptr;
+			}
+
+			if ((SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO) == 0) {
+				if (!SDL_Init(SDL_INIT_AUDIO)) {
+					SDL_Log("SDL audio init failed: %s", SDL_GetError());
+					return nullptr;
+				}
+			}
+
+			gMixer = MIX_CreateMixerDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
+			if (!gMixer) {
+				SDL_Log("MIX_CreateMixerDevice failed: %s", SDL_GetError());
+			}
+		}
+		return gMixer;
+	}
+}
+
 Audio::Audio(const char* path) {
 	if (!path) {
 		if (Engine::Instance(0, nullptr)->inDevMode()) {
@@ -23,21 +49,26 @@ Audio::Audio(const char* path) {
 		return;
 	}
 
-	if (audiomix) {
-		Mix_FreeMusic(audiomix);
-		audiomix = nullptr;
+	if (audioData) {
+		MIX_DestroyAudio(audioData);
+		audioData = nullptr;
 	}
 
-	audiomix = Mix_LoadMUS(audioFilePath.c_str());
-	if (!audiomix) {
-		SDL_Log("Mix_LoadMUS failed: %s", SDL_GetError());
+	MIX_Mixer* mixer = getMixer();
+	if (!mixer) {
+		return;
+	}
+
+	audioData = MIX_LoadAudio(mixer, audioFilePath.c_str(), true);
+	if (!audioData) {
+		SDL_Log("MIX_LoadAudio failed: %s", SDL_GetError());
 	}
 }
 
 Audio::~Audio() {
-	if (audiomix) {
-		Mix_FreeMusic(audiomix);
-		audiomix = nullptr;
+	if (audioData) {
+		MIX_DestroyAudio(audioData);
+		audioData = nullptr;
 	}
 
 	if (Engine::Instance(0, nullptr)->inDevMode()) {
@@ -50,9 +81,18 @@ void Audio::play(int loop = -1) {
 	if (Engine::Instance(0, nullptr)->inDevMode()) {
 		std::cout << "Audio playback started." << std::endl;
 	}
-	if (audiomix) {
-		if (Mix_PlayMusic(audiomix, loop) < 0) {
-			SDL_Log("Mix_PlayMusic error: %s", SDL_GetError());
+	if (audioData) {
+		if (loop > 0 && Engine::Instance(0, nullptr)->inDevMode()) {
+			std::cerr << "Loop count is ignored with current SDL3_mixer playback path." << std::endl;
+		}
+
+		MIX_Mixer* mixer = getMixer();
+		if (!mixer) {
+			return;
+		}
+
+		if (!MIX_PlayAudio(mixer, audioData)) {
+			SDL_Log("MIX_PlayAudio error: %s", SDL_GetError());
 		}
 	}
 }
