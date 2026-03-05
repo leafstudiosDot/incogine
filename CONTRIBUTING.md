@@ -8,7 +8,7 @@ By participating in this project, you agree to abide by our [Code of Conduct](CO
 
 ## License Agreement
 
-By contributing to **Incogine**, you agree that your contributions will be licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. 
+By contributing to **Incogine**, you agree that your contributions will be licensed under the **Incogine License**. 
 
 ### Important Notes on Attribution and License:
 
@@ -16,7 +16,7 @@ By contributing to **Incogine**, you agree that your contributions will be licen
    
 2. **Non-Removal Clause**: `leafstudiosDot`, trademark, and the term `Incogine` name cannot be removed from any derivative works or compiled versions.
 
-3. **Same License**: Any modifications to the base code (the core engine) must be shared under the same MPL-2.0 license. However, game-specific code that uses the engine can be licensed differently and does not need to be shared.
+3. **Same License**: Any modifications to the base code (the core engine) must be shared under the same Incogine license. However, game-specific code that uses the engine can be licensed differently and does not need to be shared.
 
 ## How to Contribute for the Incogine source code
 
