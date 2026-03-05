@@ -1,12 +1,13 @@
 ﻿#include <iostream>
-#include "../../core/scenes/scenes.h"
+#include "core/scenes/scenes.h"
 #include "core/components/components.h"
 #include "core/components/transform/transform.h"
 
-#include "../../core/fonts/fonts.h"
+#include "core/assets/audio/audio.h"
+#include "core/fonts/fonts.h"
 #include <jpsup_font.h>
 
-#include "../../project/pausemenu/pausemenu.h"
+#include "project/pausemenu/pausemenu.h"
 
 #ifndef GAMESCENE_H
 #define GAMESCENE_H
@@ -15,6 +16,8 @@ class GameScene : public Scene {
     private:
         Font steamfont;
 		PauseMenu* pauseMenu = nullptr;
+        
+		Audio* audio = nullptr;
 
     public:
         GameScene();

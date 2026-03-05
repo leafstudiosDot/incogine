@@ -6,3 +6,4 @@ out
 src/fonts/*.c
 src/fonts/*.h
 certs
+.vs/

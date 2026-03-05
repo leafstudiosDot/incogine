@@ -8,26 +8,32 @@
 using namespace std;
 namespace fs = std::filesystem;
 
+struct MIX_Audio;
+struct MIX_Track;
+
 class Audio {
 private:
     float width, height;
     string audioFilePath;
-    Mix_Music* audiomix = nullptr;
+    MIX_Audio* audioData = nullptr;
+    MIX_Track* track = nullptr;
 
     inline fs::path getExecutableDir() {
         const char* base = SDL_GetBasePath();
-        if (!base) {
+        if (!base || !*base) {
             return fs::current_path();
         }
 
-        fs::path exeDir = fs::path(base).parent_path();
-
-        SDL_free(const_cast<char*>(base));
-        return exeDir;
+        try {
+            return fs::u8path(base).parent_path();
+        } catch (const fs::filesystem_error&) {
+            return fs::current_path();
+        }
     }
 public:
     Audio(const char* path);
     ~Audio();
 
 	void play(int loop); // -1 Infinite loop, 0 play once, 1 play twice, etc.
+	void stop();
 };

@@ -10,16 +10,29 @@ GameScene::GameScene() : Scene("Game Scene") {
             std::cerr << "Failed to load menu index: \"Text\" font in GameScene::GameScene" << std::endl;
         }
     }
+    
+	audio = new Audio("testbgm.ogg"); // development audio files located in src/assets/audio/testbgm.ogg
 }
 
 GameScene::~GameScene() {
     // Scene destructor
+	if (audio) {
+		audio->stop();
+		delete audio;
+		audio = nullptr;
+	}
+
+	if (pauseMenu) {
+		delete pauseMenu;
+		pauseMenu = nullptr;
+	}
 }
 
 void GameScene::Start() {
     // Scene initialized, calls at the initialization of the scene
     steamfont.setTextContent(u8"めいさん");
 	steamfont.setColor(255, 255, 255, 255);
+    audio->play(-1);
 }
 
 void GameScene::Update() {

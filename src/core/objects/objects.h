@@ -15,6 +15,7 @@ struct Position {
     double y{0.0};
     double z{0.0};
 
+    Position() : x(0.0), y(0.0), z(0.0) {}
     Position(double x, double y, double z) : x(x), y(y), z(z) {}
 
 	// Calculates distance to another position
