@@ -34,9 +34,8 @@ Audio::Audio(const char* path) {
 		return;
 	}
 
-	fs::path fullPath = getExecutableDir() / "data" / "audio" / path;
+	fs::path fullPath = getExecutableDir() / "data" / "audio" / path; // Audios are being stored in src/data/audio/ for development, and in data/audio as the executable in production
 	audioFilePath = fullPath.string();
-
 
 	if (Engine::Instance(0, nullptr)->inDevMode()) {
 		std::cout << "Loading audio from: " << fullPath << std::endl;
@@ -62,10 +61,28 @@ Audio::Audio(const char* path) {
 	audioData = MIX_LoadAudio(mixer, audioFilePath.c_str(), true);
 	if (!audioData) {
 		SDL_Log("MIX_LoadAudio failed: %s", SDL_GetError());
+		return;
+	}
+
+	track = MIX_CreateTrack(mixer);
+	if (!track) {
+		SDL_Log("MIX_CreateTrack failed: %s", SDL_GetError());
+		return;
+	}
+
+	if (!MIX_SetTrackAudio(track, audioData)) {
+		SDL_Log("MIX_SetTrackAudio failed: %s", SDL_GetError());
 	}
 }
 
 Audio::~Audio() {
+	stop();
+
+	if (track) {
+		MIX_DestroyTrack(track);
+		track = nullptr;
+	}
+
 	if (audioData) {
 		MIX_DestroyAudio(audioData);
 		audioData = nullptr;
@@ -76,23 +93,30 @@ Audio::~Audio() {
 	}
 }
 
-void Audio::play(int loop = -1) {
-	// Placeholder for audio playback logic
+void Audio::play(int loop) {
 	if (Engine::Instance(0, nullptr)->inDevMode()) {
 		std::cout << "Audio playback started." << std::endl;
 	}
-	if (audioData) {
-		if (loop > 0 && Engine::Instance(0, nullptr)->inDevMode()) {
-			std::cerr << "Loop count is ignored with current SDL3_mixer playback path." << std::endl;
+	if (audioData && track) {
+		SDL_PropertiesID options = SDL_CreateProperties();
+		if (options) {
+			SDL_SetNumberProperty(options, MIX_PROP_PLAY_LOOPS_NUMBER, static_cast<Sint64>(loop));
 		}
 
-		MIX_Mixer* mixer = getMixer();
-		if (!mixer) {
-			return;
+		if (!MIX_PlayTrack(track, options)) {
+			SDL_Log("MIX_PlayTrack error: %s", SDL_GetError());
 		}
 
-		if (!MIX_PlayAudio(mixer, audioData)) {
-			SDL_Log("MIX_PlayAudio error: %s", SDL_GetError());
+		if (options) {
+			SDL_DestroyProperties(options);
+		}
+	}
+}
+
+void Audio::stop() {
+	if (track) {
+		if (!MIX_StopTrack(track, 0)) {
+			SDL_Log("MIX_StopTrack error: %s", SDL_GetError());
 		}
 	}
 }

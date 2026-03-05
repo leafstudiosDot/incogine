@@ -9,12 +9,14 @@ using namespace std;
 namespace fs = std::filesystem;
 
 struct MIX_Audio;
+struct MIX_Track;
 
 class Audio {
 private:
     float width, height;
     string audioFilePath;
     MIX_Audio* audioData = nullptr;
+    MIX_Track* track = nullptr;
 
     inline fs::path getExecutableDir() {
         const char* base = SDL_GetBasePath();
@@ -33,4 +35,5 @@ public:
     ~Audio();
 
 	void play(int loop); // -1 Infinite loop, 0 play once, 1 play twice, etc.
+	void stop();
 };
