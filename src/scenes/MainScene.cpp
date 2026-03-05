@@ -1,6 +1,7 @@
 #include "MainScene.h"
 #include "core/engine/engine.h"
 #include "scenes/game/GameScene.h"
+#include "scenes/settings/SettingsScene.h"
 
 MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
@@ -90,7 +91,7 @@ void MainScene::Events(const SDL_Event& event) {
 
 					break;
 				case SETTINGS:
-
+					Engine::Instance(0, nullptr)->SetScene(new SettingsScene());
 					break;
                 case CREDITS:
 

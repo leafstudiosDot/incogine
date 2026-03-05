@@ -18,6 +18,7 @@ class Scene {
     public:
         Scene(const std::string& name);
         virtual ~Scene();
+        virtual void Prestart() {};
         virtual void Start() = 0;
         virtual void Update() = 0;
         virtual void Render() = 0;

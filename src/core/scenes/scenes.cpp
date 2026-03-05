@@ -15,6 +15,7 @@ void SceneManager::SetScene(Scene* scene) {
     }
     currentScene = scene;
     if (currentScene != nullptr) {
+        currentScene->Prestart();
         if (Engine::Instance(0, nullptr)->inDevMode()) {
 			cout << "Entering scene: " << currentScene->GetSceneName() << endl;
         }
