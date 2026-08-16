@@ -4,11 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project: Incogine
 
-A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, distributed under **Incogine License**. The repo contains the engine, a sample `Puroko` game built on it, and a CMake superbuild that glues everything together.
+A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, distributed under **MPL-2.0**. The repo contains the engine, a sample `Puroko` game built on it, and a CMake superbuild that glues everything together.
 
 **Engine version** is in `src/core/engine/version.h` and mirrored into `src/project.xml` (`<incogine_version>`). The CMake `VERSION_STRING` macro is what `main.cpp` prints at startup.
 
 **Project identity** (window name, executable name, bundle ID, copyright) is read by `CMakeLists.txt` regex from `src/project.xml` and exported as `PROJECT_NAME`, `WINDOW_NAME`, `BUNDLE_IDENTIFIER`, `PROJECT_VERSION`, `PROJECT_AUTHOR`, `PROJECT_COPYRIGHT`, `PROJECT_DESCRIPTION`, `INCOGINE_VERSION` defines. Per `CONTRIBUTING.md`, contributors must not remove `leafstudiosDot` or `Incogine` from derivatives; the `name` key in `project.xml` must be a single token (no spaces) because it becomes the executable filename.
+
+## Licensing & Project Direction
+
+**License: MPL-2.0** (Mozilla Public License 2.0). The official text is in `LICENSE`. The old custom "Incogine License" and `COMMERCIAL_LICENSE.md` were removed. **Keep this section updated whenever licensing is discussed — it records decisions made with the maintainer.**
+
+Decisions (recorded 2026-08-16):
+
+- **Community over revenue.** No commercial license fees, no royalties, no EULA. Donations are optional (a GitHub Sponsors link can be added to the README once set up).
+- **Games built with Incogine may be closed source.** Game/project code (e.g. `src/project/`, `src/scenes/`) is a "Larger Work" under MPL — it can stay proprietary. Only the engine itself (Covered Software) carries obligations.
+- **The engine core can never be closed.** MPL file-level copyleft: anyone who modifies engine files and distributes them must publish those modifications under MPL. This is the maintainer's core concern — nobody can take the engine proprietary.
+- **Attribution.** All files must retain `leafstudiosDot`/`Incogine` (see `CONTRIBUTING.md`). A "Powered by Incogine" startup splash is desired but is NOT license-mandated.
+- **Trademark plan (not yet registered).** Once the business is registered, file an "Incogine" trademark and publish a short brand policy page (name/logo usage) separate from the license. Until then, no trademark enforcement.
+- **Rejected alternatives — do not revisit without a new discussion with the maintainer:** MIT/Apache (modified core could be closed), GPL/AGPL (would force games open), custom source-available EULA with contribution-back-by-email clauses (unenforceable, kills community, rejected by corporate legal), upfront commercial fees (the $100/mo model was removed as "greed").
+
+## Git Policy
+
+**Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them.
 
 ## Build Commands
 
@@ -135,3 +152,7 @@ Sets up the Emscripten `Module` shim and appends a `<canvas>`. The final Emscrip
 | Fonts | Drop TTF in `src/fonts/`, add a `add_custom_command` block in `CMakeLists.txt` mirroring the existing `main_font` / `jpsup_font` rules |
 | Save file location | `src/core/engine/savedata/savedata.cpp` (`SDL_GetPrefPath` based) |
 | Platform-specific code | `src/core/platforms/platforms.h` and the per-`PLATFORM STREQUAL` blocks in `CMakeLists.txt` |
+<<<<<<< HEAD
+=======
+| Licensing questions / project direction | The "Licensing & Project Direction" section above |
+>>>>>>> SampleGame
