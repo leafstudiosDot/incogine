@@ -1,5 +1,5 @@
 # Incogine
-A leafstudiosDot engine. Now open source!
+A leafstudiosDot engine. Now open source! Licensed under **MPL-2.0**.
 
 ## Dependencies
 - CMake
@@ -64,3 +64,12 @@ $ cmake -G Xcode -DCMAKE_SYSTEM_NAME=iOS ..
 ## Notes
 ### Can I use the space at <name> in project.xml like `My First Game`?
 Make sure the name key in project.xml has no spaces like `<name>Incogine</name>`, not `<name>Incogine Engine</name>` so it means you should name that like `<name>MyFirstGame</name>`.
+
+## License
+
+Incogine is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See [LICENSE](LICENSE).
+
+- Games and projects built with Incogine may be closed source or open source — your choice.
+- Modifications to the engine core must be shared under MPL-2.0.
+- Attribution: `leafstudiosDot` and `Incogine` must be retained (see [CONTRIBUTING.md](CONTRIBUTING.md)).
+- Donations are optional and always welcome.
