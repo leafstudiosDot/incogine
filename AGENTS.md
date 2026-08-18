@@ -6,6 +6,12 @@ This file provides guidance to AI coding agents working in this repository. **Fu
 
 A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, licensed under **MPL-2.0** (Mozilla Public License 2.0).
 
+**Two builds in one repo:** `Incogine` is the **engine core** build; `Puroko` is a **game-project** build — a reference example of any project someone can make on Incogine (like your own game's project layer). Keep this distinction in mind when documenting or changing either.
+
+## Documentation policy
+
+**`docs/` must stay in sync with the code.** Any change that touches something not already documented in `docs/` (new features, new files, changed behavior, new build steps) must also update `docs/` — add or revise the relevant Docusaurus-compatible markdown page(s). Never leave undocumented changes behind.
+
 ## Licensing (see CLAUDE.md "Licensing & Project Direction" for the full record)
 
 - **License: MPL-2.0.** Official text in `LICENSE`. The old custom "Incogine License" and `COMMERCIAL_LICENSE.md` were removed.

@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, distributed under **MPL-2.0**. The repo contains the engine, a sample `Puroko` game built on it, and a CMake superbuild that glues everything together.
 
+**Two builds in one repo:** `Incogine` is the **engine core** build; `Puroko` is a **game-project** build — a reference example of any project someone can make on Incogine. Think of it as your own game's project layer: your game would replace/parallel `Puroko` (i.e. `src/project/`, `src/scenes/`, `src/project.xml`), while the engine core (`src/core/`, `src/main.cpp`, `CMakeLists.txt`) stays the same. Keep this distinction in mind when changing or documenting either.
+
+## Documentation Policy
+
+**`docs/` must stay in sync with the code.** Any change made that touches something not already documented in `docs/` — new features, new files, changed behavior, new build steps, renamed subsystems — must also update `docs/` (Docusaurus-compatible markdown, see the pages in `docs/`). Add or revise the relevant page(s); never leave undocumented changes behind.
+
 **Engine version** is in `src/core/engine/version.h` and mirrored into `src/project.xml` (`<incogine_version>`). The CMake `VERSION_STRING` macro is what `main.cpp` prints at startup.
 
 **Project identity** (window name, executable name, bundle ID, copyright) is read by `CMakeLists.txt` regex from `src/project.xml` and exported as `PROJECT_NAME`, `WINDOW_NAME`, `BUNDLE_IDENTIFIER`, `PROJECT_VERSION`, `PROJECT_AUTHOR`, `PROJECT_COPYRIGHT`, `PROJECT_DESCRIPTION`, `INCOGINE_VERSION` defines. Per `CONTRIBUTING.md`, contributors must not remove `leafstudiosDot` or `Incogine` from derivatives; the `name` key in `project.xml` must be a single token (no spaces) because it becomes the executable filename.
