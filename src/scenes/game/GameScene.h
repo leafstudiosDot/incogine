@@ -5,7 +5,6 @@
 
 #include "core/assets/audio/audio.h"
 #include "core/fonts/fonts.h"
-#include <jpsup_font.h>
 
 #include "project/pausemenu/pausemenu.h"
 

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
-#include <GL/glew.h>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include "../render/quadrenderer.h"
 using namespace std;
 
 #ifndef FONTS_H
@@ -36,6 +36,7 @@ class Font {
 
         static bool Init();
         bool setFont(const unsigned char* data, unsigned int dataSize, double pointSize);
+        bool setFontFile(const char* path, double pointSize);
         void renderUI(float x, float y);
         void setColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a = 255);
 		FontSize getSize() const;

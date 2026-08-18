@@ -29,38 +29,31 @@ namespace {
 Audio::Audio(const char* path) {
 	if (!path) {
 		if (Engine::Instance(0, nullptr)->inDevMode()) {
-			std::cerr << "Audio path is null in Audio::setAudio" << std::endl;
+			std::cerr << "Audio path is null in Audio::Audio" << std::endl;
 		}
 		return;
 	}
 
-	fs::path fullPath = getExecutableDir() / "data" / "audio" / path; // Audios are being stored in src/data/audio/ for development, and in data/audio as the executable in production
-	audioFilePath = fullPath.string();
-
-	if (Engine::Instance(0, nullptr)->inDevMode()) {
-		std::cout << "Loading audio from: " << fullPath << std::endl;
-	}
-
-	if (!fs::exists(fullPath)) {
+	// Audio is resolved through the AssetManager: disk first (assets/ next
+	// to the executable, APK assets on Android, preloaded FS on Web),
+	// embedded fallback when built with ICG_EMBED_ASSETS=ON.
+	SDL_IOStream* io = AssetManager::Instance().Open(path);
+	if (!io) {
 		if (Engine::Instance(0, nullptr)->inDevMode()) {
-			std::cerr << "Audio file does not exist: " << audioFilePath << std::endl;
+			std::cerr << "Audio asset not found: " << path << std::endl;
 		}
 		return;
-	}
-
-	if (audioData) {
-		MIX_DestroyAudio(audioData);
-		audioData = nullptr;
 	}
 
 	MIX_Mixer* mixer = getMixer();
 	if (!mixer) {
+		SDL_CloseIO(io);
 		return;
 	}
 
-	audioData = MIX_LoadAudio(mixer, audioFilePath.c_str(), true);
+	audioData = MIX_LoadAudio_IO(mixer, io, true, true);
 	if (!audioData) {
-		SDL_Log("MIX_LoadAudio failed: %s", SDL_GetError());
+		SDL_Log("MIX_LoadAudio_IO failed: %s", SDL_GetError());
 		return;
 	}
 

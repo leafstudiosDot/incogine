@@ -69,7 +69,7 @@ Make sure the name key in project.xml has no spaces like `<name>Incogine</name>`
 
 Incogine is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**. See [LICENSE](LICENSE).
 
-- Games and projects built with Incogine may be closed source or open source — your choice.
+- Games and projects built with Incogine may be closed source or open source, your choice.
 - Modifications to the engine core must be shared under MPL-2.0.
 - Attribution: `leafstudiosDot` and `Incogine` must be retained (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 - Donations are optional and always welcome.

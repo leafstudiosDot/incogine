@@ -34,6 +34,16 @@ void Engine::Init() {
 		cout << "Creating Window..." << endl;
 	}
 
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__) || (defined(__APPLE__) && defined(__IPHONEOS__))
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+#else
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+#endif
+
     window = SDL_CreateWindow(windowName, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
 
     if (!window) {
@@ -45,6 +55,13 @@ void Engine::Init() {
     glcontext = SDL_GL_CreateContext(window);
     if (!glcontext) {
         std::cerr << "Failed to initialize OpenGL loader" << std::endl;
+        SDL_GL_DestroyContext(glcontext);
+        SDL_DestroyWindow(window);
+        SDL_Quit();
+        return;
+    }
+
+    if (!QuadRenderer::Init(window, glcontext)) {
         SDL_GL_DestroyContext(glcontext);
         SDL_DestroyWindow(window);
         SDL_Quit();
@@ -71,14 +88,14 @@ void Engine::Init() {
     SDL_GL_SetSwapInterval(1);
 
     if (devmode) {
-        if (!devmode_font.setFont(_mainfont_data, _mainfont_size, 24)) {
+        if (!devmode_font.setFontFile("fonts/main_font.ttf", 24)) {
             std::cerr << "Failed to load \"Development Mode\" font in Engine::Init" << std::endl;
         }
         devmode_font.setColor(128, 128, 128, 200);
         devmode_font.setTextContent("Development Mode");
 
         // FPS UI
-		if (!fpstext_font.setFont(_mainfont_data, _mainfont_size, 14)) {
+		if (!fpstext_font.setFontFile("fonts/main_font.ttf", 14)) {
 			std::cerr << "Failed to load \"FPS\" font in Engine::Init" << std::endl;
 		}
 		fpstext_font.setColor(0, 128, 255, 200);
@@ -106,6 +123,7 @@ void Engine::Quit() {
 void Engine::Cleanup() {
     TTF_Quit();
 	MIX_Quit();
+    QuadRenderer::Shutdown();
     SDL_GL_DestroyContext(glcontext);
     SDL_DestroyWindow(window);
     SDL_Quit();
@@ -136,7 +154,7 @@ void Engine::Update() {
 }
 
 void Engine::Render() {
-    glViewport(0, 0, windowSize.width, windowSize.height);
+    QuadRenderer::SetViewport(windowSize.width, windowSize.height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -175,6 +193,13 @@ void Engine::Events() {
                 winWidth = event.window.data1;
                 winHeight = event.window.data2;
 
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__) || (defined(__APPLE__) && defined(__IPHONEOS__))
+                // Mobile/Web windows cannot be programmatically resized; the
+                // OS or browser controls the size (orientation changes, soft
+                // keyboards, browser window resizes). Just accept the size.
+                windowWidth = winWidth;
+                windowHeight = winHeight;
+#else
                 if (winWidth < MIN_WIDTH) winWidth = MIN_WIDTH;
                 if (winHeight < MIN_HEIGHT) winHeight = MIN_HEIGHT;
 
@@ -186,6 +211,7 @@ void Engine::Events() {
 
                 windowWidth = event.window.data1;
                 windowHeight = event.window.data2;
+#endif
                 break;
 
             case SDL_EVENT_KEY_DOWN:
@@ -241,6 +267,11 @@ void Engine::SetScene(Scene* scene) {
 }
 
 void Engine::ToggleFullscreen() {
+#if defined(__ANDROID__) || defined(__EMSCRIPTEN__) || (defined(__APPLE__) && defined(__IPHONEOS__))
+    // Mobile and Web windows are always fullscreen; nothing to toggle.
+    fullScreenMode = true;
+    return;
+#else
     fullScreenMode = !fullScreenMode;
     if (fullScreenMode) {
 		windowedHeight = windowHeight;
@@ -250,6 +281,7 @@ void Engine::ToggleFullscreen() {
         //SDL_SetWindowSize(window, windowedWidth, windowedHeight);
         SDL_SetWindowFullscreen(window, false);
     }
+#endif
 }
 
 char* Engine::fpsConvert(float fps) {

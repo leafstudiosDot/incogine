@@ -1,3 +1,5 @@
+#include <SDL3/SDL_main.h>
+
 #include "core/engine/engine.h"
 #include "core/engine/version.h"
 #include "core/platforms/platforms.h"

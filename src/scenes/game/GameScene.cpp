@@ -5,13 +5,13 @@ GameScene::GameScene() : Scene("Game Scene") {
     // Scene constructor
 	pauseMenu = new PauseMenu();
 
-    if (steamfont.setFont(_jpsup_font_data, _jpsup_font_size, 32)) {
+    if (steamfont.setFontFile("fonts/jpsup_font.ttf", 32)) {
         if (Engine::Instance(0, nullptr)->inDevMode()) {
             std::cerr << "Failed to load menu index: \"Text\" font in GameScene::GameScene" << std::endl;
         }
     }
     
-	audio = new Audio("testbgm.ogg"); // development audio files located in src/assets/audio/testbgm.ogg
+	audio = new Audio("audio/testbgm.ogg"); // resolved via AssetManager (disk first, embedded fallback)
 }
 
 GameScene::~GameScene() {

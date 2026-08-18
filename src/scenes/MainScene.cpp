@@ -6,14 +6,14 @@
 MainScene::MainScene() : Scene("Main Scene") {
     // Scene constructor
     for (int i = 0; i < MainMenuItemCount; ++i) {
-        if (!menuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+        if (!menuFonts[i].setFontFile("fonts/jpsup_font.ttf", 30)) {
             if (Engine::Instance(0, nullptr)->inDevMode()) {
                 std::cerr << "Failed to load menu index: " << MainMenuItemNames[i] << " font in MainScene::MainScene" << std::endl;
             }
         }
     }
 
-    versionFont.setFont(_jpsup_font_data, _jpsup_font_size, 14);
+    versionFont.setFontFile("fonts/jpsup_font.ttf", 14);
 }
 
 MainScene::~MainScene() {

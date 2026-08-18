@@ -15,7 +15,7 @@ Splash::~Splash() {
 void Splash::Start() {
     // Scene initialized, calls at the initialization of the scene
 
-    if (!poweredByIncogineFont.setFont(_mainfont_data, _mainfont_size, 48) && Engine::Instance(0, nullptr)->inDevMode()) {
+    if (!poweredByIncogineFont.setFontFile("fonts/main_font.ttf", 48) && Engine::Instance(0, nullptr)->inDevMode()) {
         std::cerr << "Failed to load startup font in Splash::Start" << std::endl;
     }
 

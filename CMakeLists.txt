@@ -5,13 +5,8 @@ project(Incogine)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(APPLE)
-    set(CMAKE_C_COMPILER "/usr/bin/gcc")
-    set(CMAKE_CXX_COMPILER "/usr/bin/g++")
-endif()
-
 # Project settings (extracted from src/project.xml)
-file(READ "${CMAKE_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/src/project.xml" PROJECT_XML_CONTENT)
 
 # Extracts <tag>value</tag> matches from project.xml into ${_var}
 macro(icg_xml_set _tag _var)
@@ -92,15 +87,7 @@ endif()
 message(STATUS "Building for platform: ${PLATFORM}")
 
 # Platform dependencies
-if(PLATFORM STREQUAL "Web")
-    set(CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/emsdk/upstream/emscripten/system")
-
-    find_package(SDL3 REQUIRED)
-    find_package(SDL3_ttf REQUIRED)
-    find_package(SDL3_image REQUIRED)
-
-    include_directories(${SDL3_INCLUDE_DIRS} ${SDL3_TTF_INCLUDE_DIRS} ${SDL3_IMAGE_INCLUDE_DIRS})
-elseif(PLATFORM STREQUAL "Windows")
+if(PLATFORM STREQUAL "Windows")
     if(MSVC)
         add_compile_options(/utf-8)
     elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR
@@ -126,7 +113,7 @@ elseif(PLATFORM STREQUAL "Windows")
     endfunction()
 
     icg_setup_sdl3(SDL3       include)
-    icg_setup_sdl3(SDL3_ttf   include/SDL3_ttf)
+    icg_setup_sdl3(SDL3_ttf   include)
     icg_setup_sdl3(SDL3_image include)
     icg_setup_sdl3(SDL3_mixer include)
 
@@ -139,79 +126,138 @@ elseif(PLATFORM STREQUAL "UWP")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /APPCONTAINER")
     set(CMAKE_TARGET_PLATFORM "UWP")
     set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-elseif(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2.framework")
-    find_package(SDL2 REQUIRED COMPONENTS SDL2)
-    include_directories(${SDL2_INCLUDE_DIRS})
+else()
+    # SDL3 + addons built from source submodules (Linux/macOS/iOS/Android/Web).
+    # Windows uses the prebuilt libraries in reqs/ instead (see above).
+    # Emscripten ships no SDL3 ports, so Web also builds from source.
+    if(PLATFORM STREQUAL "Android")
+        # Android requires SDL3 as a shared library (the Java glue in
+        # SDLActivity loads libSDL3.so at runtime), so all SDL libraries
+        # build shared there.
+        set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+    else()
+        # Static everywhere else: no runtime DLL/.so/.dylib distribution.
+        # BUILD_SHARED_LIBS must be pinned before the SDL3 addons configure,
+        # otherwise they default to shared and require SDL3-shared.
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    endif()
 
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_ttf.framework")
-    find_package(SDL2_ttf REQUIRED COMPONENTS SDL2_ttf)
-    include_directories(${SDL2_TTF_INCLUDE_DIRS})
+    if(APPLE)
+        # Link SDL3 as a plain static library, not as a framework.
+        set(SDL_FRAMEWORK OFF CACHE BOOL "" FORCE)
+    endif()
 
-    list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/reqs/lib/SDL2_image.framework")
-    find_package(SDL2_image REQUIRED COMPONENTS SDL2_image)
-    include_directories(${SDL2_IMAGE_INCLUDE_DIRS})
+    set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
 
-    find_library(METAL_LIBRARY Metal)
-    find_library(COREFOUNDATION_LIBRARY CoreFoundation)
-elseif(PLATFORM STREQUAL "Android")
-    find_package(SDL2 REQUIRED)
+    # Use the vendored third-party sources (git submodules of the SDL3
+    # addon repos) so no system dev packages are required on any platform.
+    set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+    set(SDLIMAGE_VENDORED ON CACHE BOOL "" FORCE)
+    set(SDLMIXER_VENDORED ON CACHE BOOL "" FORCE)
 
-    add_library(SDL2 SHARED IMPORTED)
-    set_target_properties(SDL2 PROPERTIES
-        IMPORTED_LOCATION "${SDL2_PATH}/lib/armeabi-v7a/libSDL2.so"
-        INTERFACE_INCLUDE_DIRECTORIES "${SDL2_PATH}"
-    )
+    # AVIF needs the dav1d decoder which requires the nasm assembler to
+    # build; not needed by the engine, so leave it disabled.
+    set(SDLIMAGE_AVIF OFF CACHE BOOL "" FORCE)
 
-    find_library(ANDROID_LOG_LIB log)
-    set(OPENGL_LIB GLESv1_CM)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_source ${CMAKE_BINARY_DIR}/sdl3_build EXCLUDE_FROM_ALL)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_ttf_source ${CMAKE_BINARY_DIR}/sdl3_ttf_build EXCLUDE_FROM_ALL)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_image_source ${CMAKE_BINARY_DIR}/sdl3_image_build EXCLUDE_FROM_ALL)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/reqs/SDL3_mixer_source ${CMAKE_BINARY_DIR}/sdl3_mixer_build EXCLUDE_FROM_ALL)
 
-    add_definitions("-DANDROID")
+    if(PLATFORM STREQUAL "iOS")
+        find_library(OpenGLES_LIBRARIES OpenGLES)
+        find_library(METAL_LIBRARY Metal)
+        find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+    elseif(PLATFORM STREQUAL "macOS")
+        find_library(METAL_LIBRARY Metal)
+        find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+    elseif(PLATFORM STREQUAL "Android")
+        find_library(ANDROID_LOG_LIB log)
+        add_definitions("-DANDROID")
+    endif()
 endif()
 
-# OpenGL (skipped on iOS/Android, which use their own GL)
-if(NOT PLATFORM STREQUAL "iOS" AND NOT PLATFORM STREQUAL "Android")
-    find_package(OpenGL REQUIRED)
-    include_directories(${OPENGL_INCLUDE_DIR})
-    link_directories(${OPENGL_gl_LIBRARY})
-    include_directories("${CMAKE_CURRENT_SOURCE_DIR}/reqs/GLEW")
-endif()
+# OpenGL: no header/library lookup needed - glad (below) provides the GL
+# headers and resolves all GL entry points at runtime through
+# SDL_GL_GetProcAddress. Desktop Linux only needs libGL.so to exist at
+# runtime (provided by the Mesa/GL driver), not at link time.
+
+# glad: generated GL loader (desktop GL 3.3 core + OpenGL ES 3.0)
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src/core/render/glad/include")
 
 # Generated resources
-set(FONT_DIR "${CMAKE_SOURCE_DIR}/src/fonts")
-set(PARSER_DIR "${CMAKE_SOURCE_DIR}/src/parser")
+set(FONT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/fonts")
+set(PARSER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/parser")
 
-# Fonts: TTF -> C source/header pairs
-set(FONT_C_FILES
-    "${FONT_DIR}/main_font.c"
-    "${FONT_DIR}/jpsup_font.c"
-)
-set(FONT_H_FILES
-    "${FONT_DIR}/main_font.h"
-    "${FONT_DIR}/jpsup_font.h"
-)
+# Assets are read from disk at runtime by default (src/assets/ is copied
+# next to the executable; Android/Web package it through their own
+# mechanisms). ICG_EMBED_ASSETS=ON compiles fonts/audio into the binary as
+# C arrays for single-file distribution.
+option(ICG_EMBED_ASSETS "Embed fonts and audio into the executable (single-file distribution)" OFF)
 
-add_custom_command(
-    OUTPUT "${FONT_DIR}/main_font.h" "${FONT_DIR}/main_font.c"
-    COMMAND ${Python3_EXECUTABLE} "${PARSER_DIR}/ttfparse_main.py"
-            "${FONT_DIR}/main_font.ttf" "${FONT_DIR}/main_font"
-    DEPENDS "${FONT_DIR}/main_font.ttf" "${PARSER_DIR}/ttfparse_main.py"
-    COMMENT "Generating main_font.h/.c from main_font.ttf"
-)
+if(ICG_EMBED_ASSETS)
+    # Fonts: TTF -> C source/header pairs (generated into the build dir)
+    set(FONT_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_fonts")
+    set(FONT_C_FILES
+        "${FONT_GEN_DIR}/main_font.c"
+        "${FONT_GEN_DIR}/jpsup_font.c"
+    )
+    set(FONT_H_FILES
+        "${FONT_GEN_DIR}/main_font.h"
+        "${FONT_GEN_DIR}/jpsup_font.h"
+    )
 
-add_custom_command(
-    OUTPUT "${FONT_DIR}/jpsup_font.h" "${FONT_DIR}/jpsup_font.c"
-    COMMAND ${Python3_EXECUTABLE} "${PARSER_DIR}/ttfparse.py"
-            "${FONT_DIR}/jpsup_font.ttf" "${FONT_DIR}/jpsup_font" _jpsup
-    DEPENDS "${FONT_DIR}/jpsup_font.ttf" "${PARSER_DIR}/ttfparse.py"
-    COMMENT "Generating jpsup_font.h/.c from jpsup_font.ttf"
-)
+    add_custom_command(
+        OUTPUT "${FONT_GEN_DIR}/main_font.h" "${FONT_GEN_DIR}/main_font.c"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${FONT_GEN_DIR}"
+        COMMAND ${Python3_EXECUTABLE} "${PARSER_DIR}/ttfparse_main.py"
+                "${FONT_DIR}/main_font.ttf" "${FONT_GEN_DIR}/main_font"
+        DEPENDS "${FONT_DIR}/main_font.ttf" "${PARSER_DIR}/ttfparse_main.py"
+        COMMENT "Generating main_font.h/.c from main_font.ttf"
+    )
 
-add_custom_target(generate_fonts ALL DEPENDS ${FONT_H_FILES} ${FONT_C_FILES})
+    add_custom_command(
+        OUTPUT "${FONT_GEN_DIR}/jpsup_font.h" "${FONT_GEN_DIR}/jpsup_font.c"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${FONT_GEN_DIR}"
+        COMMAND ${Python3_EXECUTABLE} "${PARSER_DIR}/ttfparse.py"
+                "${FONT_DIR}/jpsup_font.ttf" "${FONT_GEN_DIR}/jpsup_font" _jpsup
+        DEPENDS "${FONT_DIR}/jpsup_font.ttf" "${PARSER_DIR}/ttfparse.py"
+        COMMENT "Generating jpsup_font.h/.c from jpsup_font.ttf"
+    )
+
+    add_custom_target(generate_fonts ALL DEPENDS ${FONT_H_FILES} ${FONT_C_FILES})
+    include_directories("${FONT_GEN_DIR}")
+
+    # Audio: OGG -> C source/header pairs (generated into the build dir)
+    set(AUDIO_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated_audio")
+    set(AUDIO_C_FILES
+        "${AUDIO_DIR}/testbgm_audio.c"
+    )
+    set(AUDIO_H_FILES
+        "${AUDIO_DIR}/testbgm_audio.h"
+    )
+
+    add_custom_command(
+        OUTPUT "${AUDIO_DIR}/testbgm_audio.h" "${AUDIO_DIR}/testbgm_audio.c"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${AUDIO_DIR}"
+        COMMAND ${Python3_EXECUTABLE} "${PARSER_DIR}/audioparse.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/audio/testbgm.ogg" "${AUDIO_DIR}/testbgm_audio" testbgm
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/audio/testbgm.ogg" "${PARSER_DIR}/audioparse.py"
+        COMMENT "Generating testbgm_audio.h/.c from testbgm.ogg"
+    )
+
+    add_custom_target(generate_audio ALL DEPENDS ${AUDIO_H_FILES} ${AUDIO_C_FILES})
+    include_directories("${AUDIO_DIR}")
+
+    add_compile_definitions(ICG_EMBED_ASSETS)
+endif()
 
 # SVG: root-level .svg files -> _svgdata.h headers
 set(SVG_PARSER_SCRIPT "${PARSER_DIR}/svgparse.py")
-file(GLOB SVG_FILES "${CMAKE_SOURCE_DIR}/*.svg")
+file(GLOB SVG_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.svg")
 foreach(SVG_FILE IN LISTS SVG_FILES)
     get_filename_component(SVG_FILENAME "${SVG_FILE}" NAME_WE)
     set(SVG_HEADER "${CMAKE_BINARY_DIR}/${SVG_FILENAME}_svgdata.h")
@@ -241,13 +287,27 @@ file(GLOB_RECURSE PROJ_LIB_EXCLUDE
 list(REMOVE_ITEM PROJ_LIB_SOURCES ${PROJ_LIB_EXCLUDE})
 
 add_library(${PROJ_LIB} STATIC ${PROJ_LIB_SOURCES})
-add_dependencies(${PROJ_LIB} generate_fonts)
+if(ICG_EMBED_ASSETS)
+    add_dependencies(${PROJ_LIB} generate_fonts generate_audio)
+endif()
 target_include_directories(${PROJ_LIB} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/fonts
 )
 target_compile_definitions(${PROJ_LIB} PUBLIC ${PROJECT_DEFINES})
 icg_group_sources(PROJ_LIB_SOURCES)
+
+# Pull in SDL3 + addon include dirs (submodule builds export them via the
+# SDL3::* targets; Windows prebuilts via the global include dirs above).
+if(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
+   PLATFORM STREQUAL "mira_linux" OR PLATFORM STREQUAL "Linux - Unknown" OR
+   PLATFORM STREQUAL "Linux - Unknown Distribution" OR
+   PLATFORM STREQUAL "macOS" OR PLATFORM STREQUAL "iOS" OR
+   PLATFORM STREQUAL "Android" OR PLATFORM STREQUAL "Web")
+    target_link_libraries(${PROJ_LIB} PUBLIC
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+    )
+endif()
 
 # Executable sources
 include_directories(
@@ -266,12 +326,12 @@ list(REMOVE_ITEM H_SOURCES   ${PROJ_LIB_SOURCES})
 set(SOURCES ${CPP_SOURCES} ${H_SOURCES})
 icg_group_sources(SOURCES)
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/src/project.xml")
-    source_group("" FILES "${CMAKE_SOURCE_DIR}/src/project.xml")
-    list(APPEND SOURCES "${CMAKE_SOURCE_DIR}/src/project.xml")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/project.xml")
+    source_group("" FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/project.xml")
+    list(APPEND SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/project.xml")
 endif()
 
-set(CREDITS_XML "${CMAKE_SOURCE_DIR}/src/credits.xml")
+set(CREDITS_XML "${CMAKE_CURRENT_SOURCE_DIR}/src/credits.xml")
 if(EXISTS "${CREDITS_XML}")
     source_group("" FILES "${CREDITS_XML}")
     list(APPEND SOURCES "${CREDITS_XML}")
@@ -281,85 +341,116 @@ foreach(_assetfile IN LISTS FILE_ASSETS)
     source_group("Assets" FILES "${_assetfile}")
 endforeach()
 
-# Executable target
-add_executable(${PROJECT_NAME} ${SOURCES} ${FILE_ASSETS} ${FONT_C_FILES})
-target_compile_definitions(${PROJECT_NAME} PRIVATE ${PROJECT_DEFINES})
-target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJ_LIB})
-add_dependencies(${PROJECT_NAME} ${PROJ_LIB} generate_fonts)
+# Executable / game target
+# Android builds the game as a shared library ("main") loaded by SDLActivity.
+if(PLATFORM STREQUAL "Android")
+    set(ICG_GAME_TARGET main)
+    add_library(${ICG_GAME_TARGET} SHARED ${SOURCES} ${FILE_ASSETS} ${FONT_C_FILES} ${AUDIO_C_FILES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/render/glad/src/gl.c)
+else()
+    set(ICG_GAME_TARGET ${PROJECT_NAME})
+    add_executable(${ICG_GAME_TARGET} ${SOURCES} ${FILE_ASSETS} ${FONT_C_FILES} ${AUDIO_C_FILES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/render/glad/src/gl.c)
+endif()
+target_compile_definitions(${ICG_GAME_TARGET} PRIVATE ${PROJECT_DEFINES})
+target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${PROJ_LIB})
+add_dependencies(${ICG_GAME_TARGET} ${PROJ_LIB})
+if(ICG_EMBED_ASSETS)
+    add_dependencies(${ICG_GAME_TARGET} generate_fonts generate_audio)
+endif()
+
+# Static library code is linked into a shared library on Android
+set_target_properties(${PROJ_LIB} PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(PLATFORM STREQUAL "Web")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         SUFFIX ".html"
-        LINK_FLAGS "-s USE_SDL=3 --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
+        LINK_FLAGS "--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/src/web/init.html"
+    )
+    # Package src/assets/ into the emscripten virtual filesystem (loaded
+    # lazily as Incogine.data at runtime).
+    target_link_options(${PROJECT_NAME} PRIVATE
+        --preload-file ${CMAKE_CURRENT_SOURCE_DIR}/src/assets@assets
+        -sFORCE_FILESYSTEM
     )
 endif()
 
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    $<TARGET_FILE:${PROJ_LIB}> $<TARGET_FILE_DIR:${PROJECT_NAME}>
-)
+if(NOT PLATFORM STREQUAL "Android")
+    add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE:${PROJ_LIB}> $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>
+    )
+endif()
+
+# Copy assets next to the executable (desktop + iOS bundle). Android and
+# Web package src/assets/ through their own mechanisms (gradle assets
+# source set, emscripten preload).
+if(NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
+    add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/assets" "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+        COMMENT "Copying assets to $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+    )
+endif()
 
 # Platform-specific linking and packaging
 if(PLATFORM STREQUAL "iOS")
-    find_library(OpenGLES_LIBRARIES OpenGLES)
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image
-        ${OpenGLES_LIBRARIES}
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+        ${OpenGLES_LIBRARIES} ${COREFOUNDATION_LIBRARY} ${METAL_LIBRARY}
     )
 elseif(PLATFORM STREQUAL "macOS")
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        SDL2::SDL2 SDL2_ttf::SDL2_ttf SDL2_image::SDL2_image
-        ${OPENGL_LIBRARIES}
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+        ${COREFOUNDATION_LIBRARY} ${METAL_LIBRARY}
+    )
+elseif(PLATFORM STREQUAL "Android")
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+        ${ANDROID_LOG_LIB}
+    )
+    set_target_properties(${ICG_GAME_TARGET} PROPERTIES
+        LINK_FLAGS "-u ANativeActivity_onCreate"
+    )
+    target_compile_definitions(${ICG_GAME_TARGET} PRIVATE -DANDROID)
+elseif(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
+       PLATFORM STREQUAL "mira_linux" OR PLATFORM STREQUAL "Linux - Unknown" OR
+       PLATFORM STREQUAL "Linux - Unknown Distribution")
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
     )
 elseif(PLATFORM STREQUAL "Windows")
-    target_link_libraries(${PROJECT_NAME} PRIVATE
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
         SDL3 SDL3_ttf SDL3_image SDL3_mixer
-        ${OPENGL_LIBRARIES}
         d3d11 d3d12 d3dcompiler
     )
 
     # Copy runtime DLLs next to the executable
     foreach(_sdl IN ITEMS SDL3 SDL3_ttf SDL3_image SDL3_mixer)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${${_sdl}_LIB_DIR}/${_sdl}.dll" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+            "${${_sdl}_LIB_DIR}/${_sdl}.dll" "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>"
         )
     endforeach()
-
-    # Copy audio assets to <exe-dir>/data/audio
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/src/assets/audio" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/data/audio"
+elseif(PLATFORM STREQUAL "Web")
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE
+        SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
     )
-elseif(PLATFORM STREQUAL "Android")
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        SDL2
-        ${ANDROID_LOG_LIB}
-        ${OPENGL_LIB}
-    )
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        LINK_FLAGS "-u ANativeActivity_onCreate"
-    )
-    target_compile_definitions(${PROJECT_NAME} PRIVATE -DANDROID)
 endif()
 
 if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${COREFOUNDATION_LIBRARY} ${METAL_LIBRARY}
-    )
-
     if(PLATFORM STREQUAL "iOS")
         set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
         set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0")
 
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_SOURCE_DIR}/bundle/ios/Assets.xcassets $<TARGET_FILE_DIR:${PROJECT_NAME}>/Assets.xcassets
+            ${CMAKE_CURRENT_SOURCE_DIR}/bundle/ios/Assets.xcassets $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/Assets.xcassets
         )
 
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${CMAKE_SOURCE_DIR}/bundle/ios/LaunchScreen.storyboard $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            ${CMAKE_CURRENT_SOURCE_DIR}/bundle/ios/LaunchScreen.storyboard $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>
         )
 
         add_custom_command(
@@ -370,13 +461,13 @@ if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
             COMMENT "Generating Info.plist"
         )
         add_custom_target(InfoPlist ALL DEPENDS ${CMAKE_BINARY_DIR}/Info.plist)
-        add_dependencies(${PROJECT_NAME} InfoPlist)
-        set_target_properties(${PROJECT_NAME} PROPERTIES
+        add_dependencies(${ICG_GAME_TARGET} InfoPlist)
+        set_target_properties(${ICG_GAME_TARGET} PROPERTIES
             MACOSX_BUNDLE_INFO_PLIST "${CMAKE_BINARY_DIR}/Info.plist"
         )
     else()
         set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
-        set_target_properties(${PROJECT_NAME} PROPERTIES
+        set_target_properties(${ICG_GAME_TARGET} PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_BUNDLE_NAME ${WINDOW_NAME}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
@@ -385,8 +476,8 @@ if(PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "macOS")
             MACOSX_BUNDLE_COPYRIGHT "${PROJECT_COPYRIGHT}\nIncogine © 2026 leafstudiosDot"
         )
         set(MACOSX_BUNDLE_ICON_FILE "AppIcon.icns")
-        set_source_files_properties(${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-        target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/bundle/macos/AppIcon.icns)
+        set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/bundle/macos/AppIcon.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+        target_sources(${ICG_GAME_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bundle/macos/AppIcon.icns)
     endif()
 elseif(PLATFORM STREQUAL "Windows")
     find_program(CMAKE_RC_COMPILER NAMES rc.exe)
@@ -395,18 +486,18 @@ elseif(PLATFORM STREQUAL "Windows")
     endif()
 
     add_custom_command(
-        TARGET ${PROJECT_NAME}
+        TARGET ${ICG_GAME_TARGET}
         PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/bundle/windows/icon.ico ${CMAKE_BINARY_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/bundle/windows/icon.ico ${CMAKE_BINARY_DIR}
         COMMENT "Copying icon file"
     )
 
     add_custom_command(
-        TARGET ${PROJECT_NAME}
+        TARGET ${ICG_GAME_TARGET}
         PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${CMAKE_SOURCE_DIR}/bundle/windows/resource.rc ${CMAKE_BINARY_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/bundle/windows/resource.rc ${CMAKE_BINARY_DIR}
         COMMENT "Copying resource script file"
     )
 
@@ -417,17 +508,17 @@ elseif(PLATFORM STREQUAL "Windows")
         COMMENT "Compiling resource file"
     )
 
-    target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc)
+    target_sources(${ICG_GAME_TARGET} PRIVATE ${CMAKE_BINARY_DIR}/resource.rc)
 
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         add_custom_target(run_debug
-            COMMAND "$<TARGET_FILE:${PROJECT_NAME}>" -dev --skipSplash
+            COMMAND "$<TARGET_FILE:${ICG_GAME_TARGET}>" -dev --skipSplash
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Running application with -dev (skipping splash)"
         )
     elseif(CMAKE_BUILD_TYPE STREQUAL "Debug (with Splash scene)")
         add_custom_target(run_debug
-            COMMAND "$<TARGET_FILE:${PROJECT_NAME}>" -dev
+            COMMAND "$<TARGET_FILE:${ICG_GAME_TARGET}>" -dev
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Running application with -dev (with splash scene)"
         )

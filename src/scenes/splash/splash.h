@@ -1,7 +1,6 @@
 #include <iostream>
 #include "../../core/scenes/scenes.h"
 #include "../../core/fonts/fonts.h"
-#include <main_font.h>
 
 #ifndef SPLASH_H
 #define SPLASH_H

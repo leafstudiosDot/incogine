@@ -1,3 +1,19 @@
 [submodule "emsdk"]
 	path = emsdk
 	url = https://github.com/emscripten-core/emsdk.git
+[submodule "reqs/SDL3_source"]
+	path = reqs/SDL3_source
+	url = https://github.com/libsdl-org/SDL.git
+	branch = release-3.4.14
+[submodule "reqs/SDL3_ttf_source"]
+	path = reqs/SDL3_ttf_source
+	url = https://github.com/libsdl-org/SDL_ttf.git
+	branch = release-3.2.2
+[submodule "reqs/SDL3_image_source"]
+	path = reqs/SDL3_image_source
+	url = https://github.com/libsdl-org/SDL_image.git
+	branch = release-3.4.4
+[submodule "reqs/SDL3_mixer_source"]
+	path = reqs/SDL3_mixer_source
+	url = https://github.com/libsdl-org/SDL_mixer.git
+	branch = release-3.2.4

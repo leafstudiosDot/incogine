@@ -4,24 +4,22 @@
 #include <vector>
 #include <locale>
 #include <codecvt>
-#include <GL/glew.h>
-#include <SDL/SDL.h>
+#include <SDL3/SDL.h>
 #if defined(__APPLE__) && defined(__IPHONEOS__)
-    #include <SDL2/SDL_main.h>
+    #include <SDL3/SDL_main.h>
 #endif
-#include <SDL_ttf.h>
-#include <SDL_image.h>
-#include <SDL/SDL_opengl.h>
-#include <SDL_mixer.h>
+#include <SDL3_ttf/SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_mixer/SDL_mixer.h>
 //#include <fbxsdk.h>
 //#include "console/console.h"
+#include "../render/quadrenderer.h"
 #include "version.h"
 #include "math.h"
 
 #include "../components/components.h"
 
 #include "../fonts/fonts.h"
-#include "../../fonts/main_font.h"
 
 #include "../scenes/scenes.h"
 
