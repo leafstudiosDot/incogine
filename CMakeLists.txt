@@ -37,6 +37,25 @@ set(PROJECT_DEFINES
 # Helpers
 find_package(Python3 REQUIRED)
 
+# Scripting options
+option(ICG_SCRIPTING_CSHARP "Enable C# scripting via .NET 10 CoreCLR" ON)
+option(ICG_SCRIPTING_KODO "Enable Kodo scripting (placeholder until language is defined)" ON)
+
+if(ICG_SCRIPTING_CSHARP)
+    find_program(DOTNET_EXECUTABLE dotnet)
+    if(DOTNET_EXECUTABLE)
+        message(STATUS "Found dotnet SDK: ${DOTNET_EXECUTABLE}")
+        add_compile_definitions(ICG_SCRIPTING_CSHARP)
+    else()
+        message(WARNING "dotnet SDK not found — disabling C# scripting")
+        set(ICG_SCRIPTING_CSHARP OFF)
+    endif()
+endif()
+
+if(ICG_SCRIPTING_KODO)
+    add_compile_definitions(ICG_SCRIPTING_KODO)
+endif()
+
 # Groups source files into folders in the IDE (no-op on non-Visual Studio generators)
 function(icg_group_sources _sources)
     foreach(_source IN LISTS ${_sources})
@@ -309,6 +328,24 @@ if(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
     )
 endif()
 
+# Kodo — scripting language placeholder (static library for VS visibility)
+if(ICG_SCRIPTING_KODO)
+    set(KODO_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodohandler.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodohandler.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.cpp
+    )
+    add_library(Kodo STATIC ${KODO_SOURCES})
+    target_include_directories(Kodo PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo
+    )
+    target_compile_definitions(Kodo PUBLIC ${PROJECT_DEFINES})
+    icg_group_sources(KODO_SOURCES)
+    set_target_properties(Kodo PROPERTIES LINKER_LANGUAGE CXX)
+endif()
+
 # Executable sources
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -341,6 +378,26 @@ foreach(_assetfile IN LISTS FILE_ASSETS)
     source_group("Assets" FILES "${_assetfile}")
 endforeach()
 
+# Script files — visible in Visual Studio Solution Explorer
+file(GLOB CSHARP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.cs
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.csproj
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.json
+)
+file(GLOB CSHARP_EXAMPLES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/examples/*.cs
+)
+file(GLOB KODO_SCRIPTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/kodo/*.kodo
+)
+file(GLOB KODO_EXAMPLES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/kodo/examples/*.kodo
+)
+source_group("Scripts\\CSharp\\Incogine" FILES ${CSHARP_SOURCES})
+source_group("Scripts\\CSharp\\Examples" FILES ${CSHARP_EXAMPLES})
+source_group("Scripts\\Kodo" FILES ${KODO_SCRIPTS})
+source_group("Scripts\\Kodo\\Examples" FILES ${KODO_EXAMPLES})
+
 # Executable / game target
 # Android builds the game as a shared library ("main") loaded by SDLActivity.
 if(PLATFORM STREQUAL "Android")
@@ -357,6 +414,73 @@ target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${PROJ_LIB})
 add_dependencies(${ICG_GAME_TARGET} ${PROJ_LIB})
 if(ICG_EMBED_ASSETS)
     add_dependencies(${ICG_GAME_TARGET} generate_fonts generate_audio)
+endif()
+
+# Scripting: link Kodo placeholder library and build C# managed assembly
+if(ICG_SCRIPTING_KODO)
+    add_dependencies(${ICG_GAME_TARGET} Kodo)
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE Kodo)
+endif()
+
+if(ICG_SCRIPTING_CSHARP AND DOTNET_EXECUTABLE)
+    set(CSHARP_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine")
+    set(CSHARP_RUNTIMECONFIG "${CSHARP_PROJECT_DIR}/Incogine.runtimeconfig.json")
+
+    # Locate .NET SDK native hosting headers and libraries (nethost, hostfxr)
+    execute_process(
+        COMMAND ${DOTNET_EXECUTABLE} --list-runtimes
+        OUTPUT_VARIABLE DOTNET_RUNTIMES
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    # Find the .NET installation root
+    get_filename_component(DOTNET_DIR ${DOTNET_EXECUTABLE} DIRECTORY)
+
+    if(PLATFORM STREQUAL "Windows")
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64"
+        )
+    elseif(PLATFORM STREQUAL "macOS")
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-arm64"
+            "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-x64"
+        )
+    else()
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "/usr/share/dotnet/packs/Microsoft.NETCore.App.Host.linux-x64"
+        )
+    endif()
+
+    find_path(NETHOST_INCLUDE_DIR nethost.h PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES include)
+    find_library(NETHOST_LIBRARY nethost PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES native)
+
+    if(NETHOST_INCLUDE_DIR)
+        target_include_directories(${ICG_GAME_TARGET} PRIVATE ${NETHOST_INCLUDE_DIR})
+        message(STATUS "C# scripting: nethost include dir: ${NETHOST_INCLUDE_DIR}")
+    else()
+        message(WARNING "C# scripting: nethost.h not found — C# host may fail to compile")
+    endif()
+
+    if(NETHOST_LIBRARY)
+        target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${NETHOST_LIBRARY})
+        message(STATUS "C# scripting: nethost library: ${NETHOST_LIBRARY}")
+    else()
+        message(WARNING "C# scripting: nethost library not found — C# host will fail to link")
+    endif()
+
+    add_custom_target(IncogineScripting ALL
+        COMMAND ${DOTNET_EXECUTABLE} build
+            "${CSHARP_PROJECT_DIR}/Incogine.csproj"
+            --configuration Release
+            --output "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CSHARP_RUNTIMECONFIG}"
+            "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/Incogine.runtimeconfig.json"
+        COMMENT "Building C# managed assembly (Incogine.dll)"
+    )
+    add_dependencies(${ICG_GAME_TARGET} IncogineScripting)
 endif()
 
 # Static library code is linked into a shared library on Android

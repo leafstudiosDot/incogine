@@ -11,7 +11,7 @@ tags: [overview]
 
 The repository contains:
 
-- The **engine core** — a C++ engine with 2D/3D rendering, a scene system, an asset manager, and audio/font support.
+- The **engine core** — a C++ engine with 2D/3D rendering, a scene system, an asset manager, audio/font support, and **scripting** (C# via .NET 10, Kodo scripting language).
 - A **sample game** (`Puroko`) built on top of the engine, plus the example play scene (`GameScene`).
 - A **CMake superbuild** that glues the engine, the game, and the vendored third-party libraries together.
 

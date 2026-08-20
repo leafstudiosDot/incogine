@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "../scripting/csharp/csharphost.h"
 using namespace std;
 
 Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) {
@@ -121,6 +122,7 @@ void Engine::Quit() {
 }
 
 void Engine::Cleanup() {
+    GetCSriptHost()->Shutdown();
     TTF_Quit();
 	MIX_Quit();
     QuadRenderer::Shutdown();
