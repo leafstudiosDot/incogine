@@ -66,7 +66,7 @@ PlayStation/Xbox/Switch/Mira are detected by macro but not actually supported in
 | Object/component model | `src/core/objects/`, `src/core/components/` |
 | Scripting system | `src/core/components/script/`, `src/core/scripting/` |
 | C# runtime host | `src/core/scripting/csharp/` |
-| Kodo placeholder | `src/core/scripting/kodo/` |
+| Kodo interpreter | `src/core/scripting/kodo/` |
 | Script files (C#) | `src/scripts/csharp/` |
 | Script files (Kodo) | `src/scripts/kodo/` |
 | Assets / fonts / audio | `src/core/assets/`, `src/core/fonts/` |

@@ -7,9 +7,10 @@ This directory is where Kodo (`.kodo`) script files live.
 ```
 src/scripts/kodo/
     README.md                 ← this file
-    syntax-reference.md       ← Kodo syntax reference (to be filled in)
+    syntax-reference.md       ← Kodo syntax reference
     examples/
-        hello.kodo            ← placeholder example
+        hello.kodo            ← minimal lifecycle example
+        mover.kodo            ← MVP feature demo (input, Time, Save, Object.find)
 ```
 
 ## How It Works
@@ -26,16 +27,22 @@ obj->addComponent(std::make_unique<ScriptComponent>(
 
 ## Status
 
-Kodo is currently a **placeholder**. The interpreter has not been implemented yet.
-When you run a game with Kodo scripts attached, you will see a log message:
+Kodo has an **MVP interpreter** (`src/core/scripting/kodo/`: lexer, parser,
+tree-walk runtime). `start()` / `update()` / `onDestroy()` run with `this.owner`
+bound; script errors are logged with file and line, and a failing `update()`
+disables that script (deterministic scripts would otherwise spam every frame).
 
-```
-[Incogine] Kodo scripting not yet implemented. Script: scripts/kodo/examples/hello.kodo
-```
+Implemented: `var`, functions (named/anonymous, recursion, closures), `if/else`,
+`while`, `for`, `foreach`, `switch`, `try/catch`, `import`, all operators,
+`Vector` math, and the engine modules (`log/logf`, `Random`, `Engine`/`Scene`,
+`Object`, `Sprite`, `Audio`, `Save`, `Time`, `Input`).
 
-This is expected. Once the Kodo language syntax is defined in `syntax-reference.md`,
-the parser and interpreter will be implemented in `src/core/scripting/kodo/`.
+Known limits: `Sprite("path")` records the texture path but the engine renders
+colored quads only; `Audio.seek/forward/reverse/setVolume/setLoop` are accepted
+but ignored (engine `Audio` has `play/stop`); `Save.load()` reports success
+instead of returning data; no physics/collision bindings yet.
 
 ## Writing Kodo Scripts
 
-See `syntax-reference.md` for the language reference (to be filled in by the maintainer).
+See `syntax-reference.md` for the language reference and `examples/mover.kodo`
+for a runnable demo.

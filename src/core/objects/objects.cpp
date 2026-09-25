@@ -1,12 +1,33 @@
 #include "objects.h"
 #include "../components/script/scriptcomponent.h"
+#include <algorithm>
 
 Object::Object(const std::string& name, Position pos, Scale scale, Rotation rotation)
     : name(name), pos(pos), scale(scale), rotation(rotation) {
+    liveObjects.push_back(this);
 }
 
 Object::~Object() {
     destroyScripts();
+    auto it = std::find(liveObjects.begin(), liveObjects.end(), this);
+    if (it != liveObjects.end()) liveObjects.erase(it);
+}
+
+std::vector<Object*> Object::liveObjects;
+
+Object* Object::FindByName(const std::string& name) {
+    for (Object* o : liveObjects) {
+        if (o && o->name == name) return o;
+    }
+    return nullptr;
+}
+
+std::vector<Object*> Object::FindAllByName(const std::string& name) {
+    std::vector<Object*> out;
+    for (Object* o : liveObjects) {
+        if (o && o->name == name) out.push_back(o);
+    }
+    return out;
 }
 
 void Object::setName(const std::string& newName) {

@@ -63,6 +63,8 @@ this.owner.destroy()
 
 ```
 // Sprite is Color OR image from assets/* (png, jpg, jpeg, gif, bmp, tiff, etc.)
+// NOTE: image paths are recorded (read back via .texture) but the engine
+// renders colored quads — no texture upload yet.
 var spr1 = Sprite(Color(1, 0, 0, 1))
 var spr2 = Sprite("assets/images/hero.png")
 this.owner.sprite = Sprite("assets/images/hero.png")
@@ -77,21 +79,24 @@ var bgm = Audio("assets/audio/testbgm.ogg")
 bgm.play()
 bgm.stop()
 bgm.play(loop=true)
-bgm.seek(5.0)
-bgm.forward(2.0)
-bgm.reverse(2.0)
-bgm.setVolume(0.8)
-bgm.setLoop(true)
 ```
+
+`seek` / `forward` / `reverse` / `setVolume` / `setLoop` are accepted but
+ignored — engine `Audio` (`src/core/assets/audio/audio.h:12`) only backs
+`play`/`stop` so far.
 
 ## Save / Load
 
 ```
-// game-defined keys; persisted via src/core/engine/savedata/savedata.h:1
+// game-defined keys; one shared store (scriptsave.dat) for C# and Kodo
+// — see docs/save-data.md
 Save.set("coins", 100)
-var coins = Save.get("coins")
-Save.save()
-Save.load()
+var coins = Save.get("coins") // "" when the key is missing
+Save.has("coins") // -> bool
+Save.remove("coins") // -> bool
+Save.clear()
+Save.save() // -> bool
+Save.load() // -> bool (success; use get()/has() afterwards to read values)
 ```
 
 ## Time

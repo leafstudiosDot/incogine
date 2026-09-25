@@ -10,3 +10,17 @@ emsdk/upstream
 emsdk/node
 emsdk/.emscripten
 emsdk/.emscripten_cache*
+
+# C# / .NET
+bin/
+obj/
+TestResults/
+packages/
+artifacts/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+project.lock.json
+project.fragment.lock.json

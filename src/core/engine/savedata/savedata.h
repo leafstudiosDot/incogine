@@ -1,55 +1,43 @@
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <SDL3/SDL.h>
-using namespace std;
+// SaveData: string key-value store with file persistence.
+//
+// Game code and scripts share one file-backed store per filename. The
+// scripting languages (C# SaveApi, Kodo Save module) both delegate to the
+// shared "scriptsave" instance via SharedScriptSave(), so a value written
+// from C# is visible to Kodo and vice versa.
+//
+// On-disk format is length-prefixed ("<klen> <key><vlen> <value>\n") so keys
+// and values may contain spaces, newlines and arbitrary bytes except NUL.
 
-#ifdef _WIN32
-    #include <direct.h>
-    #else
-    #include <sys/stat.h>
-    #include <sys/types.h>
-#endif
+#ifndef SAVEDATA_H
+#define SAVEDATA_H
+
+#include <map>
+#include <string>
 
 class SaveData {
     private:
-        string path;
+        std::string path;
+        std::map<std::string, std::string> store;
 
-        bool directoryExists() {
-            char* _path = SDL_GetPrefPath(PROJECT_AUTHOR, PROJECT_NAME);
-            struct stat info;
-            if (stat(_path, &info) != 0) {
-                return false;
-            } else if (info.st_mode & S_IFDIR) {
-                return true;
-            }
-            return false;
-        }
-
-        bool createDirectory() {
-            char* _path = SDL_GetPrefPath(PROJECT_AUTHOR, PROJECT_NAME);
-
-            #ifdef _WIN32
-                if (_mkdir(_path) == 0) {
-                    return true;
-                } else if (errno == EEXIST) {
-                    return directoryExists();
-                } else {
-                    return false;
-                }
-            #else
-                if (mkdir(_path, 0755) == 0) {
-                    return true;
-                } else if (errno == EEXIST) {
-                    return directoryExists();
-                } else {
-                    return false;
-                }
-            #endif
-        }
     public:
-        SaveData(string filename);
+        // filename without extension; resolved under
+        // SDL_GetPrefPath(PROJECT_AUTHOR, PROJECT_NAME) + ".dat".
+        explicit SaveData(const std::string& filename);
 
-        bool Save(const string &data);
-        bool Load();
+        void Set(const std::string& key, const std::string& value);
+        std::string Get(const std::string& key, const std::string& fallback = "") const;
+        bool Has(const std::string& key) const;
+        bool Remove(const std::string& key); // true when the key existed
+        void Clear();
+
+        bool Save(); // flush memory to disk
+        bool Load(); // replace memory from disk (false when no file yet)
+
+        const std::string& filePath() const { return path; }
 };
+
+// Script-facing store (file "scriptsave"). Single implementation behind
+// Incogine_Save_* (C#) and the Kodo Save module.
+SaveData& SharedScriptSave();
+
+#endif

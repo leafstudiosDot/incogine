@@ -101,6 +101,7 @@ class Object {
         Position pos;
         Scale scale;
         Rotation rotation;
+        static std::vector<Object*> liveObjects;
 
     public:
         Object(const std::string& name, Position pos, Scale scale, Rotation rotation);
@@ -109,6 +110,10 @@ class Object {
         // Name
         void setName(const std::string& newName);
         std::string getName() const;
+
+        // Live-object registry (used by C#/Kodo Object.find).
+        static Object* FindByName(const std::string& name);
+        static std::vector<Object*> FindAllByName(const std::string& name);
 
         // Component
         Component* getComponent(int index);

@@ -10,7 +10,7 @@ tags: [scripting, csharp, kodo, scriptcomponent]
 Incogine supports two scripting languages through the `ScriptComponent` system:
 
 - **C#** — full .NET 10 runtime integration via CoreCLR
-- **Kodo** — Incogine's custom scripting language (placeholder, not yet implemented)
+- **Kodo** — Incogine's custom scripting language (MVP interpreter: lexer, parser, tree-walk runtime)
 
 Scripts are attached to `Object` instances via C++ code, similar to Unity's `MonoBehaviour`.
 
@@ -31,7 +31,7 @@ Each `ScriptComponent` holds a `ScriptHandler` — an abstract interface with tw
 | Handler | Language | Status |
 |---------|----------|--------|
 | `CSriptHandler` | C# | Functional (requires .NET 10 SDK at build time) |
-| `KodoScriptHandler` | Kodo | Placeholder — logs a warning, no-op |
+| `KodoScriptHandler` | Kodo | MVP interpreter (errors logged with file:line; failing `update()` disables the script) |
 
 ## Lifecycle
 
@@ -93,7 +93,7 @@ MyScene::~MyScene() {
 | CMake Option | Default | Description |
 |-------------|---------|-------------|
 | `ICG_SCRIPTING_CSHARP` | ON | Enable C# scripting (requires .NET 10 SDK) |
-| `ICG_SCRIPTING_KODO` | ON | Enable Kodo scripting (placeholder) |
+| `ICG_SCRIPTING_KODO` | ON | Enable Kodo scripting (MVP interpreter) |
 
 When `ICG_SCRIPTING_CSHARP=ON`, the build compiles the managed assembly `Incogine.dll`
 from `src/scripts/csharp/Incogine/` via `dotnet build` and copies it next to the
@@ -107,7 +107,7 @@ The scripting system appears in the VS Solution Explorer as:
 Incogine (exe)
 ├── src/core/components/script/    ← ScriptComponent, ScriptHandler
 ├── src/core/scripting/csharp/     ← C# host + handler
-├── src/core/scripting/kodo/       ← Kodo handler (placeholder)
+├── src/core/scripting/kodo/       ← Kodo interpreter (lexer/parser/runtime)
 Kodo (lib)                         ← Kodo static library
 IncogineScripting (custom)         ← C# managed assembly build
 Scripts/
@@ -120,4 +120,4 @@ Scripts/
 ## See Also
 
 - [C# Scripting](./csharp-scripting.md) — writing C# scripts
-- [Kodo](./kodo/intro.md) — the Kodo language (placeholder)
+- [Kodo](./kodo/intro.md) — the Kodo language (MVP interpreter)

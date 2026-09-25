@@ -1,6 +1,6 @@
 # Kodo Syntax Reference
 
-> **Status:** Draft by leafstudiosDot — covers the intended Kodo syntax. `src/core/scripting/kodo/` is still a placeholder interpreter; this file is the spec for the future implementation.
+> **Status:** Implemented as an MVP interpreter (`src/core/scripting/kodo/`: lexer, parser, tree-walk runtime with the bindings below). Known MVP limits: `Sprite("path")` records the path without rendering it, `Audio.seek/forward/reverse/setVolume/setLoop` are accepted but ignored, `Save.load()` returns success instead of data, no physics yet, `Object.create` objects are Kodo-owned until `destroy()`.
 
 - Dynamically typed — all variables declared with `var`
 - No semicolons — newlines terminate statements (semicolons only as separators inside `for` headers)
@@ -190,11 +190,15 @@ bgm.reverse(2.0)              // skip backward 2 seconds
 bgm.setVolume(0.8)            // 0.0 .. 1.0
 bgm.setLoop(true)             // enable/disable looping after creation
 
-// Save / Load — game-defined keys; engine persists via src/core/engine/savedata/savedata.h
+// Save / Load — game-defined keys in one shared store (scriptsave.dat,
+// see docs/save-data.md); engine persists via src/core/engine/savedata/savedata.h
 Save.set("coins", 100)
-var coins = Save.get("coins")
-Save.save()                   // flush to disk
-var data = Save.load()        // load from disk
+var coins = Save.get("coins")   // "" when missing
+var hasCoins = Save.has("coins")
+Save.remove("coins")
+Save.clear()
+Save.save()                     // flush to disk -> bool
+var ok = Save.load()            // load from disk -> bool
 ```
 
 ## Types

@@ -335,6 +335,15 @@ if(ICG_SCRIPTING_KODO)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodohandler.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.h
         ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodolexer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodolexer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoast.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodovalue.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoengine.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodointerpreter.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodointerpreter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoeval.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodobindings.cpp
     )
     add_library(Kodo STATIC ${KODO_SOURCES})
     target_include_directories(Kodo PUBLIC
@@ -344,6 +353,16 @@ if(ICG_SCRIPTING_KODO)
     target_compile_definitions(Kodo PUBLIC ${PROJECT_DEFINES})
     icg_group_sources(KODO_SOURCES)
     set_target_properties(Kodo PROPERTIES LINKER_LANGUAGE CXX)
+    # kodoengine.h reaches engine.h/SDL via square.h; give the Kodo target
+    # the same SDL headers the exe gets through Puroko.
+    if(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
+       PLATFORM STREQUAL "mira_linux" OR PLATFORM STREQUAL "Linux - Unknown" OR
+       PLATFORM STREQUAL "Linux - Unknown Distribution" OR PLATFORM STREQUAL "macOS" OR
+       PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "Android" OR PLATFORM STREQUAL "Web")
+        target_link_libraries(Kodo PUBLIC
+            SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+        )
+    endif()
 endif()
 
 # Executable sources
@@ -412,6 +431,10 @@ endif()
 target_compile_definitions(${ICG_GAME_TARGET} PRIVATE ${PROJECT_DEFINES})
 target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${PROJ_LIB})
 add_dependencies(${ICG_GAME_TARGET} ${PROJ_LIB})
+# Scripting P/Invoke resolves "Incogine" to the host executable
+# (InteropLib.cs -> NativeLibrary.GetMainProgramHandle), so the game
+# target must export its symbols (needed on Linux/macOS; harmless elsewhere).
+set_target_properties(${ICG_GAME_TARGET} PROPERTIES ENABLE_EXPORTS TRUE)
 if(ICG_EMBED_ASSETS)
     add_dependencies(${ICG_GAME_TARGET} generate_fonts generate_audio)
 endif()
