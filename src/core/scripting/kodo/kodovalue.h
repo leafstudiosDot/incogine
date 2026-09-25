@@ -18,22 +18,8 @@ namespace Kodo {
 
 class Interpreter;
 struct Function; // Defined in kodoast.h (AST + closure).
-
-// Type-erased native callable (std::function<Value(...)> can't be named
-// here: Value is still incomplete at this point).
-struct INativeFn {
-    virtual ~INativeFn() = default;
-    virtual Value call(Interpreter&, const std::vector<Value>&, const std::map<std::string, Value>&) = 0;
-};
-
-template <typename F>
-struct NativeFnImpl : INativeFn {
-    F f;
-    explicit NativeFnImpl(F fn) : f(std::move(fn)) {}
-    Value call(Interpreter& ip, const std::vector<Value>& a, const std::map<std::string, Value>& n) override {
-        return f(ip, a, n);
-    }
-};
+struct INativeFn; // Defined below (after Value is complete).
+struct Value;
 
 struct Vec3 {
     double x = 0.0, y = 0.0, z = 0.0;
@@ -145,6 +131,22 @@ struct Value {
             case Type::Module: return module.c_str();
         }
         return "unknown";
+    }
+};
+
+// Type-erased native callable. Defined after Value (above) so the
+// virtual signature can use Value by value/reference directly.
+struct INativeFn {
+    virtual ~INativeFn() = default;
+    virtual Value call(Interpreter&, const std::vector<Value>&, const std::map<std::string, Value>&) = 0;
+};
+
+template <typename F>
+struct NativeFnImpl : INativeFn {
+    F f;
+    explicit NativeFnImpl(F fn) : f(std::move(fn)) {}
+    Value call(Interpreter& ip, const std::vector<Value>& a, const std::map<std::string, Value>& n) override {
+        return f(ip, a, n);
     }
 };
 

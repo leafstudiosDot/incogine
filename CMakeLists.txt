@@ -463,34 +463,96 @@ if(ICG_SCRIPTING_CSHARP AND DOTNET_EXECUTABLE)
             "${DOTNET_DIR}"
             "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64"
         )
+        set(NETHOST_RID "win-x64")
     elseif(PLATFORM STREQUAL "macOS")
         set(NETHOST_SEARCH_PATHS
             "${DOTNET_DIR}"
             "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-arm64"
             "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-x64"
         )
+        set(NETHOST_RID "osx-x64")
     else()
         set(NETHOST_SEARCH_PATHS
             "${DOTNET_DIR}"
             "/usr/share/dotnet/packs/Microsoft.NETCore.App.Host.linux-x64"
         )
+        set(NETHOST_RID "linux-x64")
     endif()
 
-    find_path(NETHOST_INCLUDE_DIR nethost.h PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES include)
-    find_library(NETHOST_LIBRARY nethost PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES native)
+    # nethost.h lives under a versioned pack subdir:
+    #   packs/Microsoft.NETCore.App.Host.<rid>/<version>/include/nethost.h
+    #   packs/Microsoft.NETCore.App.Host.<rid>/<version>/runtimes/<rid>/native/nethost.lib
+    # so expand version dirs explicitly before falling back to find_path.
+    set(NETHOST_VERSIONED_INCLUDE_DIRS "")
+    set(NETHOST_VERSIONED_LIB_DIRS "")
+    foreach(_pack IN LISTS NETHOST_SEARCH_PATHS DOTNET_DIR)
+        foreach(_cand "${_pack}" "${_pack}/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}")
+            if(EXISTS "${_cand}")
+                file(GLOB _vers "${_cand}/*/include/nethost.h")
+                foreach(_h IN LISTS _vers)
+                    get_filename_component(_inc "${_h}" DIRECTORY)
+                    list(APPEND NETHOST_VERSIONED_INCLUDE_DIRS "${_inc}")
+                endforeach()
+                file(GLOB _libs "${_cand}/*/runtimes/${NETHOST_RID}/native/nethost.*"
+                                "${_cand}/*/runtimes/${NETHOST_RID}/native/*nethost*")
+                foreach(_l IN LISTS _libs)
+                    if(NOT IS_DIRECTORY "${_l}")
+                        get_filename_component(_libdir "${_l}" DIRECTORY)
+                        list(APPEND NETHOST_VERSIONED_LIB_DIRS "${_libdir}")
+                    endif()
+                endforeach()
+            endif()
+        endforeach()
+    endforeach()
+    # Also probe the well-known pack roots directly (covers DOTNET_DIR layout
+    # where packs/ sits next to the dotnet executable).
+    foreach(_packroot "${DOTNET_DIR}/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "/usr/share/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}")
+        if(EXISTS "${_packroot}")
+            file(GLOB _vers "${_packroot}/*/include/nethost.h")
+            foreach(_h IN LISTS _vers)
+                get_filename_component(_inc "${_h}" DIRECTORY)
+                list(APPEND NETHOST_VERSIONED_INCLUDE_DIRS "${_inc}")
+            endforeach()
+            file(GLOB _libs "${_packroot}/*/runtimes/${NETHOST_RID}/native/nethost.*")
+            foreach(_l IN LISTS _libs)
+                if(NOT IS_DIRECTORY "${_l}")
+                    get_filename_component(_libdir "${_l}" DIRECTORY)
+                    list(APPEND NETHOST_VERSIONED_LIB_DIRS "${_libdir}")
+                endif()
+            endforeach()
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES NETHOST_VERSIONED_INCLUDE_DIRS)
+    list(REMOVE_DUPLICATES NETHOST_VERSIONED_LIB_DIRS)
+
+    find_path(NETHOST_INCLUDE_DIR nethost.h
+        PATHS ${NETHOST_VERSIONED_INCLUDE_DIRS} ${NETHOST_SEARCH_PATHS}
+        PATH_SUFFIXES include NO_DEFAULT_PATH)
+    if(NOT NETHOST_INCLUDE_DIR)
+        find_path(NETHOST_INCLUDE_DIR nethost.h PATH_SUFFIXES include)
+    endif()
+    find_library(NETHOST_LIBRARY nethost
+        PATHS ${NETHOST_VERSIONED_LIB_DIRS} ${NETHOST_SEARCH_PATHS}
+        PATH_SUFFIXES native NO_DEFAULT_PATH)
+    if(NOT NETHOST_LIBRARY)
+        find_library(NETHOST_LIBRARY nethost PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES native)
+    endif()
 
     if(NETHOST_INCLUDE_DIR)
         target_include_directories(${ICG_GAME_TARGET} PRIVATE ${NETHOST_INCLUDE_DIR})
         message(STATUS "C# scripting: nethost include dir: ${NETHOST_INCLUDE_DIR}")
     else()
-        message(WARNING "C# scripting: nethost.h not found — C# host may fail to compile")
+        message(WARNING "C# scripting: nethost.h not found — C# host compiles as disabled stub (install .NET SDK hosting pack to enable)")
     endif()
 
     if(NETHOST_LIBRARY)
         target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${NETHOST_LIBRARY})
         message(STATUS "C# scripting: nethost library: ${NETHOST_LIBRARY}")
     else()
-        message(WARNING "C# scripting: nethost library not found — C# host will fail to link")
+        message(WARNING "C# scripting: nethost library not found — C# host compiles as disabled stub")
     endif()
 
     add_custom_target(IncogineScripting ALL

@@ -56,10 +56,10 @@ SDL_GamepadButton gamepadButtonFromName(const char* name) {
     if (!name) return SDL_GAMEPAD_BUTTON_INVALID;
     std::string n(name);
     for (auto& c : n) c = (char)std::tolower((unsigned char)c);
-    if (n == "a") return SDL_GAMEPAD_BUTTON_A;
-    if (n == "b") return SDL_GAMEPAD_BUTTON_B;
-    if (n == "x") return SDL_GAMEPAD_BUTTON_X;
-    if (n == "y") return SDL_GAMEPAD_BUTTON_Y;
+    if (n == "a") return SDL_GAMEPAD_BUTTON_SOUTH;
+    if (n == "b") return SDL_GAMEPAD_BUTTON_EAST;
+    if (n == "x") return SDL_GAMEPAD_BUTTON_WEST;
+    if (n == "y") return SDL_GAMEPAD_BUTTON_NORTH;
     if (n == "back") return SDL_GAMEPAD_BUTTON_BACK;
     if (n == "guide") return SDL_GAMEPAD_BUTTON_GUIDE;
     if (n == "start") return SDL_GAMEPAD_BUTTON_START;

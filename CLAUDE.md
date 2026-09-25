@@ -31,7 +31,15 @@ Decisions (recorded 2026-08-16):
 
 ## Git Policy
 
-**Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them.
+**Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them. The only exception is moving a submodule working tree to a newer upstream release tag (see below) — still without committing or pushing.
+
+## Submodules / Third-Party Deps (`reqs/`, `emsdk`)
+
+Submodule checkouts (everything listed in `.gitmodules`: `emsdk/`, `reqs/SDL3_source`, `reqs/SDL3_ttf_source`, `reqs/SDL3_image_source`, `reqs/SDL3_mixer_source`, and any future `reqs/*` entry) plus the gitignored prebuilt drops in `reqs/` (`SDL3`, `SDL3_ttf`, `SDL3_image`, `SDL3_mixer`, per `reqs/.gitignore`) are **read-only**:
+
+- Never create, edit, or delete files inside them. Read them for reference; build against them via the existing `add_subdirectory(reqs/SDL3_*_source ...)` / prebuilt paths in `CMakeLists.txt`. Fix integration issues in our own code or CMake, never by patching upstream sources, headers, or build scripts.
+- **Allowed: bump a submodule to a newer upstream release tag.** Run `git fetch --tags` then `git submodule update --remote --checkout <path>` (or `git checkout <release-tag>` inside that submodule) to test the latest stable tag on its tracked `release-*` branch from `.gitmodules` (e.g. SDL `release-3.4.x`, SDL_ttf `release-3.2.x`). Rebuild the affected platform(s) to verify. Do not retarget submodule URLs/branches, do not add/remove submodules, and do not commit or push — leave the moved gitlink in the working tree for the maintainer to review and commit.
+- Windows prebuilt refreshes work the same way: re-extract the upstream release archive into `reqs/` instead of hand-editing files. If the fresh `SDL3_mixer` package still ships the header at the legacy `include/SDL_mixer.h` location, recreate the one-line `reqs/SDL3_mixer/include/SDL3_mixer/SDL_mixer.h` shim (see the Windows prebuilts note under Build Commands).
 
 ## Build Commands
 

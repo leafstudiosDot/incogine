@@ -105,7 +105,7 @@ class Object {
 
     public:
         Object(const std::string& name, Position pos, Scale scale, Rotation rotation);
-        ~Object();
+        virtual ~Object();
 
         // Name
         void setName(const std::string& newName);

@@ -1,7 +1,22 @@
 #include "csharphost.h"
 #include <iostream>
 
-#ifdef ICG_SCRIPTING_CSHARP
+// nethost.h / hostfxr.h ship with the .NET SDK packs. CMake searches for
+// them, but the pack layout is versioned and may not be found on every
+// machine even when `dotnet` exists. Guard the include so a missing header
+// degrades to the disabled-stub path below instead of breaking the build
+// with C1083 (VS2026 reported this on Debug x64).
+#if defined(__has_include)
+#  if __has_include(<nethost.h>) && __has_include(<hostfxr.h>) && __has_include(<coreclr_delegates.h>)
+#    define ICG_HAS_NETHOST 1
+#  else
+#    define ICG_HAS_NETHOST 0
+#  endif
+#else
+#  define ICG_HAS_NETHOST 0
+#endif
+
+#if defined(ICG_SCRIPTING_CSHARP) && ICG_HAS_NETHOST
 
 #if defined(_WIN32)
     #include <windows.h>
