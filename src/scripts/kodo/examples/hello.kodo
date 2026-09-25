@@ -1,0 +1,18 @@
+/* Hello Kodo — example ScriptComponent attached to an Object
+   See src/scripts/kodo/syntax-reference.md for the full syntax
+*/
+
+function start() {
+    log("Hello from Kodo!")
+}
+
+function update() {
+    // per-frame logic — move the owner
+    var owner = this.owner
+    var pos = owner.transform.position
+    // e.g. owner.transform.position = Vector(pos.x + 1, pos.y, pos.z)
+}
+
+function onDestroy() {
+    log("Goodbye from Kodo!", INFO)
+}
