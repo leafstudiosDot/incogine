@@ -1,0 +1,57 @@
+/* Mover — Kodo MVP example (see src/scripts/kodo/syntax-reference.md)
+   Attach: obj->addComponent(std::make_unique<ScriptComponent>(
+       obj, "scripts/kodo/examples/mover.kodo", ScriptLanguage::Kodo))
+
+   NOTE: Vectors are values. `pos.x = 5` on a local copy fails loudly;
+   assign whole Vectors back (as below).
+*/
+
+var speed = 120.0
+var coins = 0
+var pickups = ["coin", "gem", "star"]
+
+function start() {
+    log("Mover start")
+    this.owner.transform.position = Vector(100, 200, 0)
+    Save.load()
+    foreach (var p in pickups) {
+        logf("pickup: {p}", p=p)
+    }
+}
+
+function update() {
+    var dt = Time.deltaTime
+    var step = speed * dt
+
+    if (Input.isKeyDown("A")) {
+        this.owner.transform.position = this.owner.transform.position + Vector(-step, 0, 0)
+    }
+    if (Input.isKeyDown("D")) {
+        this.owner.transform.position = this.owner.transform.position + Vector(step, 0, 0)
+    }
+
+    // Wrap around the left edge
+    var pos = this.owner.transform.position
+    if (pos.x < 0) {
+        pos = Vector(1280, pos.y, pos.z)
+        this.owner.transform.position = pos
+    }
+
+    // One-shot pickup key
+    if (Input.isKeyPressed("Space")) {
+        coins = coins + 1
+        Save.set("coins", coins)
+        Save.save()
+        logf("coins: {coins}", coins=coins)
+    }
+
+    // Find a sibling by name (null when absent)
+    var player = Object.find("Player")
+    if (player != null) {
+        logf("found {name}", name=player.name, level=DEBUG)
+    }
+}
+
+function onDestroy() {
+    log("Mover done", INFO)
+}

@@ -1,4 +1,5 @@
 #include <string>
+#include <memory>
 using namespace std;
 
 #ifndef COMPONENTS_H
@@ -12,8 +13,15 @@ class Component {
         string component_name;
     public:
         Component(Object* linkedobj);
+        virtual ~Component();
+
         void setComponentName(string name);
         string getComponentName();
+        Object* getLinkedObject() const;
+
+        virtual void Start();
+        virtual void Update();
+        virtual void OnDestroy();
 };
 
 #endif

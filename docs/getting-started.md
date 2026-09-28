@@ -17,10 +17,14 @@ This page covers the prerequisites and initial repository setup. Choose a platfo
 
 ## Dependencies
 
-- **CMake**
+- **CMake** (3.26.3+)
 - **Python 3** (3.11+)
 - **C++17**
-- **SDL2** (legacy) / **SDL3** (current)
+- **SDL3** (vendored via submodules)
+
+### Optional
+
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download)** — required for C# scripting (`ICG_SCRIPTING_CSHARP=ON`, the default). Without it, C# scripting is automatically disabled and the engine builds fine.
 
 ### SDL3 submodules
 

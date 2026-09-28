@@ -1,3 +1,6 @@
+#ifndef AUDIO_H
+#define AUDIO_H
+
 #include <SDL3/SDL.h>
 #include <SDL3_mixer/SDL_mixer.h>
 #include "core/engine/engine.h"
@@ -21,3 +24,5 @@ public:
 	void play(int loop); // -1 Infinite loop, 0 play once, 1 play twice, etc.
 	void stop();
 };
+
+#endif

@@ -9,7 +9,7 @@ class Sprite : public Component {
         string component_name = "Sprite";
         Color color = {255, 255, 255, 255};
     public:
-        Sprite() : Component(nullptr) {}
+        Sprite() : Component(nullptr) { setComponentName("Sprite"); }
         void setColor(const Color& newColor);
         Color getColor() const;
 };

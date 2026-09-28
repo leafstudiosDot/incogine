@@ -27,6 +27,12 @@ A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, lice
 
 **Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them.
 
+## Submodules / third-party deps (`reqs/`, `emsdk`)
+
+- **Read-only:** never create, edit, or delete files inside submodule checkouts listed in `.gitmodules` (`emsdk/`, `reqs/SDL3_*_source/`, any future `reqs/*` entry) or inside gitignored prebuilt drops in `reqs/` (`SDL3`, `SDL3_ttf`, `SDL3_image`, `SDL3_mixer`, etc.). Read them for reference; build against them via `CMakeLists.txt`; fix integration issues in our own code/CMake, not by patching upstream.
+- **Allowed: bump to newer upstream release tags.** `git fetch --tags` / `git submodule update --remote --checkout <path>` (or `git checkout <release-tag>` inside the submodule) to test the latest stable `release-*` tag matching the tracked branch in `.gitmodules` (e.g. SDL `release-3.4.x`). Verify with a build. Do not retarget URLs/branches in `.gitmodules`, and do not commit or push — leave the moved gitlink in the working tree for the maintainer to review and commit.
+- After re-extracting Windows prebuilts, recreate the `reqs/SDL3_mixer/include/SDL3_mixer/SDL_mixer.h` shim if the package still uses the legacy header layout (see CLAUDE.md build notes).
+
 ## Quick build (full details in CLAUDE.md)
 
 - Windows: `mkdir build && cd build && cmake .. && cmake --build .`

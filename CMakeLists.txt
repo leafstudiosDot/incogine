@@ -37,6 +37,25 @@ set(PROJECT_DEFINES
 # Helpers
 find_package(Python3 REQUIRED)
 
+# Scripting options
+option(ICG_SCRIPTING_CSHARP "Enable C# scripting via .NET 10 CoreCLR" ON)
+option(ICG_SCRIPTING_KODO "Enable Kodo scripting (placeholder until language is defined)" ON)
+
+if(ICG_SCRIPTING_CSHARP)
+    find_program(DOTNET_EXECUTABLE dotnet)
+    if(DOTNET_EXECUTABLE)
+        message(STATUS "Found dotnet SDK: ${DOTNET_EXECUTABLE}")
+        add_compile_definitions(ICG_SCRIPTING_CSHARP)
+    else()
+        message(WARNING "dotnet SDK not found — disabling C# scripting")
+        set(ICG_SCRIPTING_CSHARP OFF)
+    endif()
+endif()
+
+if(ICG_SCRIPTING_KODO)
+    add_compile_definitions(ICG_SCRIPTING_KODO)
+endif()
+
 # Groups source files into folders in the IDE (no-op on non-Visual Studio generators)
 function(icg_group_sources _sources)
     foreach(_source IN LISTS ${_sources})
@@ -309,6 +328,43 @@ if(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
     )
 endif()
 
+# Kodo — scripting language placeholder (static library for VS visibility)
+if(ICG_SCRIPTING_KODO)
+    set(KODO_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodohandler.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodohandler.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoparser.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodolexer.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodolexer.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoast.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodovalue.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoengine.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodointerpreter.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodointerpreter.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodoeval.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo/kodobindings.cpp
+    )
+    add_library(Kodo STATIC ${KODO_SOURCES})
+    target_include_directories(Kodo PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core/scripting/kodo
+    )
+    target_compile_definitions(Kodo PUBLIC ${PROJECT_DEFINES})
+    icg_group_sources(KODO_SOURCES)
+    set_target_properties(Kodo PROPERTIES LINKER_LANGUAGE CXX)
+    # kodoengine.h reaches engine.h/SDL via square.h; give the Kodo target
+    # the same SDL headers the exe gets through Puroko.
+    if(PLATFORM STREQUAL "Linux" OR PLATFORM STREQUAL "Ubuntu" OR
+       PLATFORM STREQUAL "mira_linux" OR PLATFORM STREQUAL "Linux - Unknown" OR
+       PLATFORM STREQUAL "Linux - Unknown Distribution" OR PLATFORM STREQUAL "macOS" OR
+       PLATFORM STREQUAL "iOS" OR PLATFORM STREQUAL "Android" OR PLATFORM STREQUAL "Web")
+        target_link_libraries(Kodo PUBLIC
+            SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image SDL3_mixer::SDL3_mixer
+        )
+    endif()
+endif()
+
 # Executable sources
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -341,6 +397,26 @@ foreach(_assetfile IN LISTS FILE_ASSETS)
     source_group("Assets" FILES "${_assetfile}")
 endforeach()
 
+# Script files — visible in Visual Studio Solution Explorer
+file(GLOB CSHARP_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.cs
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.csproj
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine/*.json
+)
+file(GLOB CSHARP_EXAMPLES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/examples/*.cs
+)
+file(GLOB KODO_SCRIPTS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/kodo/*.kodo
+)
+file(GLOB KODO_EXAMPLES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/kodo/examples/*.kodo
+)
+source_group("Scripts\\CSharp\\Incogine" FILES ${CSHARP_SOURCES})
+source_group("Scripts\\CSharp\\Examples" FILES ${CSHARP_EXAMPLES})
+source_group("Scripts\\Kodo" FILES ${KODO_SCRIPTS})
+source_group("Scripts\\Kodo\\Examples" FILES ${KODO_EXAMPLES})
+
 # Executable / game target
 # Android builds the game as a shared library ("main") loaded by SDLActivity.
 if(PLATFORM STREQUAL "Android")
@@ -355,8 +431,141 @@ endif()
 target_compile_definitions(${ICG_GAME_TARGET} PRIVATE ${PROJECT_DEFINES})
 target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${PROJ_LIB})
 add_dependencies(${ICG_GAME_TARGET} ${PROJ_LIB})
+# Scripting P/Invoke resolves "Incogine" to the host executable
+# (InteropLib.cs -> NativeLibrary.GetMainProgramHandle), so the game
+# target must export its symbols (needed on Linux/macOS; harmless elsewhere).
+set_target_properties(${ICG_GAME_TARGET} PROPERTIES ENABLE_EXPORTS TRUE)
 if(ICG_EMBED_ASSETS)
     add_dependencies(${ICG_GAME_TARGET} generate_fonts generate_audio)
+endif()
+
+# Scripting: link Kodo placeholder library and build C# managed assembly
+if(ICG_SCRIPTING_KODO)
+    add_dependencies(${ICG_GAME_TARGET} Kodo)
+    target_link_libraries(${ICG_GAME_TARGET} PRIVATE Kodo)
+endif()
+
+if(ICG_SCRIPTING_CSHARP AND DOTNET_EXECUTABLE)
+    set(CSHARP_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/scripts/csharp/Incogine")
+    set(CSHARP_RUNTIMECONFIG "${CSHARP_PROJECT_DIR}/Incogine.runtimeconfig.json")
+
+    # Locate .NET SDK native hosting headers and libraries (nethost, hostfxr)
+    execute_process(
+        COMMAND ${DOTNET_EXECUTABLE} --list-runtimes
+        OUTPUT_VARIABLE DOTNET_RUNTIMES
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    # Find the .NET installation root
+    get_filename_component(DOTNET_DIR ${DOTNET_EXECUTABLE} DIRECTORY)
+
+    if(PLATFORM STREQUAL "Windows")
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64"
+        )
+        set(NETHOST_RID "win-x64")
+    elseif(PLATFORM STREQUAL "macOS")
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-arm64"
+            "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.osx-x64"
+        )
+        set(NETHOST_RID "osx-x64")
+    else()
+        set(NETHOST_SEARCH_PATHS
+            "${DOTNET_DIR}"
+            "/usr/share/dotnet/packs/Microsoft.NETCore.App.Host.linux-x64"
+        )
+        set(NETHOST_RID "linux-x64")
+    endif()
+
+    # nethost.h lives under a versioned pack subdir:
+    #   packs/Microsoft.NETCore.App.Host.<rid>/<version>/include/nethost.h
+    #   packs/Microsoft.NETCore.App.Host.<rid>/<version>/runtimes/<rid>/native/nethost.lib
+    # so expand version dirs explicitly before falling back to find_path.
+    set(NETHOST_VERSIONED_INCLUDE_DIRS "")
+    set(NETHOST_VERSIONED_LIB_DIRS "")
+    foreach(_pack IN LISTS NETHOST_SEARCH_PATHS DOTNET_DIR)
+        foreach(_cand "${_pack}" "${_pack}/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}")
+            if(EXISTS "${_cand}")
+                file(GLOB _vers "${_cand}/*/include/nethost.h")
+                foreach(_h IN LISTS _vers)
+                    get_filename_component(_inc "${_h}" DIRECTORY)
+                    list(APPEND NETHOST_VERSIONED_INCLUDE_DIRS "${_inc}")
+                endforeach()
+                file(GLOB _libs "${_cand}/*/runtimes/${NETHOST_RID}/native/nethost.*"
+                                "${_cand}/*/runtimes/${NETHOST_RID}/native/*nethost*")
+                foreach(_l IN LISTS _libs)
+                    if(NOT IS_DIRECTORY "${_l}")
+                        get_filename_component(_libdir "${_l}" DIRECTORY)
+                        list(APPEND NETHOST_VERSIONED_LIB_DIRS "${_libdir}")
+                    endif()
+                endforeach()
+            endif()
+        endforeach()
+    endforeach()
+    # Also probe the well-known pack roots directly (covers DOTNET_DIR layout
+    # where packs/ sits next to the dotnet executable).
+    foreach(_packroot "${DOTNET_DIR}/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "/usr/local/share/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}"
+                      "/usr/share/dotnet/packs/Microsoft.NETCore.App.Host.${NETHOST_RID}")
+        if(EXISTS "${_packroot}")
+            file(GLOB _vers "${_packroot}/*/include/nethost.h")
+            foreach(_h IN LISTS _vers)
+                get_filename_component(_inc "${_h}" DIRECTORY)
+                list(APPEND NETHOST_VERSIONED_INCLUDE_DIRS "${_inc}")
+            endforeach()
+            file(GLOB _libs "${_packroot}/*/runtimes/${NETHOST_RID}/native/nethost.*")
+            foreach(_l IN LISTS _libs)
+                if(NOT IS_DIRECTORY "${_l}")
+                    get_filename_component(_libdir "${_l}" DIRECTORY)
+                    list(APPEND NETHOST_VERSIONED_LIB_DIRS "${_libdir}")
+                endif()
+            endforeach()
+        endif()
+    endforeach()
+    list(REMOVE_DUPLICATES NETHOST_VERSIONED_INCLUDE_DIRS)
+    list(REMOVE_DUPLICATES NETHOST_VERSIONED_LIB_DIRS)
+
+    find_path(NETHOST_INCLUDE_DIR nethost.h
+        PATHS ${NETHOST_VERSIONED_INCLUDE_DIRS} ${NETHOST_SEARCH_PATHS}
+        PATH_SUFFIXES include NO_DEFAULT_PATH)
+    if(NOT NETHOST_INCLUDE_DIR)
+        find_path(NETHOST_INCLUDE_DIR nethost.h PATH_SUFFIXES include)
+    endif()
+    find_library(NETHOST_LIBRARY nethost
+        PATHS ${NETHOST_VERSIONED_LIB_DIRS} ${NETHOST_SEARCH_PATHS}
+        PATH_SUFFIXES native NO_DEFAULT_PATH)
+    if(NOT NETHOST_LIBRARY)
+        find_library(NETHOST_LIBRARY nethost PATHS ${NETHOST_SEARCH_PATHS} PATH_SUFFIXES native)
+    endif()
+
+    if(NETHOST_INCLUDE_DIR)
+        target_include_directories(${ICG_GAME_TARGET} PRIVATE ${NETHOST_INCLUDE_DIR})
+        message(STATUS "C# scripting: nethost include dir: ${NETHOST_INCLUDE_DIR}")
+    else()
+        message(WARNING "C# scripting: nethost.h not found — C# host compiles as disabled stub (install .NET SDK hosting pack to enable)")
+    endif()
+
+    if(NETHOST_LIBRARY)
+        target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${NETHOST_LIBRARY})
+        message(STATUS "C# scripting: nethost library: ${NETHOST_LIBRARY}")
+    else()
+        message(WARNING "C# scripting: nethost library not found — C# host compiles as disabled stub")
+    endif()
+
+    add_custom_target(IncogineScripting ALL
+        COMMAND ${DOTNET_EXECUTABLE} build
+            "${CSHARP_PROJECT_DIR}/Incogine.csproj"
+            --configuration Release
+            --output "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CSHARP_RUNTIMECONFIG}"
+            "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/Incogine.runtimeconfig.json"
+        COMMENT "Building C# managed assembly (Incogine.dll)"
+    )
+    add_dependencies(${ICG_GAME_TARGET} IncogineScripting)
 endif()
 
 # Static library code is linked into a shared library on Android

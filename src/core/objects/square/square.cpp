@@ -1,13 +1,12 @@
 #include "square.h"
 
 Square::Square() : Object("Square", Position(0, 0, 0), Scale(1, 1, 1), Rotation(0, 0, 0)) {
-    sprite = new Sprite(); // Initialize the Sprite component
-    sprite->setColor({255, 255, 255, 255}); // Default color: white
-    addComponent(*sprite); // Add the Sprite component to the object
+    sprite = new Sprite();
+    sprite->setColor({255, 255, 255, 255});
+    addComponent(std::unique_ptr<Component>(sprite));
 }
 
 Square::~Square() {
-    delete sprite;
 }
 
 void Square::setColor(const Color& color) {

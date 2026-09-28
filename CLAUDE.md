@@ -31,7 +31,15 @@ Decisions (recorded 2026-08-16):
 
 ## Git Policy
 
-**Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them.
+**Never run git commands that write to the repository or alter history** — no commits, pushes, amends, rebases, resets, branch operations, stashes, cleans, or checkouts that modify files. Read-only commands (`git status`, `git diff`, `git log`) are fine. All repository changes stay in the working tree until the maintainer commits them. The only exception is moving a submodule working tree to a newer upstream release tag (see below) — still without committing or pushing.
+
+## Submodules / Third-Party Deps (`reqs/`, `emsdk`)
+
+Submodule checkouts (everything listed in `.gitmodules`: `emsdk/`, `reqs/SDL3_source`, `reqs/SDL3_ttf_source`, `reqs/SDL3_image_source`, `reqs/SDL3_mixer_source`, and any future `reqs/*` entry) plus the gitignored prebuilt drops in `reqs/` (`SDL3`, `SDL3_ttf`, `SDL3_image`, `SDL3_mixer`, per `reqs/.gitignore`) are **read-only**:
+
+- Never create, edit, or delete files inside them. Read them for reference; build against them via the existing `add_subdirectory(reqs/SDL3_*_source ...)` / prebuilt paths in `CMakeLists.txt`. Fix integration issues in our own code or CMake, never by patching upstream sources, headers, or build scripts.
+- **Allowed: bump a submodule to a newer upstream release tag.** Run `git fetch --tags` then `git submodule update --remote --checkout <path>` (or `git checkout <release-tag>` inside that submodule) to test the latest stable tag on its tracked `release-*` branch from `.gitmodules` (e.g. SDL `release-3.4.x`, SDL_ttf `release-3.2.x`). Rebuild the affected platform(s) to verify. Do not retarget submodule URLs/branches, do not add/remove submodules, and do not commit or push — leave the moved gitlink in the working tree for the maintainer to review and commit.
+- Windows prebuilt refreshes work the same way: re-extract the upstream release archive into `reqs/` instead of hand-editing files. If the fresh `SDL3_mixer` package still ships the header at the legacy `include/SDL_mixer.h` location, recreate the one-line `reqs/SDL3_mixer/include/SDL3_mixer/SDL_mixer.h` shim (see the Windows prebuilts note under Build Commands).
 
 ## Build Commands
 
@@ -128,12 +136,21 @@ Singleton access pattern: `Engine::Instance(argc, argv)` (caches and returns the
 ### Project (Puroko) library — `src/project/`
 `CMakeLists.txt` builds `src/project/*.cpp|h` and `src/scenes/**` (except `splash/` and `settings/`, which are deliberately excluded from this library) into a **static** library named `Puroko`. The final executable is then `Incogine` (from `<name>`) which links `Puroko` plus the rest of `src/`.
 
-In practice, `src/project/` currently only contains a placeholder `Script` class (empty `Start`/`Update`) and `pausemenu/` (a real `PauseMenu` overlay used by `GameScene`). `pausemenu/` lives under `src/project/` but is included via the `src/scenes/**` glob — it pairs the `Square` scene-object primitive with menu font rendering.
+`src/project/` contains a redirect `Script` class (now points to the scripting system in `src/core/components/script/`) and `pausemenu/` (a real `PauseMenu` overlay used by `GameScene`).
 
 ### Object / Component model — `src/core/objects/`, `src/core/components/`
-- `Object` carries `Position`/`Scale`/`Rotation`/`Color` POD structs and a `std::vector<Component>`. Subtypes: `Cube` (no rendering yet), `Square` (renders with its `Sprite` component).
-- `Component` is a thin base; existing components are `Transform` and `Sprite` (color only). The component system is intentionally minimal — most scenes don't use `Object` directly; they compose `Square`/`Font`/`Audio` manually.
+- `Object` carries `Position`/`Scale`/`Rotation`/`Color` POD structs and a `std::vector<std::unique_ptr<Component>>`. Subtypes: `Cube` (no rendering yet), `Square` (renders with its `Sprite` component).
+- `Component` is a polymorphic base with virtual lifecycle methods (`Start`, `Update`, `OnDestroy`). Existing components are `Transform`, `Sprite` (color only), and `ScriptComponent` (gameplay scripting).
 - `Object::Render()` is currently a no-op; rendering is implemented per concrete subclass (e.g. `Square::Render`).
+- `Object::startScripts()` / `updateScripts()` / `destroyScripts()` iterate components and call lifecycle on `ScriptComponent` instances.
+
+### Scripting — `src/core/components/script/`, `src/core/scripting/`, `src/scripts/`
+- `ScriptComponent` attaches a script (C# or Kodo) to an `Object`. Holds a `ScriptHandler` — abstract interface with `Start`/`Update`/`OnDestroy`.
+- `CSriptHandler` (in `src/core/scripting/csharp/`) wraps the .NET 10 CoreCLR runtime via `nethost`/`hostfxr`. The C# managed assembly (`Incogine.dll`) is built by `dotnet build` from `src/scripts/csharp/Incogine/`.
+- `KodoScriptHandler` (in `src/core/scripting/kodo/`) is a placeholder — logs a warning, no-op.
+- Script files: C# in `src/scripts/csharp/`, Kodo in `src/scripts/kodo/`.
+- CMake options: `ICG_SCRIPTING_CSHARP` (ON by default, requires .NET 10 SDK), `ICG_SCRIPTING_KODO` (ON by default, stub).
+- The Kodo language syntax is being designed in `src/scripts/kodo/syntax-reference.md`.
 
 ### Assets / subsystems — `src/core/assets/`, `src/core/fonts/`
 - **AssetManager** (`assetmanager.h/.cpp`) — the single entry point for all asset IO: `Open(path) -> SDL_IOStream*` and `Exists(path)`. Resolution order: disk first, embedded fallback (only when compiled with `ICG_EMBED_ASSETS=ON`). On desktop/iOS the disk root is `<exe-or-bundle>/assets/` (copied by CMake post-build); on Android it's the APK's `assets/` directory (via `SDL_IOFromFile` + AAssetManager, wired in `android-project/app/build.gradle` through `assets.srcDirs`); on Web it's the emscripten virtual filesystem (`--preload-file src/assets@assets` → `Incogine.data`). Asset paths are canonical, e.g. `"fonts/main_font.ttf"`, `"audio/testbgm.ogg"`. Adding a new asset only requires placing the file in `src/assets/` (plus a registry entry in `assetmanager.cpp` when embedded mode should cover it).
@@ -170,6 +187,9 @@ Sets up the Emscripten `Module` shim and appends a `<canvas>`. The final Emscrip
 | Settings menu entries | `SettingsMenu` static vector in `src/scenes/settings/SettingsScene.h` |
 | Audio files | Drop in `src/assets/audio/`; reference by basename (e.g. `"testbgm.ogg"`) |
 | Fonts | Drop TTF in `src/fonts/`, add a `add_custom_command` block in `CMakeLists.txt` mirroring the existing `main_font` / `jpsup_font` rules |
+| C# scripts | `src/scripts/csharp/`, base class in `src/scripts/csharp/Incogine/ScriptBehaviour.cs` |
+| Kodo scripts | `src/scripts/kodo/`, syntax reference in `src/scripts/kodo/syntax-reference.md` |
+| Scripting engine core | `src/core/components/script/` (ScriptComponent) and `src/core/scripting/` (handlers) |
 | Save file location | `src/core/engine/savedata/savedata.cpp` (`SDL_GetPrefPath` based) |
 | Platform-specific code | `src/core/platforms/platforms.h` and the per-`PLATFORM STREQUAL` blocks in `CMakeLists.txt` |
 | Licensing questions / project direction | The "Licensing & Project Direction" section above |
