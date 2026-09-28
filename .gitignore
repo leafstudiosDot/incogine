@@ -24,3 +24,5 @@ artifacts/
 *.nupkg
 project.lock.json
 project.fragment.lock.json
+
+build-*/

@@ -1,0 +1,6 @@
+// Incogine Studio — Windows executable icon (same icon.ico as the game).
+// Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
+// The icon file is copied next to this script at configure time (see
+// src/studio/CMakeLists.txt), mirroring how the game build stages
+// bundle/windows/resource.rc + icon.ico.
+IDI_INCOGINE_STUDIO ICON "studio_icon.ico"

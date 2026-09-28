@@ -18,7 +18,8 @@ Open(path) -> SDL_IOStream*
 Exists(path)
 ```
 
-Resolution order: **disk first, embedded fallback** (the latter only when compiled with `ICG_EMBED_ASSETS=ON`).
+Resolution order: **mounted update bundles first, then disk, bundles,
+embedded last** (embedded only when compiled with `ICG_EMBED_ASSETS=ON`).
 
 Per-platform disk roots:
 
@@ -33,6 +34,62 @@ Asset paths are canonical, e.g. `"fonts/main_font.ttf"`, `"audio/testbgm.ogg"`.
 :::tip
 Adding a new asset only requires placing the file in `src/assets/` (plus a registry entry in `assetmanager.cpp` when embedded mode should cover it).
 :::
+
+## Bundled builds (`.incoba`)
+
+Every game build splits `src/assets/` into payload-capped bundles
+(`ICG_INCOBA_MAX_MB`, default 128 MiB each) plus an `index.incobai` lookup
+table, shipped inside the executable's `assets/` folder:
+
+```text
+<exe>/assets/
+├── index.incobai        # path -> (bundle, offset, size, crc) for every asset
+├── a.incoba             # ...or a_00.incoba, a_01.incoba, ... past the cap
+└── ...                  # loose files may sit alongside as dev overrides
+```
+
+Two ship modes, one CMake switch (`ICG_USE_INCOBA`, default `ON`) — Dev,
+Debug, Staging, and Release all behave the same:
+
+- `ON`: `<exe>/assets/` holds **only** `index.incobai` + `*.incoba`. The
+  folder is cleared first, so no stale loose files survive.
+- `OFF` (`-DICG_USE_INCOBA=OFF`): loose `src/assets/` files are copied
+  instead — direct-disk flow, no bundles involved.
+
+At runtime `AssetManager` probes `<assetRoot>/index.incobai` (falling back
+to a lone `a.incoba`/`game.incoba`, then `assets/`-relative and bare names
+for Android/Web layouts). Index entries are binary-searched by path and read via
+direct offset seeks — bundles that cannot contain the asset are never
+opened. `HasBundles()` / `BundleEntryCount()` report mount state. Reads are
+CRC-checked; corrupt entries fall through to the embedded fallback.
+
+## Downloadable update sets (live games)
+
+Bundles double as versioned content updates (gacha banners, events,
+balance patches) without re-shipping the game:
+
+```text
+server:  patch_2026-10-01/ { index.incobai, a_00.incoba, ... } + version note
+            |
+            v  (game downloads into a writable dir, e.g. SDL_GetPrefPath)
+client:  <prefpath>/patches/2026-10-01/ { index.incobai, a_00.incoba, ... }
+            |
+            v  AssetManager::MountBundleDir("<prefpath>/patches/2026-10-01")
+runtime: patch entries override same-path base assets, live, no restart
+```
+
+- Produce a patch set with the packer (`--split` over just the new/changed
+  files); a patch dir may also be a single `.incoba` mounted with
+  `MountBundleFile()`. Multi-bundle patch sets must ship their index.
+- Mounts are explicit and ordered: the newest mount wins, and mounts beat
+  loose/base content. `MountedBundleCount()` / `ClearMounts()` manage them.
+- Delivery (version check, download, resume, per-entry CRC already covers
+  integrity) is game code — the engine only mounts. Keep a game-side
+  `version.txt` next to each patch dir so the client knows what is applied.
+
+Packaging, compression headroom, and casual modification resistance are the
+goals — explicitly **not DRM**. See [Incogine Studio](./studio.md) for the
+format and packer.
 
 ## Subsystems
 

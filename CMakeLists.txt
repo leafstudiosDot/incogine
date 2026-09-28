@@ -56,6 +56,11 @@ if(ICG_SCRIPTING_KODO)
     add_compile_definitions(ICG_SCRIPTING_KODO)
 endif()
 
+# Incogine Studio IDE (Qt). Desktop dev tool only: the game/runtime targets
+# below never link Studio sources or Qt (see the src/studio exclusion and the
+# standalone targets in src/studio/CMakeLists.txt).
+option(ICG_BUILD_STUDIO "Build Incogine Studio IDE and .incoba packer (Qt shell is optional)" ON)
+
 # Groups source files into folders in the IDE (no-op on non-Visual Studio generators)
 function(icg_group_sources _sources)
     foreach(_source IN LISTS ${_sources})
@@ -379,6 +384,15 @@ file(GLOB_RECURSE FILE_ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/*)
 list(REMOVE_ITEM CPP_SOURCES ${PROJ_LIB_SOURCES})
 list(REMOVE_ITEM H_SOURCES   ${PROJ_LIB_SOURCES})
 
+# Studio is a developer-only tool: its sources must never link into the game
+# executable / runtime (Staging+Release ship no Studio, no Qt).
+file(GLOB_RECURSE STUDIO_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/studio/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/studio/*.h
+)
+list(REMOVE_ITEM CPP_SOURCES ${STUDIO_SOURCES})
+list(REMOVE_ITEM H_SOURCES   ${STUDIO_SOURCES})
+
 set(SOURCES ${CPP_SOURCES} ${H_SOURCES})
 icg_group_sources(SOURCES)
 
@@ -591,16 +605,10 @@ if(NOT PLATFORM STREQUAL "Android")
     )
 endif()
 
-# Copy assets next to the executable (desktop + iOS bundle). Android and
-# Web package src/assets/ through their own mechanisms (gradle assets
-# source set, emscripten preload).
-if(NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
-    add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/assets" "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
-        COMMENT "Copying assets to $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
-    )
-endif()
+# Asset shipping is decided in the "Asset shipping mode" section at the end
+# of this file (single ICG_USE_INCOBA switch: bundles-only vs loose).
+# Android and Web package src/assets/ through their own mechanisms (gradle
+# assets source set, emscripten preload).
 
 # Platform-specific linking and packaging
 if(PLATFORM STREQUAL "iOS")
@@ -694,6 +702,15 @@ elseif(PLATFORM STREQUAL "Windows")
         message(FATAL_ERROR "Resource compiler (rc.exe) not found. Please ensure Visual Studio is installed and configured correctly.")
     endif()
 
+    # Guarantee the resource files exist at generate time: a brand-fresh
+    # binary dir has no PRE_BUILD outputs yet, and `target_sources` below
+    # fails generation when the file is missing (seen with fresh VS 2026
+    # `.slnx` configures). Mirrors the PRE_BUILD copies; harmless thereafter.
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/bundle/windows/icon.ico
+         DESTINATION ${CMAKE_BINARY_DIR})
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/bundle/windows/resource.rc
+         DESTINATION ${CMAKE_BINARY_DIR})
+
     add_custom_command(
         TARGET ${ICG_GAME_TARGET}
         PRE_BUILD
@@ -730,6 +747,68 @@ elseif(PLATFORM STREQUAL "Windows")
             COMMAND "$<TARGET_FILE:${ICG_GAME_TARGET}>" -dev
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             COMMENT "Running application with -dev (with splash scene)"
+        )
+    endif()
+endif()
+
+# Incogine Studio — developer-only tooling (excluded from Android/Web game
+# packaging; the runtime never depends on these targets — see section 17 in
+# docs/studio.md).
+if(ICG_BUILD_STUDIO AND NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/studio ${CMAKE_BINARY_DIR}/studio_build)
+endif()
+
+# Asset shipping mode (desktop + iOS bundle; Android and Web package
+# src/assets/ through their own mechanisms).
+#
+# Single switch, exactly one layout — Dev, Debug, Staging, and Release all
+# behave the same:
+#   ICG_USE_INCOBA=ON  (default): <exe>/assets/ holds ONLY index.incobai +
+#                       *.incoba (headless packer, no Studio/Qt needed).
+#   ICG_USE_INCOBA=OFF: loose src/assets/ files are copied instead
+#                       (direct-disk flow, no bundles involved).
+# Generator-agnostic — Ninja, Make, and the Visual Studio generator (VS 2026
+# `.slnx`) alike — because it only uses generator expressions and `cmake -E`.
+# See docs/studio.md and docs/assets.md.
+option(ICG_USE_INCOBA "Ship assets as .incoba bundles instead of loose files" ON)
+set(ICG_INCOBA_MAX_MB "128" CACHE STRING "Payload cap in MiB per .incoba bundle")
+
+if(NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
+    if(ICG_USE_INCOBA AND TARGET IncogineIncoba)
+        file(GLOB_RECURSE ICG_INCOBA_ASSET_FILES CONFIGURE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/assets/*")
+        set(ICG_INCOBA_STAGING_DIR "${CMAKE_BINARY_DIR}/incoba_staging")
+        set(ICG_INCOBA_INDEX "${ICG_INCOBA_STAGING_DIR}/index.incobai")
+        add_custom_command(
+            OUTPUT "${ICG_INCOBA_INDEX}"
+            COMMAND $<TARGET_FILE:IncogineIncoba>
+                    --split "${CMAKE_CURRENT_SOURCE_DIR}/src/assets"
+                    "${ICG_INCOBA_STAGING_DIR}"
+                    --stem a --max-mb ${ICG_INCOBA_MAX_MB}
+            DEPENDS IncogineIncoba ${ICG_INCOBA_ASSET_FILES}
+            COMMENT "Splitting src/assets/ into .incoba bundles + index (headless packer, no Studio required)"
+            VERBATIM
+        )
+        add_custom_target(IncogineIncobaBundle ALL DEPENDS "${ICG_INCOBA_INDEX}")
+        # Ship bundles ONLY: clear the folder first so no stale loose files
+        # (or older bundles) survive mode switches or asset deletions.
+        add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${ICG_INCOBA_STAGING_DIR}" "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+            COMMENT "Shipping .incoba bundles ONLY into the executable assets folder"
+        )
+        add_dependencies(${ICG_GAME_TARGET} IncogineIncobaBundle)
+    else()
+        if(ICG_USE_INCOBA)
+            message(WARNING "ICG_USE_INCOBA requested but the IncogineIncoba packer is unavailable (ICG_BUILD_STUDIO=OFF?) — falling back to loose assets")
+        endif()
+        # Direct-disk flow: loose files ONLY, no bundles.
+        add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${CMAKE_CURRENT_SOURCE_DIR}/src/assets" "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
+            COMMENT "Copying loose assets ONLY to $<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/assets"
         )
     endif()
 endif()

@@ -43,3 +43,4 @@ make              # or: ninja
 - The MSVC build forces `/utf-8`; MinGW/Clang add `-fexec-charset=UTF-8`.
 - The Windows target name is the value of `<name>` in `src/project.xml` (currently `Incogine`).
 - The Windows build copies the static `Puroko.lib` next to the executable as a post-build step — don't be surprised by its presence.
+- Every game build ships `src/assets/` as `.incoba` bundles + `index.incobai` **only** (executable's `assets/` folder) via the headless packer — no Studio/Qt needed. Use `-DICG_USE_INCOBA=OFF` for the direct-disk flow (loose files only). See [Incogine Studio](./studio.md).
