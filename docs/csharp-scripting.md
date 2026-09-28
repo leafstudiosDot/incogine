@@ -18,6 +18,10 @@ Incogine embeds the .NET 10 runtime (CoreCLR) to run C# scripts on game Objects.
 ## Prerequisites
 
 - [.NET 10 SDK](https://dotnet.microsoft.com/download) installed
+  (including the `Microsoft.NETCore.App.Host` pack that provides `nethost.h`).
+  If the SDK is missing — or the hosting headers can't be located — the C++
+  host compiles as a disabled stub so the engine still builds; C# scripts
+  just won't run until the pack is installed.
 - CMake build configured with `-DICG_SCRIPTING_CSHARP=ON` (default)
 
 ## Writing a Script (static — supported today)
