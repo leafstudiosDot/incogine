@@ -20,6 +20,8 @@ set(ICG_STUDIO_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/core/project_xml.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/credits_xml.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_discovery.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_cpp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba.cpp
 )
 
@@ -53,6 +55,8 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/code_editor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/search_panel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/search_panel.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_viewport.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_viewport.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.h
     )

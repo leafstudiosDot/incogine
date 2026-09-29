@@ -70,6 +70,7 @@ private:
     void buildCentral();
     void buildCreditsTab();
     void buildSettingsTab();
+    void buildViewportTab();
     void closeEvent(QCloseEvent* event) override;
     bool restoreGeometryFromSettings();
 

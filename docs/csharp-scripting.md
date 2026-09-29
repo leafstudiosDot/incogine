@@ -131,7 +131,10 @@ obj->addComponent(std::make_unique<ScriptComponent>(
 ## How It Works
 
 1. At build time, `dotnet build` compiles `src/scripts/csharp/Incogine/Incogine.csproj`
-   into `Incogine.dll`, placed next to the executable.
+   into `Incogine.dll`, placed next to the executable. Managed debug info is
+   embedded in the DLL (`DebugType=embedded`, so C# debugging still works)
+   instead of a sidecar `Incogine.pdb` — that filename belongs to the native
+   linker (`Incogine.exe`), and sharing it broke every link with LNK1207.
 2. At runtime, when a `ScriptComponent` with `ScriptLanguage::CSharp` is first started,
    the engine's `CSriptHost` initializes CoreCLR via `hostfxr`.
 3. The `CSriptHandler` loads the user's script assembly and resolves the `Start`,

@@ -18,6 +18,22 @@ The object/component model lives in `src/core/objects/` and `src/core/components
 | `Cube` | No rendering yet. |
 | `Square` | Renders with its `Sprite` component. |
 
+## Identity and hierarchy
+
+Every `Object` carries a runtime-unique `uint64_t` id (`getId()`, stable
+across renames) and non-owning hierarchy links (`setParent` / `addChild` /
+`getChildren`). The id generator starts at 1 and auto-assigns on
+construction; loaders override ids with `setId()`, which pushes the
+generator past any loaded id so later objects never collide. `FindById()`
+joins `FindByName()` / `FindAllByName()` for lookups.
+
+Lifetimes are unchanged: whoever `new`'d an object still owns it.
+Destroying an object detaches it from its parent and orphans its children
+— there is no cascading delete. Link attempts that would create a cycle
+are rejected (`setParent` / `addChild` return `false`). Stored transforms
+stay in world space; the hierarchy is organizational, and editors
+translate subtrees explicitly when moving a parent.
+
 ## `Component`
 
 `Component` is a polymorphic base with virtual lifecycle methods (`Start`, `Update`, `OnDestroy`). Existing components:

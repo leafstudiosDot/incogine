@@ -1,11 +1,21 @@
 #include "engine.h"
 #include "../scripting/csharp/csharphost.h"
+#include "../preview/preview_apply.h"
+#include "../preview/preview_scenes.h"
 using namespace std;
 
 Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) {
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
     skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
+    previewMode = std::find(argv, argv + argc, std::string("--studio-preview")) != argv + argc;
+    for (int i = 0; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg.rfind("--studio-preview=", 0) == 0) {
+            previewMode = true;
+            previewScene_ = arg.substr(18);
+        }
+    }
     sceneManager = new SceneManager();
 }
 
@@ -23,6 +33,8 @@ void Engine::Init() {
     if (devmode) {
         //snprintf(projectName, sizeof(projectName), "%s [DEV]", PROJECT_NAME);
         snprintf(windowName, sizeof(windowName), "%s [DEV]", WINDOW_NAME);
+    } else if (previewMode) {
+        snprintf(windowName, sizeof(windowName), "%s [PREVIEW]", WINDOW_NAME);
     } else if (debugMode) {
         //snprintf(projectName, sizeof(projectName), "%s [DEBUG]", PROJECT_NAME);
         snprintf(windowName, sizeof(windowName), "%s [DEBUG]", WINDOW_NAME);
@@ -51,6 +63,13 @@ void Engine::Init() {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "WinErr: %s", SDL_GetError());
         SDL_Quit();
         return;
+    }
+
+    if (previewMode) {
+        // The Studio preview channel carries fixed 1280x720 frames: lock
+        // the window to the design resolution so captures always fit.
+        SDL_SetWindowSize(window, SCREEN_WIDTH, SCREEN_HEIGHT);
+        SDL_SetWindowResizable(window, false);
     }
 
     glcontext = SDL_GL_CreateContext(window);
@@ -109,10 +128,37 @@ void Engine::Init() {
         cout << "Scene loading..." << endl;
     }
     if (sceneManager != nullptr) {
-        if (skipSplash) {
+        Scene* bootScene = nullptr;
+        if (previewMode && !previewScene_.empty()) {
+            bootScene = PreviewSceneRegistry::Create(previewScene_);
+            if (!bootScene) {
+                SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                             "Unknown preview scene '%s'; normal boot instead.",
+                             previewScene_.c_str());
+            }
+        }
+        if (bootScene) {
+            sceneManager->SetScene(bootScene);
+        } else if (skipSplash) {
             sceneManager->SetScene(new MainScene());
         } else {
             sceneManager->SetScene(new Splash());
+        }
+    }
+
+    if (previewMode) {
+        // Touches the game-layer registration TU so its static scene
+        // registrations (and every named scene) actually link.
+        SDL_Log("Preview scenes registered: %d", PreviewSceneRegistrationCount());
+        std::string previewError;
+        if (!previewServer_.Start(previewError)) {
+            // Preview mirroring is best-effort: the game still runs so a
+            // broken channel never blocks normal play.
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Preview SHM: %s",
+                         previewError.c_str());
+            previewMode = false;
+        } else {
+            previewPixels_.resize(ICG_PREVIEW_PIXEL_BYTES);
         }
     }
 }
@@ -122,6 +168,7 @@ void Engine::Quit() {
 }
 
 void Engine::Cleanup() {
+    previewServer_.Shutdown();
     GetCSriptHost()->Shutdown();
     TTF_Quit();
 	MIX_Quit();
@@ -172,6 +219,30 @@ void Engine::Render() {
 		fpstext_font.setTextContent((std::string(fpsConvert(getfps())) + " fps").c_str());
 		FontSize devfps_font_sz = fpstext_font.getSize();
 		fpstext_font.renderUI((windowWidth - devfps_font_sz.width - 15), 15);
+    }
+
+    if (previewMode && previewServer_.IsActive()) {
+        int drawableWidth = 0, drawableHeight = 0;
+        SDL_GetWindowSizeInPixels(window, &drawableWidth, &drawableHeight);
+        if (drawableWidth == ICG_PREVIEW_WIDTH && drawableHeight == ICG_PREVIEW_HEIGHT) {
+            glReadPixels(0, 0, ICG_PREVIEW_WIDTH, ICG_PREVIEW_HEIGHT, GL_RGBA,
+                         GL_UNSIGNED_BYTE, previewPixels_.data());
+            previewServer_.PushFrame(ICG_PREVIEW_WIDTH, ICG_PREVIEW_HEIGHT,
+                                     ICG_PREVIEW_PITCH, previewPixels_.data());
+        }
+        uint32_t previewCmd = ICG_PREVIEW_CMD_NOP;
+        uint64_t previewId = 0;
+        float previewValues[9] = {0};
+        if (previewServer_.PollCommand(previewCmd, previewId, previewValues)) {
+            if (previewCmd == ICG_PREVIEW_CMD_QUIT) {
+                Quit();
+            } else if (previewCmd == ICG_PREVIEW_CMD_TRANSFORM) {
+                ApplyPreviewTransform(previewId, previewValues, previewValues + 3,
+                                      previewValues + 6);
+            } else if (previewCmd == ICG_PREVIEW_CMD_SELECT) {
+                SetPreviewSelection(previewId);
+            }
+        }
     }
 
     SDL_GL_SwapWindow(window);

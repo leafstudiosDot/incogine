@@ -1,6 +1,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cstdint>
 #include <stdexcept>
 #include <cmath>
 #include "../components/components.h"
@@ -101,7 +102,11 @@ class Object {
         Position pos;
         Scale scale;
         Rotation rotation;
+        uint64_t id;
+        Object* parent = nullptr;
+        std::vector<Object*> children;
         static std::vector<Object*> liveObjects;
+        static uint64_t nextId;
 
     public:
         Object(const std::string& name, Position pos, Scale scale, Rotation rotation);
@@ -111,9 +116,33 @@ class Object {
         void setName(const std::string& newName);
         std::string getName() const;
 
+        // Identity — unique per object, stable across renames. The runtime
+        // auto-assigns ids; loaders (and Studio's scene round-trip) override
+        // them with setId(), which pushes the generator past any loaded id
+        // so later objects never collide. Used by C#/Kodo Object.find.
+        uint64_t getId() const;
+        void setId(uint64_t newId);
+        static Object* FindById(uint64_t id);
+
         // Live-object registry (used by C#/Kodo Object.find).
         static Object* FindByName(const std::string& name);
         static std::vector<Object*> FindAllByName(const std::string& name);
+
+        // Hierarchy — non-owning links for the scene tree. Lifetimes are
+        // unchanged: whoever new'd an object still owns it. Destroying an
+        // object detaches it from its parent and orphans its children
+        // (their parent becomes null); there is no cascading delete.
+        // Stored transforms stay in world space; hierarchy is organizational
+        // (editors translate subtrees explicitly when moving a parent).
+        // setParent/addChild return false (and change nothing) when the
+        // link would create a cycle.
+        bool setParent(Object* newParent);
+        Object* getParent() const;
+        const std::vector<Object*>& getChildren() const;
+        size_t getChildCount() const;
+        Object* getChild(size_t index) const;
+        bool addChild(Object* child);
+        void removeChild(Object* child);
 
         // Component
         Component* getComponent(int index);

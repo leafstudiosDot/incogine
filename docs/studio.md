@@ -131,15 +131,35 @@ cmake --build . --target IncogineIncoba   # packer only
   `<incogine_version>` field stays read-only (mirrored from
   `src/core/engine/version.h`); `<name>` must remain a single token because it
   becomes the executable filename.
-- **Scene panel — read-only.** Discovery scans `src/scenes/` for
-  `class X : public Scene`, shows the declared `Scene("…")` name, header/source
-  locations, and whether the scene ships in the `Puroko` lib or is exe-only
-  (`splash/`, `settings/`). Clicking anything in the panel jumps to the
-  Scene tab (retitled `Scene - <name>`, no Code tab opened) showing the
-  header source. Visual editing with write-back waits for a
-  dedicated scene format: current scenes are imperative C++ (e.g. font setup
-  in the constructor, layout math in `Render()`), so there is no serializable
-  object list to round-trip yet.
+- **Scene panel — read-only UI, round-trip-ready parser.** Discovery scans
+  `src/scenes/` for `class X : public Scene`, shows the declared
+  `Scene("…")` name, header/source locations, and whether the scene ships
+  in the `Puroko` lib or is exe-only (`splash/`, `settings/`). Clicking
+  anything in the panel jumps to the Scene tab (retitled `Scene - <name>`,
+  no Code tab opened) showing the header source. Underneath,
+  `src/studio/core/scene_cpp.h` already parses constructor patterns
+  (`new Square/Cube/Object`, `setName`/`setId`, transform/color calls,
+  `addComponent`/`setParent`) and rewrites exact spans — rename, transform,
+  id, add, and remove operations with byte-identical no-op round trips —
+  while `Update()`/`Render()` code, control blocks, and non-Object
+  allocations stay verbatim. The visual hierarchy/Inspector panels that
+  drive it are next.
+- **Live preview viewport (pinned tab).** The game runs with
+  `--studio-preview` (or `--studio-preview=<SceneClass>`, chosen from a
+  scene dropdown backed by scene discovery) as a subprocess (normal boot
+  or the selected scene via the game layer's preview registry, window
+  locked to the 1280×720 design resolution, `[PREVIEW]` title) and mirrors
+  every frame into shared memory (`ICGPREV2` protocol: seqlock frames,
+  acked commands with id + transform payload). Studio polls at ~30 Hz,
+  displays with aspect fit, and can ask the game to quit gracefully on
+  Stop (terminate/kill fallback). Pixel-exact because it is the real
+  renderer — an engine crash can't take the IDE down. The game executable
+  auto-resolves (sibling of Studio, remembered override, or Browse).
+  Below the viewport, the chosen scene's parser-known objects are listed
+  with Position/Rotation/Scale controls: **Apply live** moves the running
+  object over the channel (needs a file id), **Save to source** rewrites
+  the `.cpp` via the round-trip parser (assigning max+1 ids first) so the
+  change survives rebuilds. Edit commands (gizmos) build on this loop.
 - **Asset Browser** — `QFileSystemModel` over `src/assets/` (browse, open,
   import by copying in) with a **Loading...** indicator while folders
   populate (dismissed when content lists). Import settings and dependency

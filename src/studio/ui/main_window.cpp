@@ -33,6 +33,7 @@
 #include "code_editor.h"
 #include "search_panel.h"
 #include "font_preview.h"
+#include "preview_viewport.h"
 #ifdef ICG_STUDIO_HAS_MULTIMEDIA
 #include "audio_preview.h"
 #endif
@@ -165,12 +166,19 @@ void StudioMainWindow::buildCentral() {
     central_->addTab(sceneTab, tr("Scene"));
     sceneTab_ = sceneTab;
 
-    // Credits / Project Settings / Scene stay pinned and unclosable;
-    // file pages insert before them.
+    buildViewportTab();
+
+    // Credits / Project Settings / Scene / Viewport stay pinned and
+    // unclosable; file pages insert before them.
     for (int i = 0; i < central_->count(); ++i) {
         central_->widget(i)->setProperty("pageKind", "pinned");
     }
     refreshPinnedCloseButtons();
+}
+
+void StudioMainWindow::buildViewportTab() {
+    auto* viewport = new PreviewViewport(projectRoot_);
+    central_->addTab(viewport, tr("Viewport"));
 }
 
 void StudioMainWindow::buildCreditsTab() {

@@ -2,6 +2,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cstdint>
 #include <locale>
 #include <codecvt>
 #include <SDL3/SDL.h>
@@ -22,6 +23,8 @@
 #include "../fonts/fonts.h"
 
 #include "../scenes/scenes.h"
+
+#include "../preview/preview_server.h"
 
 #include "../../scenes/splash/splash.h"
 #include "../../scenes/MainScene.h"
@@ -55,6 +58,7 @@ class Engine {
 
         inline bool inDebugMode() { return debugMode; }
         inline bool inDevMode() { return devmode; }
+        inline bool inPreviewMode() const { return previewMode; }
         inline bool running() { return isRunning; }
         inline bool checkInBackground() { return inBackground; }
 		inline bool inFullScreen() { return fullScreenMode; }
@@ -72,6 +76,10 @@ class Engine {
     protected:
         bool debugMode;
         bool devmode;
+        bool previewMode; // --studio-preview: mirror frames to Studio
+        std::string previewScene_; // --studio-preview=<SceneClass>
+        PreviewServer previewServer_;
+        std::vector<uint8_t> previewPixels_;
         bool isRunning = false;
         bool inBackground;
         bool skipSplash;

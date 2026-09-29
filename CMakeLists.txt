@@ -574,11 +574,17 @@ if(ICG_SCRIPTING_CSHARP AND DOTNET_EXECUTABLE)
             "${CSHARP_PROJECT_DIR}/Incogine.csproj"
             --configuration Release
             --output "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>"
+            -p:DebugType=embedded
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CSHARP_RUNTIMECONFIG}"
             "$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/Incogine.runtimeconfig.json"
         COMMENT "Building C# managed assembly (Incogine.dll)"
     )
+    # NOTE: DebugType=embedded keeps the managed debug info inside
+    # Incogine.dll instead of emitting Incogine.pdb next to the game
+    # executable — that filename belongs to the NATIVE linker (Incogine.exe)
+    # and sharing it breaks every link with LNK1207. C# debugging in VS
+    # keeps working with embedded portable PDBs.
     add_dependencies(${ICG_GAME_TARGET} IncogineScripting)
 endif()
 
