@@ -1410,6 +1410,75 @@ bool AddObject(SceneFile& file, const std::string& typeName, const std::string& 
     return Reparse(file, error);
 }
 
+bool SetParentObject(SceneFile& file, const std::string& var,
+                     const std::string& parentVar, std::string& error) {
+    const ObjectModel* obj = FindObject(file.model, var);
+    if (!obj) {
+        error = "unknown object '" + var + "'";
+        return false;
+    }
+    if (parentVar == var) {
+        error = "object cannot parent to itself";
+        return false;
+    }
+    if (!parentVar.empty() && !FindObject(file.model, parentVar)) {
+        error = "unknown parent object '" + parentVar + "'";
+        return false;
+    }
+    if (parentVar.empty()) {
+        // Unparent: delete existing setParent statements.
+        std::vector<CppEdit> dels;
+        for (size_t idx : obj->statementIndexes) {
+            const Statement& stmt = file.model.ctorStatements[idx];
+            if (stmt.kind == Statement::Kind::SetParent) {
+                dels.push_back(CppEdit{stmt.beginLine, stmt.endLine, ""});
+            }
+        }
+        if (!ApplyEdits(file.sourceLines, dels, error)) {
+            return false;
+        }
+        return Reparse(file, error);
+    }
+    const size_t si = LastStmt(file.model, *obj, Statement::Kind::SetParent);
+    if (si == static_cast<size_t>(-1)) {
+        if (!obj->hasConstruct) {
+            error = "no construction site for '" + var + "'";
+            return false;
+        }
+        const Statement& cs = file.model.ctorStatements[obj->constructIndex];
+        const CppEdit ins{cs.endLine + 1, cs.endLine,
+                          file.model.indent + var + "->setParent(" + parentVar + ");"};
+        if (!ApplyEdits(file.sourceLines, {ins}, error)) {
+            return false;
+        }
+        return Reparse(file, error);
+    }
+    const Statement& stmt = file.model.ctorStatements[si];
+    const std::string text = StmtText(file, stmt);
+    static const std::regex parentCall("setParent\\s*\\(");
+    std::smatch m;
+    if (!std::regex_search(text, m, parentCall)) {
+        error = "cannot locate setParent call";
+        return false;
+    }
+    const size_t openOff = text.find('(', static_cast<size_t>(m.position(0)));
+    if (openOff == std::string::npos) {
+        error = "cannot locate setParent call";
+        return false;
+    }
+    const size_t closeOff = MatchBracket(text, openOff, ')');
+    if (closeOff == std::string::npos) {
+        error = "unbalanced setParent call";
+        return false;
+    }
+    const auto [l1, c1] = StmtOffsetToPos(file, stmt, openOff + 1);
+    const auto [l2, c2] = StmtOffsetToPos(file, stmt, closeOff);
+    if (!SpliceRange(file.sourceLines, l1, c1, l2, c2, parentVar, error)) {
+        return false;
+    }
+    return Reparse(file, error);
+}
+
 bool RemoveObject(SceneFile& file, const std::string& var, RemoveResult& result,
                   std::string& error) {
     const ObjectModel* obj = FindObject(file.model, var);

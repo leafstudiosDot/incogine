@@ -11,6 +11,7 @@
 
 #include "ui/main_window.h"
 #include "ui/preview_viewport.h"
+#include "ui/scene_editor.h"
 
 #include "core/preview_exe.h"
 #include "core/project_paths.h"
@@ -106,14 +107,6 @@ int main(int argc, char** argv) {
         win.onOpenFile(QString::fromStdString(root + "/src/assets/fonts/main_font.ttf"));
         win.onOpenFile(QString::fromStdString(root + "/src/assets/audio/testbgm.ogg"));
         std::cout << "self-test: code/font/audio pages opened\n";
-        // Scene dropdown must carry the class name (used for the launch
-        // argument), not just display text.
-        if (auto* viewport = win.findChild<PreviewViewport*>()) {
-            const bool selected = viewport->selectPreviewScene("MainScene");
-            std::cout << "self-test: scene dropdown select MainScene "
-                      << (selected ? "ok" : "FAILED") << ", selected='"
-                      << viewport->selectedPreviewScene().toStdString() << "'\n";
-        }
         const int pagesBefore = win.filePageCount();
         if (auto* tree = win.findChild<QTreeWidget*>()) {
             if (QTreeWidgetItem* top = tree->topLevelItem(0)) {
@@ -124,6 +117,13 @@ int main(int argc, char** argv) {
         std::cout << "self-test: scene selected, file pages "
                   << pagesBefore << " -> " << win.filePageCount()
                   << ", current tab '" << win.currentTabTitle().toStdString() << "'\n";
+        // Scene sidebar selection drives the editor (class + parsed
+        // hierarchy); the launch argument reuses the same class name.
+        if (auto* editor = win.findChild<SceneEditorTab*>()) {
+            std::cout << "self-test: editor scene='"
+                      << editor->sceneClass().toStdString() << "' objects="
+                      << editor->sceneObjectCount() << "\n";
+        }
         app.setStyle(QStyleFactory::create("Fusion"));
         QPalette dark = app.palette();
         dark.setColor(QPalette::Window, QColor(53, 53, 53));

@@ -15,6 +15,8 @@
 //   non-Object allocations like `new PauseMenu()`) is Unknown and never
 //   rewritten. Multi-line statements are supported; edits splice exact
 //   line/column spans so diffs stay minimal.
+//   `var->setParent(other)` links hierarchy; empty/other-identifier args
+//   stay raw (recorded but not modeled).
 //
 // Limits (v1, documented so review can extend them):
 // - One construction per variable (first wins); member-vs-local is not
@@ -143,6 +145,8 @@ bool SetTransform(SceneFile& file, const std::string& var, const std::string& ki
                   const std::string& w, std::string& error);
 bool SetObjectId(SceneFile& file, const std::string& var, uint64_t id,
                  std::string& error);
+bool SetParentObject(SceneFile& file, const std::string& var,
+                     const std::string& parentVar, std::string& error);
 struct AddResult {
     bool headerUpdated = false;
 };

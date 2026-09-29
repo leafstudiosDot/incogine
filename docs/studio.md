@@ -76,7 +76,7 @@ mkdir build && cd build && cmake .. && cmake --build . --target IncogineStudio
 cmake --build . --target IncogineIncoba   # packer only
 ```
 
-## What the IDE shell does (Phase 1)
+## What the IDE shell does (Phases 1–3)
 
 - **Project dock** — `QFileSystemModel` over `src/` with right-click
   **New file / New folder / Rename / Delete**, drag-drop move, and refresh,
@@ -131,36 +131,34 @@ cmake --build . --target IncogineIncoba   # packer only
   `<incogine_version>` field stays read-only (mirrored from
   `src/core/engine/version.h`); `<name>` must remain a single token because it
   becomes the executable filename.
-- **Scene panel — read-only UI, round-trip-ready parser.** Discovery scans
-  `src/scenes/` for `class X : public Scene`, shows the declared
-  `Scene("…")` name, header/source locations, and whether the scene ships
-  in the `Puroko` lib or is exe-only (`splash/`, `settings/`). Clicking
-  anything in the panel jumps to the Scene tab (retitled `Scene - <name>`,
-  no Code tab opened) showing the header source. Underneath,
-  `src/studio/core/scene_cpp.h` already parses constructor patterns
-  (`new Square/Cube/Object`, `setName`/`setId`, transform/color calls,
-  `addComponent`/`setParent`) and rewrites exact spans — rename, transform,
-  id, add, and remove operations with byte-identical no-op round trips —
-  while `Update()`/`Render()` code, control blocks, and non-Object
-  allocations stay verbatim. The visual hierarchy/Inspector panels that
-  drive it are next.
-- **Live preview viewport (pinned tab).** The Viewport tab auto-locates
-  the development game executable from the CMake build tree (VS 2026 and
-  Xcode multi-config layouts, Ninja/Make single-config, macOS bundles —
-  verified against the tree's `CMakeCache`), named after `<name>` in
-  `src/project.xml`. Studio itself opens only against a verified build:
-  a startup gate requires the SHA-256 to match the CMake-written sidecar
-  and force-closes with an error otherwise (re-checked at preview launch,
-  where a per-launch session token additionally binds the channel). The game runs
-  with `--studio-preview[=<SceneClass>]` (scene dropdown, registry boot)
-  as a subprocess, window locked to 1280×720 `[PREVIEW]`, mirroring every
-  frame (seqlock, acked commands with id + transform payload); Studio
-  polls at ~30 Hz with aspect fit and quits gracefully on Stop.
-  Below the viewport, the chosen scene's parser-known objects are listed
-  with Position/Rotation/Scale controls: **Apply live** moves the running
-  object over the channel (needs a file id), **Save to source** rewrites
-  the `.cpp` via the round-trip parser (assigning max+1 ids first) so the
-  change survives rebuilds. Edit commands (gizmos) build on this loop.
+- **Scene editor tab (Unity-style, Phase 3).** The Scene tab is the
+  editor viewport: live game frames on a canvas with a toolbar (2D/3D
+  toggle, Perspective/Orthographic/Isometric camera selector, Move/Rotate/
+  Scale gizmo mode, 10px snap, Save to source), a Hierarchy tree with
+  drag-reparent (rewrites `setParent`, cycle-guarded), an Inspector
+  (Position/Rotation/Scale + RGBA for Squares, file id, Apply live, Add/
+  Delete object), and a read-only Source view of the current model.
+  Click/drag in 2D picks (exact Square rects) and moves objects with live
+  preview; dropping an asset creates a placeholder `Square_N`. Rotate/scale
+  drags and 3D picking wait on engine Cube rendering. Edits apply to the
+  in-memory round-trip model (dirty `*` on the tab) and flush on Save.
+- **Scene panel.** Discovery scans `src/scenes/` for
+  `class X : public Scene`, shows the declared `Scene("…")` name,
+  header/source locations, and whether the scene ships in the `Puroko`
+  lib or is exe-only (`splash/`, `settings/`). Clicking anything in the
+  panel loads the scene into the editor tab (retitled `Scene - <name>`)
+  and targets Preview launches at it; no Code tab is opened.
+- **Round-trip parser** (`src/studio/core/scene_cpp.h`): constructor
+  patterns (`new Square/Cube/Object`, `setName`/`setId`, transform/color
+  calls, `addComponent`/`setParent`) rewrite exact spans — rename,
+  transform, id, parent, add, remove — with byte-identical no-op round
+  trips, while `Update()`/`Render()` code, control blocks, and
+  non-Object allocations stay verbatim.
+- **Preview tab (passive monitor).** The former Viewport tab now only runs
+  and watches: game picker with dev-build binding, Launch/Stop, live
+  frames, status. One shared session object feeds both tabs, so Scene and
+  Preview can never fight over the single-instance channel. All transform
+  editing moved to the Scene tab.
 - **Asset Browser** — `QFileSystemModel` over `src/assets/` (browse, open,
   import by copying in) with a **Loading...** indicator while folders
   populate (dismissed when content lists). Import settings and dependency
@@ -274,3 +272,24 @@ hot reload, play mode, breakpoints, code completion, asset database + import
 pipeline, `.incoba` compression choice, resource IDs, build profiles,
 packaging, project templates, and plugin/shader/audio/input/localization
 editors. Phase 1 deliberately stops at the shell + models + packer.
+
+## Engine roadmap (what to add next)
+
+Phase 3 order, biggest unlocks first:
+
+1. **`Cube` rendering + camera adoption** — the renderer still uses a fixed
+   ortho path and `Cube::Render` is empty. Render boxes through the new
+   `Camera` (2D already matches pixel-for-pixel; verified), then 3D scenes
+   become editable instead of view-only.
+2. **Relative transforms** — hierarchy is organizational today (world-space
+   storage, editors translate subtrees). Compose parent→child transforms
+   in `Object` when ready for true nested prefabs-in-spirit.
+3. **Sprite textures** — `Sprite` is color-only; texture assignment is the
+   top asset-editor unlock (Asset Browser drag already stages the drop).
+4. **Script attach patterns** — `ScriptComponent` construction is parsed
+   but not yet written; adding the writer op unlocks drag-a-script-onto-
+   an-object.
+5. **Physics/collision stubs** — Kodo notes physics as unimplemented;
+   decide 2D-first (AABB) scope before any editor.
+6. **Prefab/templates, undo/redo, play mode, hot reload** — in that order;
+   each builds on the round-trip + preview channel already in place.

@@ -20,6 +20,9 @@ class QTabWidget;
 
 class CodeEditor;
 class SearchPanel;
+class PreviewSession;
+class PreviewViewport;
+class SceneEditorTab;
 
 namespace icg {
 namespace studio {
@@ -61,6 +64,7 @@ private slots:
     void onDeleteItems();
     void onFocusSearch();
     void onTabCloseRequested(int index);
+    void onSceneDirtyChanged(bool dirty);
     void cycleTab(int direction);
     void log(const QString& msg);
 
@@ -103,6 +107,11 @@ private:
     QPlainTextEdit* output_ = nullptr;
     QTabWidget* central_ = nullptr;
     QWidget* sceneTab_ = nullptr;
+    QString sceneTabBaseTitle_ = "Scene";
+    QString selectedSceneClass_;
+    PreviewSession* session_ = nullptr;
+    SceneEditorTab* sceneEditor_ = nullptr;
+    PreviewViewport* previewTab_ = nullptr;
     SearchPanel* searchPanel_ = nullptr;
     QDockWidget* searchDock_ = nullptr;
     // Open file pages by canonical path (code/audio/font widgets).

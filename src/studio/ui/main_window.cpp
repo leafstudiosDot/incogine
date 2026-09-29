@@ -31,6 +31,9 @@
 #include <QHBoxLayout>
 
 #include "code_editor.h"
+#include "preview_session.h"
+#include "preview_viewport.h"
+#include "scene_editor.h"
 #include "search_panel.h"
 #include "font_preview.h"
 #include "preview_viewport.h"
@@ -47,6 +50,7 @@ StudioMainWindow::StudioMainWindow(const std::string& projectRoot, QWidget* pare
     : QMainWindow(parent), projectRoot_(projectRoot) {
     credits_ = new icg::studio::CreditsXml();
     project_ = new icg::studio::ProjectXml();
+    session_ = new PreviewSession(this);
     setWindowTitle(tr("Incogine Studio"));
     buildMenus();
     buildCentral();
@@ -59,7 +63,6 @@ StudioMainWindow::StudioMainWindow(const std::string& projectRoot, QWidget* pare
     onDiscoverScenes();
     onRefreshProject();
     log(tr("Incogine Studio — project root: %1").arg(QString::fromStdString(projectRoot_)));
-    log(tr("Scene editing is read-only in Phase 1 (scenes are imperative C++)."));
 }
 
 void StudioMainWindow::buildMenus() {
@@ -155,16 +158,12 @@ void StudioMainWindow::buildCentral() {
     buildCreditsTab();
     buildSettingsTab();
 
-    // Scene source tab (read-only note + source view).
-    QWidget* sceneTab = new QWidget();
-    QVBoxLayout* sl = new QVBoxLayout(sceneTab);
-    sl->addWidget(new QLabel(tr("Scene source (read-only in Phase 1). Select a scene to view its header.")));
-    QPlainTextEdit* sceneView = new QPlainTextEdit();
-    sceneView->setObjectName("sceneSourceView");
-    sceneView->setReadOnly(true);
-    sl->addWidget(sceneView);
-    central_->addTab(sceneTab, tr("Scene"));
-    sceneTab_ = sceneTab;
+    // Scene editor tab: live viewport + hierarchy + inspector + source.
+    sceneEditor_ = new SceneEditorTab(projectRoot_, session_);
+    central_->addTab(sceneEditor_, tr("Scene"));
+    sceneTab_ = sceneEditor_;
+    connect(sceneEditor_, &SceneEditorTab::dirtyChanged, this,
+            &StudioMainWindow::onSceneDirtyChanged);
 
     buildViewportTab();
 
@@ -177,8 +176,16 @@ void StudioMainWindow::buildCentral() {
 }
 
 void StudioMainWindow::buildViewportTab() {
-    auto* viewport = new PreviewViewport(projectRoot_);
-    central_->addTab(viewport, tr("Viewport"));
+    previewTab_ = new PreviewViewport(projectRoot_, session_);
+    central_->addTab(previewTab_, tr("Preview"));
+}
+
+void StudioMainWindow::onSceneDirtyChanged(bool dirty) {
+    if (!sceneTab_) {
+        return;
+    }
+    central_->setTabText(central_->indexOf(sceneTab_),
+                         dirty ? sceneTabBaseTitle_ + " *" : sceneTabBaseTitle_);
 }
 
 void StudioMainWindow::buildCreditsTab() {
@@ -876,22 +883,21 @@ void StudioMainWindow::onSceneSelected(QTreeWidgetItem* item) {
     while (top->parent()) {
         top = top->parent();
     }
-    // Scene sidebar selections stay in the Scene tab: show the header source
-    // there and retitle the tab. No Code tab is opened for scene files.
+    // Scene sidebar selections drive the Scene editor tab (no Code tab is
+    // opened for scene files) and the Preview launch target.
     const QString header = top->data(0, Qt::UserRole).toString();
     if (!header.isEmpty()) {
-        if (auto* sv = findChild<QPlainTextEdit*>("sceneSourceView")) {
-            QFile f(header);
-            if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                sv->setPlainText(QTextStream(&f).readAll());
-            }
-        }
         QString sceneName = top->data(0, Qt::UserRole + 2).toString();
+        QString className = top->data(0, Qt::UserRole + 1).toString();
         if (sceneName.isEmpty()) {
-            sceneName = top->data(0, Qt::UserRole + 1).toString();
+            sceneName = className;
         }
-        central_->setTabText(central_->indexOf(sceneTab_),
-                             tr("Scene - %1").arg(sceneName));
+        selectedSceneClass_ = className;
+        sceneEditor_->setScene(className, header,
+                               top->data(1, Qt::UserRole).toString());
+        previewTab_->setLaunchScene(className);
+        sceneTabBaseTitle_ = tr("Scene - %1").arg(sceneName);
+        central_->setTabText(central_->indexOf(sceneTab_), sceneTabBaseTitle_);
         central_->setCurrentWidget(sceneTab_);
     }
 }

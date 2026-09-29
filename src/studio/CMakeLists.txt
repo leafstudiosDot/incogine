@@ -59,11 +59,25 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/search_panel.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_viewport.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_viewport.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_session.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/preview_session.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/scene_editor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/scene_editor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.h
     )
     add_executable(IncogineStudio ${ICG_STUDIO_UI_SOURCES})
     target_link_libraries(IncogineStudio PRIVATE IncogineStudioCore Qt6::Widgets)
+    # Engine camera math is dependency-free; the editor links it directly
+    # (the runtime must never depend on Studio, not the reverse).
+    target_sources(IncogineStudio PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/../core/render/camera.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/../core/render/camera.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/../core/render/camera_math.h
+    )
+    source_group("Studio\\EngineMath" FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/../core/render/camera.cpp
+    )
     if(Qt6Multimedia_FOUND)
         # Audio preview tabs (play/seek/duration/loop). Without it the shell
         # still builds; audio files just open as text with a log note.
