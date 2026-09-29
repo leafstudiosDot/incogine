@@ -18,8 +18,8 @@
 #include <QVBoxLayout>
 #include <cstring>
 
-#include "../core/preview_exe.h"
-#include "../core/project_xml.h"
+#include "../core/preview/preview_exe.h"
+#include "../core/xml/project_xml.h"
 
 // ---- PreviewCanvas ----
 

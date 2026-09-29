@@ -121,9 +121,11 @@ std::string HexOf(const void* data, size_t size) {
     Absorb(ctx, static_cast<const uint8_t*>(data), size);
     uint8_t digest[32];
     Finalize(ctx, digest);
-    char hex[65];
+    constexpr char kHex[] = "0123456789abcdef";
+    char hex[64];
     for (int i = 0; i < 32; ++i) {
-        std::snprintf(hex + i * 2, 3, "%02x", digest[i]);
+        hex[i * 2] = kHex[digest[i] >> 4];
+        hex[i * 2 + 1] = kHex[digest[i] & 0x0F];
     }
     return std::string(hex, 64);
 }
@@ -159,9 +161,11 @@ bool HexOfFile(const std::string& path, std::string& outHex, std::string& error)
     }
     uint8_t digest[32];
     Finalize(ctx, digest);
-    char hex[65];
+    constexpr char kHex[] = "0123456789abcdef";
+    char hex[64];
     for (int i = 0; i < 32; ++i) {
-        std::snprintf(hex + i * 2, 3, "%02x", digest[i]);
+        hex[i * 2] = kHex[digest[i] >> 4];
+        hex[i * 2 + 1] = kHex[digest[i] & 0x0F];
     }
     outHex.assign(hex, 64);
     return true;

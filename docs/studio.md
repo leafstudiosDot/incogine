@@ -132,28 +132,37 @@ cmake --build . --target IncogineIncoba   # packer only
   `src/core/engine/version.h`); `<name>` must remain a single token because it
   becomes the executable filename.
 - **Scene editor tab (Unity-style, Phase 3).** The Scene tab is the
-  editor viewport: live game frames on a canvas with a toolbar (2D/3D
-  toggle, Perspective/Orthographic/Isometric camera selector, Move/Rotate/
-  Scale gizmo mode, 10px snap, Save to source), a Hierarchy tree with
-  drag-reparent (rewrites `setParent`, cycle-guarded), an Inspector
-  (Position/Rotation/Scale + RGBA for Squares, file id, Apply live, Add/
-  Delete object), and a read-only Source view of the current model.
-  Click/drag in 2D picks (exact Square rects) and moves objects with live
-  preview; dropping an asset creates a placeholder `Square_N`. Rotate/scale
-  drags and 3D picking wait on engine Cube rendering. Edits apply to the
-  in-memory round-trip model (dirty `*` on the tab) and flush on Save.
+  editor viewport and needs **no running game**: it parses the scene
+  sources and draws objects (exact `Square` rects) plus font labels in the
+  1280×720 design space, framed by a 1px border showing what the game
+  sees. Toolbar: cursor tools **Select / Move / Rotate / Scale / Hand**
+  (keys 1–5; rotate/scale drags arrive later, spins work now), 2D/3D
+  toggle, Perspective/Orthographic/Isometric camera selector, 10px snap,
+  Save to source. Hierarchy tree with drag-reparent (rewrites `setParent`,
+  cycle-guarded), Inspector (Position/Rotation/Scale + RGBA for Squares,
+  file id, Apply live, Add/Delete), Source view. Click/drag moves boxes
+  with live preview when connected; dropping an asset creates a
+  placeholder `Square_N`. In 3D mode an orbitable grid previews camera
+  math until Cube rendering lands. Edits apply to the in-memory model
+  (dirty `*`) and flush on Save.
 - **Scene panel.** Discovery scans `src/scenes/` for
   `class X : public Scene`, shows the declared `Scene("…")` name,
   header/source locations, and whether the scene ships in the `Puroko`
   lib or is exe-only (`splash/`, `settings/`). Clicking anything in the
   panel loads the scene into the editor tab (retitled `Scene - <name>`)
   and targets Preview launches at it; no Code tab is opened.
-- **Round-trip parser** (`src/studio/core/scene_cpp.h`): constructor
+- **Round-trip parser** (`src/studio/core/scene/scene_cpp.h`): constructor
   patterns (`new Square/Cube/Object`, `setName`/`setId`, transform/color
   calls, `addComponent`/`setParent`) rewrite exact spans — rename,
   transform, id, parent, add, remove — with byte-identical no-op round
   trips, while `Update()`/`Render()` code, control blocks, and
-  non-Object allocations stay verbatim.
+  non-Object allocations stay verbatim. The implementation is split by
+  concern: `scene/scene_cpp_text.cpp` (EOL/lines, comments, bracket matching),
+  `scene/scene_cpp.cpp` (constructor scan + statement matching),
+  `scene/scene_cpp_fonts.cpp` (`Font`/text labels), `scene/scene_cpp_ops.cpp`
+  (splices, mutations, serialization), with shared internals in
+  `scene/scene_cpp_detail.h`. Shared XML trimming/escaping/tag lookup used by
+  the project/credits models lives in `xml/xml_util.h`.
 - **Preview tab (passive monitor).** The former Viewport tab now only runs
   and watches: game picker with dev-build binding, Launch/Stop, live
   frames, status. One shared session object feeds both tabs, so Scene and
@@ -197,7 +206,7 @@ Updates:      downloaded patch dir(s)       ->  MountBundleDir (override, live)
 ```
 
 Bundle format (little-endian, no third-party deps —
-`src/studio/core/incoba.h`):
+`src/studio/core/incoba/incoba.h`, codec helpers in `incoba/incoba_detail.h`):
 
 ```text
 magic[6]="INCOBA", version u16=1, flags u16=0, entryCount u32
@@ -229,6 +238,11 @@ per entry: pathLen u16, path, bundleIdx u16,
   future compression. Readers accept 0 and reject the rest.
 - CRC-32 is a corruption check, not security. The bundle gives packaging,
   fewer files, and casual modification resistance — explicitly **not DRM**.
+- Studio-side code is split by concern: `incoba/incoba.cpp` (CRC, single-bundle
+  writer, directory packer, `Reader`) and `incoba/incoba_index.cpp` (split
+  packing, index, `IndexedReader`). The split packer builds its index
+  from the writer's reported table rows instead of re-reading each
+  bundle back.
 - The engine runtime reads bundles itself (`src/core/assets/`:
   disk → bundle → embedded). Studio Core's `Reader`/`IndexedReader` are the
   reference implementations; the engine parser mirrors the format and must

@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <string>
 
-#include "../core/scene_cpp.h"
+#include "../core/scene/scene_cpp.h"
 #include "preview_session.h"
 #include "preview_viewport.h"
 

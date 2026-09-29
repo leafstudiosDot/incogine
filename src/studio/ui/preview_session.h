@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-#include "../core/preview_client.h"
+#include "../core/preview/preview_client.h"
 
 class QTimer;
 

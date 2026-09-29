@@ -13,9 +13,9 @@
 #include "ui/preview_viewport.h"
 #include "ui/scene_editor.h"
 
-#include "core/preview_exe.h"
+#include "core/preview/preview_exe.h"
 #include "core/project_paths.h"
-#include "core/project_xml.h"
+#include "core/xml/project_xml.h"
 
 namespace {
 

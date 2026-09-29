@@ -17,14 +17,19 @@ endif()
 
 set(ICG_STUDIO_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/core/project_paths.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/project_xml.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/credits_xml.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_discovery.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_cpp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview_client.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview_exe.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/sha256.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/xml/project_xml.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/xml/credits_xml.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/xml/xml_util.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_discovery.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_cpp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_cpp_text.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_cpp_fonts.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_cpp_ops.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview/preview_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview/preview_exe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/crypto/sha256.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba/incoba.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba/incoba_index.cpp
 )
 
 add_library(IncogineStudioCore STATIC ${ICG_STUDIO_CORE_SOURCES})

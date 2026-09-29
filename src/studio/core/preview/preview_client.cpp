@@ -6,7 +6,7 @@
 #include <cstring>
 #include <thread>
 
-#include "../../core/preview/preview_protocol.h"
+#include "../../../core/preview/preview_protocol.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN

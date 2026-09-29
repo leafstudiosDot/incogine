@@ -8,7 +8,7 @@
 #include <fstream>
 #include <sstream>
 
-#include "sha256.h"
+#include "core/crypto/sha256.h"
 
 namespace icg {
 namespace studio {
@@ -26,13 +26,16 @@ std::string Canonical(const std::string& path) {
     return p.generic_string();
 }
 
+void ToLowerInPlace(std::string& s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+}
+
 bool SamePath(const std::string& a, const std::string& b) {
     std::string x = Canonical(a), y = Canonical(b);
 #ifdef _WIN32
-    std::transform(x.begin(), x.end(), x.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
-    std::transform(y.begin(), y.end(), y.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    ToLowerInPlace(x);
+    ToLowerInPlace(y);
 #endif
     return x == y;
 }
@@ -180,11 +183,9 @@ bool VerifyPreviewExe(const std::string& projectRoot, const std::string& exeBase
     std::string stem = exe.stem().string(); // strips .exe on Windows
 #ifdef _WIN32
     std::string lowered = stem;
-    std::transform(lowered.begin(), lowered.end(), lowered.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    ToLowerInPlace(lowered);
     std::string wanted = exeBaseName;
-    std::transform(wanted.begin(), wanted.end(), wanted.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    ToLowerInPlace(wanted);
 #else
     const std::string& lowered = stem;
     const std::string& wanted = exeBaseName;

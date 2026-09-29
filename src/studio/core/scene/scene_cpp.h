@@ -5,12 +5,16 @@
 // parser recognizes a convention subset inside a scene class constructor
 // and rewrites only those spans, preserving everything else byte-for-byte:
 //
-//   Recognized (constructor body only; Update()/Render()/rest verbatim):
+//   Recognized (constructor body only, except Font call sites which are
+//   scanned file-wide; Update()/Render() object code stays verbatim):
 //     `v = new Square();` / `v = new Cube();`
 //     `v = new Object("Name", Position(..), Scale(..), Rotation(..));`
 //     `v->setName("Literal");` / `v->setId(123);`
 //     `v->setPosition(Position(..));` (+ Scale/Rotation/Color pairs)
 //     `v->addComponent(...);` / `v->setParent(...);` (recorded, raw args)
+//     `Font f;` / `Font f[N];` (header) with `f.setFontFile("..", pts);`
+//     literal `f.setTextContent("..");`, numeric `f.setColor(..);`, and
+//     `f.renderUI(x, y);` sites (constant args = placed, else dynamic).
 //   Everything else (font setup, if/for blocks, Update()/Render() code,
 //   non-Object allocations like `new PauseMenu()`) is Unknown and never
 //   rewritten. Multi-line statements are supported; edits splice exact
@@ -30,6 +34,11 @@
 //   the declaration is left to the developer (reported).
 // - RemoveObject deletes constructor statements and reports every other
 //   mention (e.g. `delete v;`) for hand cleanup instead of guessing.
+//
+// Implementation is split by concern across scene_cpp_text.cpp (text and
+// bracket utilities), scene_cpp.cpp (constructor scan + matching),
+// scene_cpp_fonts.cpp (Font/text labels), and scene_cpp_ops.cpp (edits);
+// shared internals are declared in scene_cpp_detail.h.
 #pragma once
 
 #include <cstdint>
@@ -90,6 +99,39 @@ struct ObjectModel {
     bool hasConstruct = false;
 };
 
+// A drawable text label: `Font` members (`Font f;` / `Font f[N];`) with
+// their file/size (setFontFile), literal content (setTextContent), color,
+// and renderUI call sites. Positions from constant numeric call args are
+// placed and draggable; anything computed per-frame (loop indices, window
+// math) is dynamicPos and shown, not placed — Studio never guesses layout.
+struct TextItem {
+    std::string varName;
+    int index = -1; // array element, -1 for scalars
+    std::string content;
+    bool hasContent = false;
+    int color[4] = {255, 255, 255, 255};
+    bool hasColor = false;
+    std::string xExpr, yExpr;
+    double xVal = 0.0, yVal = 0.0;
+    bool xNum = false, yNum = false;
+    bool dynamicPos = true;
+    // Winning renderUI site (absolute offsets) for rewrites; none when dynamic.
+    size_t siteOpen = 0, siteClose = 0;
+    size_t arg1Begin = 0, arg1End = 0, arg2Begin = 0, arg2End = 0;
+    bool hasSite = false;
+    std::string fontFile;
+    int pointSize = 0;
+};
+
+struct FontDecl {
+    std::string varName;
+    bool isArray = false;
+    int arraySize = 1;
+    std::string file;
+    int pointSize = 0;
+    bool hasFile = false;
+};
+
 struct SceneModel {
     std::string className;
     std::string declaredName; // Scene("..."), may be empty
@@ -98,6 +140,8 @@ struct SceneModel {
     std::string sourceFile;
     std::vector<Statement> ctorStatements; // recognized + Unknown, in order
     std::vector<ObjectModel> objects;
+    std::vector<FontDecl> fonts;
+    std::vector<TextItem> texts;
     size_t ctorBodyBeginLine = 0; // line of '{'
     size_t ctorBodyEndLine = 0;   // line of matching '}'
     std::string indent;           // detected body indent unit
@@ -147,6 +191,12 @@ bool SetObjectId(SceneFile& file, const std::string& var, uint64_t id,
                  std::string& error);
 bool SetParentObject(SceneFile& file, const std::string& var,
                      const std::string& parentVar, std::string& error);
+// Rewrites a text item's renderUI arguments. Only constant-positioned
+// items qualify (index: array element, -1 for scalars / first match);
+// dynamic layouts fail instead of freezing expressions into constants.
+bool SetTextPosition(SceneFile& file, const std::string& var, int index,
+                     const std::string& x, const std::string& y,
+                     std::string& error);
 struct AddResult {
     bool headerUpdated = false;
 };

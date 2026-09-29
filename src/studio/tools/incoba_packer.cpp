@@ -13,7 +13,7 @@
 #include <iostream>
 #include <string>
 
-#include "../core/incoba.h"
+#include "../core/incoba/incoba.h"
 
 namespace {
 

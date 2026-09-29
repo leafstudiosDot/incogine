@@ -40,11 +40,11 @@
 #ifdef ICG_STUDIO_HAS_MULTIMEDIA
 #include "audio_preview.h"
 #endif
-#include "../core/credits_xml.h"
-#include "../core/incoba.h"
+#include "../core/xml/credits_xml.h"
+#include "../core/incoba/incoba.h"
 #include "../core/project_paths.h"
-#include "../core/project_xml.h"
-#include "../core/scene_discovery.h"
+#include "../core/xml/project_xml.h"
+#include "../core/scene/scene_discovery.h"
 
 StudioMainWindow::StudioMainWindow(const std::string& projectRoot, QWidget* parent)
     : QMainWindow(parent), projectRoot_(projectRoot) {

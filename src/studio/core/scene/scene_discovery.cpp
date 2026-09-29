@@ -3,25 +3,12 @@
 #include "scene_discovery.h"
 
 #include <filesystem>
-#include <fstream>
 #include <regex>
-#include <sstream>
+
+#include "core/xml/xml_util.h"
 
 namespace icg {
 namespace studio {
-namespace {
-
-std::string ReadFile(const std::filesystem::path& p) {
-    std::ifstream in(p, std::ios::binary);
-    if (!in) {
-        return {};
-    }
-    std::ostringstream ss;
-    ss << in.rdbuf();
-    return ss.str();
-}
-
-} // namespace
 
 std::vector<SceneInfo> SceneDiscovery::Scan(const std::string& scenesDir) {
     std::vector<SceneInfo> out;
@@ -42,7 +29,11 @@ std::vector<SceneInfo> SceneDiscovery::Scan(const std::string& scenesDir) {
         if (entry.path().extension() != ".h") {
             continue;
         }
-        const std::string headerText = ReadFile(entry.path());
+        std::string headerText;
+        std::string ignored;
+        if (!xml::ReadTextFile(entry.path().string(), headerText, ignored)) {
+            continue;
+        }
         std::smatch m;
         if (!std::regex_search(headerText, m, classRe)) {
             continue;
@@ -56,7 +47,10 @@ std::vector<SceneInfo> SceneDiscovery::Scan(const std::string& scenesDir) {
         std::string haystack = headerText;
         if (std::filesystem::exists(cpp)) {
             info.sourceFile = cpp.string();
-            haystack += "\n" + ReadFile(cpp);
+            std::string cppText;
+            if (xml::ReadTextFile(cpp.string(), cppText, ignored)) {
+                haystack += "\n" + cppText;
+            }
         }
         if (std::regex_search(haystack, m, nameRe)) {
             info.declaredName = m[1].str();
