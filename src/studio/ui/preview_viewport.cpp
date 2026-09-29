@@ -14,10 +14,12 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QProcess>
 #include <QPushButton>
+#include <QRandomGenerator>
 #include <QSettings>
 #include <QTextStream>
 #include <QTimer>
@@ -25,6 +27,8 @@
 #include <cstring>
 
 #include "../../core/preview/preview_protocol.h"
+#include "../core/preview_exe.h"
+#include "../core/project_xml.h"
 #include "../core/scene_cpp.h"
 #include "../core/scene_discovery.h"
 
@@ -154,6 +158,7 @@ PreviewViewport::PreviewViewport(const std::string& projectRoot, QWidget* parent
     layout->addLayout(editRow);
     layout->addWidget(noteLabel_);
 
+    exeBaseName_ = exeBaseName();
     exeField_->setText(resolveExe());
     refreshScenes();
 
@@ -173,31 +178,38 @@ PreviewViewport::PreviewViewport(const std::string& projectRoot, QWidget* parent
     connect(saveButton_, &QPushButton::clicked, this, &PreviewViewport::onSaveToSource);
 }
 
+QString PreviewViewport::exeBaseName() {
+    // Executable stem from the project identity (<name> in src/project.xml
+    // becomes the binary name — single token, no spaces).
+    icg::studio::ProjectXml project;
+    std::string error;
+    if (icg::studio::ProjectXml::ParseFile(
+            projectRoot_ + "/src/project.xml", project, error) &&
+        !project.name.empty()) {
+        return QString::fromStdString(project.name);
+    }
+    return tr("Incogine");
+}
+
 QString PreviewViewport::resolveExe() {
     QSettings settings;
     const QString saved = settings.value("previewExe").toString();
     if (!saved.isEmpty() && QFileInfo::exists(saved)) {
-        return saved;
+        return saved; // explicit override (still binding-checked at launch)
     }
-#ifdef _WIN32
-    const QString exeName = "Incogine.exe";
-#else
-    const QString exeName = "Incogine";
-#endif
-    // Studio builds into <build>/studio_build/<Config>/; the game lands two
-    // levels up. Also cover Ninja-style single-dir layouts.
+    // CMake-aware resolution: verified build trees first, Studio-sibling
+    // dirs as fallback. The binding check at launch is the real gate.
     const QString studioDir = QCoreApplication::applicationDirPath();
-    const QStringList candidates = {
-        studioDir + "/../../" + exeName,
-        studioDir + "/../" + exeName,
-        studioDir + "/" + exeName,
-    };
-    for (const QString& candidate : candidates) {
-        const QString clean = QDir::cleanPath(candidate);
-        if (QFileInfo::exists(clean)) {
-            return clean;
-        }
+    icg::studio::preview::PreviewExeInfo info;
+    std::string error;
+    if (icg::studio::preview::LocatePreviewExe(
+            projectRoot_, exeBaseName_.toStdString(),
+            {studioDir.toStdString(), (studioDir + "/..").toStdString(),
+             (studioDir + "/../..").toStdString()},
+            info, error)) {
+        return QString::fromStdString(info.exePath);
     }
+    setNote(tr("Game executable: %1").arg(QString::fromStdString(error)));
     return saved;
 }
 
@@ -223,13 +235,28 @@ void PreviewViewport::onLaunch() {
     if (proc_->state() != QProcess::NotRunning) {
         return;
     }
-    const QString exe = exeField_->text();
-    if (exe.isEmpty() || !QFileInfo::exists(exe)) {
-        setStatus(tr("Game executable not found — pick it with Browse..."));
+    QString exe = exeField_->text();
+    if (exe.isEmpty()) {
+        exe = resolveExe();
+        exeField_->setText(exe);
+    }
+    // Dev-build binding: refuse foreign executables, released binaries,
+    // and swapped-in files with a visible error.
+    icg::studio::preview::PreviewBinding binding;
+    std::string verifyError;
+    if (!icg::studio::preview::VerifyPreviewExe(projectRoot_,
+                                                exeBaseName_.toStdString(),
+                                                exe.toStdString(), binding,
+                                                verifyError)) {
+        QMessageBox::warning(this, tr("Preview refused"),
+                             QString::fromStdString(verifyError));
+        setStatus(tr("Launch refused: %1")
+                      .arg(QString::fromStdString(verifyError)));
         return;
     }
     QSettings settings;
-    settings.setValue("previewExe", exe);
+    settings.setValue("previewExe", QString::fromStdString(binding.exePath));
+    exeField_->setText(QString::fromStdString(binding.exePath));
     QStringList args;
     const QString scene = sceneCombo_->currentData().toString();
     if (scene.isEmpty()) {
@@ -237,6 +264,12 @@ void PreviewViewport::onLaunch() {
     } else {
         args << ("--studio-preview=" + scene);
     }
+    sessionToken_ = 0;
+    while (sessionToken_ == 0) {
+        sessionToken_ = QRandomGenerator::global()->generate64();
+    }
+    args << ("--studio-token=" +
+             QString::number(sessionToken_, 16));
     client_.Disconnect();
     connected_ = false;
     canvas_->clear();
@@ -272,8 +305,13 @@ void PreviewViewport::onPoll() {
     }
     if (!connected_) {
         std::string error;
-        if (client_.Connect("incogine_preview", error)) {
+        if (client_.Connect("incogine_preview", sessionToken_, error)) {
             connected_ = true;
+        } else if (!error.empty() && error.find("token mismatch") != std::string::npos) {
+            QMessageBox::warning(this, tr("Session token mismatch"),
+                                 tr("This is not the development build Studio launched."));
+            setStatus(tr("Token mismatch — stopping foreign session."));
+            onStop();
         }
         return;
     }
@@ -298,20 +336,36 @@ void PreviewViewport::onProcessFinished(int exitCode, QProcess::ExitStatus statu
 void PreviewViewport::refreshScenes() {
     sceneCombo_->blockSignals(true);
     sceneCombo_->clear();
+    scenePaths_.clear();
     sceneCombo_->addItem(tr("Default boot"), QString());
     const auto scenes = icg::studio::SceneDiscovery::Scan(projectRoot_ + "/src/scenes");
     for (const auto& scene : scenes) {
-        QString label = QString::fromStdString(scene.className);
+        const QString className = QString::fromStdString(scene.className);
+        QString label = className;
         if (!scene.declaredName.empty()) {
             label += QString(" (\"%1\")").arg(QString::fromStdString(scene.declaredName));
         }
         QStringList paths;
         paths << QString::fromStdString(scene.headerFile)
               << QString::fromStdString(scene.sourceFile);
-        sceneCombo_->addItem(label, paths);
+        sceneCombo_->addItem(label, className);
+        scenePaths_.insert(className, paths);
     }
     sceneCombo_->blockSignals(false);
     refreshObjects();
+}
+
+bool PreviewViewport::selectPreviewScene(const QString& className) {
+    const int index = sceneCombo_->findData(className);
+    if (index < 0) {
+        return false;
+    }
+    sceneCombo_->setCurrentIndex(index);
+    return true;
+}
+
+QString PreviewViewport::selectedPreviewScene() const {
+    return sceneCombo_ ? sceneCombo_->currentData().toString() : QString();
 }
 
 void PreviewViewport::onSceneChanged(int /*index*/) {
@@ -326,7 +380,7 @@ void PreviewViewport::refreshObjects() {
     currentHasId_ = false;
     currentSceneOk_ = false;
 
-    const QStringList paths = sceneCombo_->currentData().toStringList();
+    const QStringList paths = scenePaths_.value(sceneCombo_->currentData().toString());
     if (paths.size() < 2 || paths[1].isEmpty()) {
         setNote(tr("Pick a scene to list its parser-known objects."));
         return;

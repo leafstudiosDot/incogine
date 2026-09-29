@@ -28,8 +28,8 @@
 #define ICG_PREVIEW_MAGIC4 'R'
 #define ICG_PREVIEW_MAGIC5 'E'
 #define ICG_PREVIEW_MAGIC6 'V'
-#define ICG_PREVIEW_MAGIC7 '2'
-#define ICG_PREVIEW_VERSION 2u
+#define ICG_PREVIEW_MAGIC7 '3'
+#define ICG_PREVIEW_VERSION 3u
 #define ICG_PREVIEW_WIDTH 1280u
 #define ICG_PREVIEW_HEIGHT 720u
 #define ICG_PREVIEW_BPP 4u
@@ -53,7 +53,9 @@ typedef struct IcgPreviewHeader {
     volatile uint32_t ackSeq;
     uint64_t cmdId;           // object id for SELECT/TRANSFORM
     float cmdF[9];            // TRANSFORM: pos xyz, rot xyz, scale xyz
-    uint32_t reserved[11];    // pad to 128 bytes
+    uint64_t sessionToken;    // random per Studio launch (--studio-token);
+                              // 0 = unbound (legacy); must match when set
+    uint32_t reserved[9];     // pad to 128 bytes
 } IcgPreviewHeader;
 
 #endif // ICG_PREVIEW_PROTOCOL_H

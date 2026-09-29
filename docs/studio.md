@@ -144,17 +144,18 @@ cmake --build . --target IncogineIncoba   # packer only
   while `Update()`/`Render()` code, control blocks, and non-Object
   allocations stay verbatim. The visual hierarchy/Inspector panels that
   drive it are next.
-- **Live preview viewport (pinned tab).** The game runs with
-  `--studio-preview` (or `--studio-preview=<SceneClass>`, chosen from a
-  scene dropdown backed by scene discovery) as a subprocess (normal boot
-  or the selected scene via the game layer's preview registry, window
-  locked to the 1280×720 design resolution, `[PREVIEW]` title) and mirrors
-  every frame into shared memory (`ICGPREV2` protocol: seqlock frames,
-  acked commands with id + transform payload). Studio polls at ~30 Hz,
-  displays with aspect fit, and can ask the game to quit gracefully on
-  Stop (terminate/kill fallback). Pixel-exact because it is the real
-  renderer — an engine crash can't take the IDE down. The game executable
-  auto-resolves (sibling of Studio, remembered override, or Browse).
+- **Live preview viewport (pinned tab).** The Viewport tab auto-locates
+  the development game executable from the CMake build tree (VS 2026 and
+  Xcode multi-config layouts, Ninja/Make single-config, macOS bundles —
+  verified against the tree's `CMakeCache`), named after `<name>` in
+  `src/project.xml`. Studio itself opens only against a verified build:
+  a startup gate requires the SHA-256 to match the CMake-written sidecar
+  and force-closes with an error otherwise (re-checked at preview launch,
+  where a per-launch session token additionally binds the channel). The game runs
+  with `--studio-preview[=<SceneClass>]` (scene dropdown, registry boot)
+  as a subprocess, window locked to 1280×720 `[PREVIEW]`, mirroring every
+  frame (seqlock, acked commands with id + transform payload); Studio
+  polls at ~30 Hz with aspect fit and quits gracefully on Stop.
   Below the viewport, the chosen scene's parser-known objects are listed
   with Position/Rotation/Scale controls: **Apply live** moves the running
   object over the channel (needs a file id), **Save to source** rewrites

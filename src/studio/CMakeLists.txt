@@ -22,6 +22,8 @@ set(ICG_STUDIO_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_discovery.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/scene_cpp.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/preview_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/preview_exe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/sha256.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba.cpp
 )
 

@@ -1,6 +1,7 @@
 #include "engine.h"
 #include "../scripting/csharp/csharphost.h"
 #include "../preview/preview_apply.h"
+#include "../preview/preview_args.h"
 #include "../preview/preview_scenes.h"
 using namespace std;
 
@@ -8,14 +9,10 @@ Engine::Engine(int argc, char* argv[]) : sceneManager(nullptr), isRunning(true) 
     devmode = std::find(argv, argv + argc, std::string("-dev")) != argv + argc;
     debugMode = std::find(argv, argv + argc, std::string("-debug")) != argv + argc;
     skipSplash = std::find(argv, argv + argc, std::string("--skipSplash")) != argv + argc;
-    previewMode = std::find(argv, argv + argc, std::string("--studio-preview")) != argv + argc;
-    for (int i = 0; i < argc; ++i) {
-        const std::string arg = argv[i];
-        if (arg.rfind("--studio-preview=", 0) == 0) {
-            previewMode = true;
-            previewScene_ = arg.substr(18);
-        }
-    }
+    const PreviewArgs previewArgs = ParsePreviewArgs(argc, argv);
+    previewMode = previewArgs.enabled;
+    previewScene_ = previewArgs.scene;
+    previewToken_ = previewArgs.token;
     sceneManager = new SceneManager();
 }
 
@@ -150,6 +147,7 @@ void Engine::Init() {
         // Touches the game-layer registration TU so its static scene
         // registrations (and every named scene) actually link.
         SDL_Log("Preview scenes registered: %d", PreviewSceneRegistrationCount());
+        previewServer_.SetSessionToken(previewToken_);
         std::string previewError;
         if (!previewServer_.Start(previewError)) {
             // Preview mirroring is best-effort: the game still runs so a

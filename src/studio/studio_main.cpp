@@ -10,8 +10,48 @@
 #include <iostream>
 
 #include "ui/main_window.h"
+#include "ui/preview_viewport.h"
 
+#include "core/preview_exe.h"
 #include "core/project_paths.h"
+#include "core/project_xml.h"
+
+namespace {
+
+// Studio refuses to run unless the development game build verifies:
+// executable located in a CMake build tree of this project and its
+// SHA-256 matching the CMake-written sidecar. Foreign projects,
+// released binaries, and swapped-in files all fail closed.
+bool checkDevBinding(const std::string& root, std::string& errorOut) {
+    icg::studio::ProjectXml project;
+    std::string error;
+    if (!icg::studio::ProjectXml::ParseFile(root + "/src/project.xml", project,
+                                            error) ||
+        project.name.empty()) {
+        errorOut = "Cannot read project identity (src/project.xml): " + error;
+        return false;
+    }
+    const QString appDir = QCoreApplication::applicationDirPath();
+    icg::studio::preview::PreviewExeInfo info;
+    if (!icg::studio::preview::LocatePreviewExe(
+            root, project.name,
+            {appDir.toStdString(), (appDir + "/..").toStdString(),
+             (appDir + "/../..").toStdString()},
+            info, error)) {
+        errorOut = "No development build found: " + error +
+                   "\nBuild the project with CMake first.";
+        return false;
+    }
+    icg::studio::preview::PreviewBinding binding;
+    if (!icg::studio::preview::VerifyPreviewExe(root, project.name, info.exePath,
+                                                binding, error)) {
+        errorOut = "Development build verification failed: " + error;
+        return false;
+    }
+    return true;
+}
+
+} // namespace
 
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
@@ -37,9 +77,26 @@ int main(int argc, char** argv) {
                              "File browsers will still open, but XML models will fail to load.");
     }
 
+    if (!selfTest) {
+        // Binding gate: Studio only opens against a verified development
+        // build. Anything else force-closes with an error.
+        std::string bindingError;
+        if (!checkDevBinding(root, bindingError)) {
+            std::cerr << "binding failed: " << bindingError << "\n";
+            QMessageBox::critical(nullptr, "Incogine Studio",
+                                  QString::fromStdString(bindingError));
+            return 1;
+        }
+        std::cout << "binding ok for root " << root << "\n";
+    } else {
+        std::cout << "self-test: binding gate bypassed (diagnostic mode)\n";
+    }
+
     StudioMainWindow win(root);
     win.show();
     if (selfTest) {
+        // Headless smoke test (QT_QPA_PLATFORM=offscreen): everything
+        // else runs for real.
         // Headless smoke test (QT_QPA_PLATFORM=offscreen): the constructor
         // already runs scene discovery + XML model loads; also flip through
         // a dark palette so the highlighters rebuild (paletteChanged path),
@@ -49,8 +106,14 @@ int main(int argc, char** argv) {
         win.onOpenFile(QString::fromStdString(root + "/src/assets/fonts/main_font.ttf"));
         win.onOpenFile(QString::fromStdString(root + "/src/assets/audio/testbgm.ogg"));
         std::cout << "self-test: code/font/audio pages opened\n";
-        // Scene sidebar clicks must land on the Scene tab (renamed) without
-        // opening extra file tabs.
+        // Scene dropdown must carry the class name (used for the launch
+        // argument), not just display text.
+        if (auto* viewport = win.findChild<PreviewViewport*>()) {
+            const bool selected = viewport->selectPreviewScene("MainScene");
+            std::cout << "self-test: scene dropdown select MainScene "
+                      << (selected ? "ok" : "FAILED") << ", selected='"
+                      << viewport->selectedPreviewScene().toStdString() << "'\n";
+        }
         const int pagesBefore = win.filePageCount();
         if (auto* tree = win.findChild<QTreeWidget*>()) {
             if (QTreeWidgetItem* top = tree->topLevelItem(0)) {

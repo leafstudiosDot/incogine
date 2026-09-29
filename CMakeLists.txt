@@ -818,3 +818,17 @@ if(NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
         )
     endif()
 endif()
+
+# SHA-256 sidecar for Studio dev-build binding (desktop dev workflow only).
+# Written next to the game binary on every link: Studio refuses to preview
+# executables whose hash does not match (foreign projects, released or
+# swapped-in binaries). See docs/studio.md and preview_exe.h.
+if(NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
+    add_custom_command(TARGET ${ICG_GAME_TARGET} POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DEXE=$<TARGET_FILE:${ICG_GAME_TARGET}>
+                -DOUT=$<TARGET_FILE_DIR:${ICG_GAME_TARGET}>/${PROJECT_NAME}.sha256
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/sha256sidecar.cmake
+        COMMENT "Writing SHA-256 sidecar for Studio dev-build binding"
+    )
+endif()

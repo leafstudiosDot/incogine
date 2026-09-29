@@ -15,6 +15,7 @@
 
 #include <QWidget>
 #include <QImage>
+#include <QMap>
 #include <QProcess>
 
 #include <cstdint>
@@ -57,6 +58,11 @@ class PreviewViewport : public QWidget {
 public:
     explicit PreviewViewport(const std::string& projectRoot, QWidget* parent = nullptr);
 
+    // Test/introspection: item data carries the scene class name (used for
+    // the --studio-preview= argument); header/source paths live in scenePaths_.
+    bool selectPreviewScene(const QString& className);
+    QString selectedPreviewScene() const;
+
 private slots:
     void onLaunch();
     void onStop();
@@ -71,6 +77,7 @@ private slots:
 private:
     void setStatus(const QString& text);
     QString resolveExe();
+    QString exeBaseName();
     void refreshScenes();
     void refreshObjects();
     void setNote(const QString& text);
@@ -83,6 +90,7 @@ private:
     QPushButton* launchButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
     QComboBox* sceneCombo_ = nullptr;
+    QMap<QString, QStringList> scenePaths_; // class name -> {header, source}
     QListWidget* objectList_ = nullptr;
     QLabel* noteLabel_ = nullptr;
     QDoubleSpinBox* posSpin_[3] = {nullptr, nullptr, nullptr};
@@ -92,8 +100,10 @@ private:
     QPushButton* saveButton_ = nullptr;
     icg::studio::preview::PreviewClient client_;
     bool connected_ = false;
+    uint64_t sessionToken_ = 0;
     std::vector<uint8_t> frameBytes_;
     std::string projectRoot_;
+    QString exeBaseName_;
     icg::studio::scenecpp::SceneFile currentScene_;
     bool currentSceneOk_ = false;
     QString currentHeader_;

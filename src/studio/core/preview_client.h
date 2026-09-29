@@ -23,6 +23,10 @@ public:
     PreviewClient& operator=(const PreviewClient&) = delete;
 
     bool Connect(const std::string& name, std::string& error);
+    // Same, but additionally requires the segment's session token to match
+    // (binds the channel to the Studio launch that created it). A zero
+    // expected token skips the check.
+    bool Connect(const std::string& name, uint64_t expectedToken, std::string& error);
     void Disconnect();
     bool IsConnected() const { return base_ != nullptr; }
 

@@ -25,7 +25,7 @@ namespace studio {
 namespace preview {
 namespace {
 
-constexpr char kMagic[8] = {'I', 'C', 'G', 'P', 'R', 'E', 'V', '2'};
+constexpr char kMagic[8] = {'I', 'C', 'G', 'P', 'R', 'E', 'V', '3'};
 
 const IcgPreviewHeader* HeaderOf(const uint8_t* base) {
     return reinterpret_cast<const IcgPreviewHeader*>(base);
@@ -42,6 +42,11 @@ bool HeaderValid(const IcgPreviewHeader* header) {
 } // namespace
 
 bool PreviewClient::Connect(const std::string& name, std::string& error) {
+    return Connect(name, 0, error);
+}
+
+bool PreviewClient::Connect(const std::string& name, uint64_t expectedToken,
+                            std::string& error) {
     if (IsConnected()) {
         return true;
     }
@@ -91,6 +96,11 @@ bool PreviewClient::Connect(const std::string& name, std::string& error) {
 #endif
     if (!HeaderValid(HeaderOf(base_))) {
         error = "preview segment failed validation (magic/version/size)";
+        Disconnect();
+        return false;
+    }
+    if (expectedToken != 0 && HeaderOf(base_)->sessionToken != expectedToken) {
+        error = "preview session token mismatch (not the build Studio launched)";
         Disconnect();
         return false;
     }

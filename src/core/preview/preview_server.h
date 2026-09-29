@@ -24,6 +24,10 @@ public:
     void Shutdown();
     bool IsActive() const { return base_ != nullptr; }
 
+    // Binds this session to a Studio launch (from --studio-token). Must be
+    // called before Start(); 0 leaves the segment unbound.
+    void SetSessionToken(uint64_t token) { pendingToken_ = token; }
+
     // Publishes one frame (bottom-up RGBA rows). Dimensions must match the
     // protocol exactly; anything else is ignored.
     void PushFrame(uint32_t width, uint32_t height, uint32_t pitch,
@@ -39,6 +43,7 @@ private:
     }
 
     uint8_t* base_ = nullptr;
+    uint64_t pendingToken_ = 0;
 #ifdef _WIN32
     void* fileMap_ = nullptr;
 #else

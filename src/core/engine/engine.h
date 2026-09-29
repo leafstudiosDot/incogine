@@ -78,6 +78,7 @@ class Engine {
         bool devmode;
         bool previewMode; // --studio-preview: mirror frames to Studio
         std::string previewScene_; // --studio-preview=<SceneClass>
+        uint64_t previewToken_ = 0; // --studio-token=<hex>, 0 = unbound
         PreviewServer previewServer_;
         std::vector<uint8_t> previewPixels_;
         bool isRunning = false;

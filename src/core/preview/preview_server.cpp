@@ -19,9 +19,9 @@
 
 namespace {
 
-constexpr char kMagic[8] = {'I', 'C', 'G', 'P', 'R', 'E', 'V', '2'};
+constexpr char kMagic[8] = {'I', 'C', 'G', 'P', 'R', 'E', 'V', '3'};
 
-void InitHeader(IcgPreviewHeader* header) {
+void InitHeader(IcgPreviewHeader* header, uint64_t token) {
     std::memcpy(header->magic, kMagic, 8);
     header->version = ICG_PREVIEW_VERSION;
     header->frameSeq = 0;
@@ -31,6 +31,7 @@ void InitHeader(IcgPreviewHeader* header) {
     header->cmdSeq = 0;
     header->cmdCode = ICG_PREVIEW_CMD_NOP;
     header->ackSeq = 0;
+    header->sessionToken = token;
     std::memset(header->reserved, 0, sizeof(header->reserved));
 }
 
@@ -98,7 +99,7 @@ bool PreviewServer::Start(std::string& error) {
         return false;
     }
 #endif
-    InitHeader(Header());
+    InitHeader(Header(), pendingToken_);
     return true;
 }
 
