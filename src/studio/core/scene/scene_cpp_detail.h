@@ -45,7 +45,7 @@ size_t MatchBracket(const std::string& text, size_t open, char close);
 
 // Header `Font` declarations + file-wide call sites (scene_cpp_fonts.cpp).
 void ParseFonts(const std::string& headerText, const std::string& sourceText,
-                SceneModel& model);
+                SceneModel& model, WindowSize window, FontMeasureFn measure);
 // Fold line vectors back into texts and re-parse (scene_cpp_ops.cpp).
 bool Reparse(SceneFile& file, std::string& error);
 // Replaces [bLine,bCol)..[eLine,eCol) (1-based lines, 0-based cols).

@@ -115,6 +115,8 @@ public:
     bool canRedoScene() const { return !redoStack_.empty(); }
     void undoScene();
     void redoScene();
+    // Writes .cpp/.h to disk; false when nothing was written.
+    bool saveSceneToSource();
     // Overlay + picking helpers used by the canvas.
     void drawOverlay(QPainter* painter, const QRectF& fitted);
     bool isMode2D() const;
@@ -123,6 +125,10 @@ public:
     // Selection: objects ("object") and font labels ("text", index in model).
     QString selectedKind() const { return selectedKind_; }
     int selectedIndex() const;
+    // Simulated engine window (Scene tab "Window" combo); the canvas fits
+    // this aspect like the game window.
+    int simWindowWidth() const { return windowWidth_; }
+    int simWindowHeight() const { return windowHeight_; }
 
 signals:
     void dirtyChanged(bool dirty);
@@ -142,6 +148,8 @@ private slots:
     void onDragMove(const QPoint& widgetPos);
     void onDragFinish();
     void onAnchorChanged(int index);
+    void onWindowSizeChanged(int index);
+    void applyEdgePin(int edge, bool on); // 0 Left, 1 Right, 2 Top, 3 Bottom
     void onDropFile(const QString& path, const QPoint& widgetPos);
     void onPan(const QPoint& deltaPixels);
     void onZoom2D(double factor, const QPoint& widgetPos);
@@ -193,6 +201,8 @@ private:
     QDoubleSpinBox* scaleSpin_[3] = {nullptr, nullptr, nullptr};
     QDoubleSpinBox* colorSpin_[4] = {nullptr, nullptr, nullptr, nullptr};
     QComboBox* anchorCombo_ = nullptr; // renderUI anchor presets (texts)
+    QPushButton* edgeBtn_[4] = {nullptr, nullptr, nullptr, nullptr}; // L/R/T/B constraint toggles
+    QComboBox* windowCombo_ = nullptr; // simulated engine window size
     QPushButton* undoButton_ = nullptr; // scene source history (per tab)
     QPushButton* redoButton_ = nullptr;
     QLabel* idLabel_ = nullptr;
@@ -203,6 +213,11 @@ private:
 
     QMap<QString, QString> fontFamilies_; // asset path -> loaded family
     QString familyForFont(const QString& assetPath);
+    // Rasterized text size in engine px (mirrors Font::getSize after the
+    // windowHeight/720 font scale all in-repo scenes use). Backs both the
+    // parser measurer and the constraint margin math (single source).
+    bool measureFont(const QString& assetPath, int pointSizePt, int windowHeight,
+                     const QString& content, double& w, double& h);
 
     // ---- scene source history (undo/redo, per tab instance) ----
     struct SceneHistoryEntry {
@@ -223,6 +238,11 @@ private:
 
     icg::studio::scenecpp::SceneFile sceneFile_;
     bool sceneOk_ = false;
+    // Simulated engine window (GetWindowSize reports this; the engine
+    // forces 16:9, so presets stay 16:9). Editing/dragging stays in
+    // engine pixels at this size.
+    int windowWidth_ = 1280;
+    int windowHeight_ = 720;
     QString sceneClass_;
     QString sceneHeader_;
     QString sceneSource_;

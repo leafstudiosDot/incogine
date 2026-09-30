@@ -60,7 +60,7 @@ void PreviewCanvas::paintEvent(QPaintEvent* /*event*/) {
     painter.fillRect(rect(), Qt::black);
     if (frame_.isNull()) {
         painter.setPen(Qt::gray);
-        painter.drawText(rect(), Qt::AlignCenter, tr("No signal — launch the game preview"));
+        painter.drawText(rect(), Qt::AlignCenter, tr("No signal — launch Incogine preview"));
         return;
     }
     // Fit keeping aspect; flip vertically (frames arrive bottom-up).
@@ -81,7 +81,7 @@ PreviewViewport::PreviewViewport(const std::string& projectRoot, PreviewSession*
     canvas_ = new PreviewCanvas();
 
     exeField_ = new QLineEdit();
-    exeField_->setPlaceholderText(tr("Game executable (auto-located from CMake)..."));
+    exeField_->setPlaceholderText(tr("Incogine executable (auto-located from CMake)..."));
     auto* browseButton = new QPushButton(tr("Browse..."));
     launchButton_ = new QPushButton(tr("Launch preview"));
     stopButton_ = new QPushButton(tr("Stop"));
@@ -89,7 +89,7 @@ PreviewViewport::PreviewViewport(const std::string& projectRoot, PreviewSession*
     status_ = new QLabel(tr("Stopped."));
 
     QHBoxLayout* top = new QHBoxLayout();
-    top->addWidget(new QLabel(tr("Game:")));
+    top->addWidget(new QLabel(tr("Incogine executable:")));
     top->addWidget(exeField_, 1);
     top->addWidget(browseButton);
     top->addWidget(launchButton_);
@@ -145,13 +145,13 @@ QString PreviewViewport::resolveExe() {
             info, error)) {
         return QString::fromStdString(info.exePath);
     }
-    status_->setText(tr("Game executable: %1").arg(QString::fromStdString(error)));
+    status_->setText(tr("Incogine executable: %1").arg(QString::fromStdString(error)));
     return saved;
 }
 
 void PreviewViewport::onBrowse() {
     const QString path = QFileDialog::getOpenFileName(
-        this, tr("Select game executable"), exeField_->text());
+        this, tr("Select Incogine executable"), exeField_->text());
     if (!path.isEmpty()) {
         exeField_->setText(path);
         QSettings settings;

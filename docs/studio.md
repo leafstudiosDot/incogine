@@ -104,6 +104,17 @@ cmake --build . --target IncogineIncoba   # packer only
   Saves are byte-verbatim: files are read raw and the original EOL
   (CRLF vs LF) and UTF-8 BOM ride along as page properties, so
   untouched files round-trip byte-identically.
+- **Manual game compile** — the main toolbar's **Compile game** button
+  next to Save/Refresh/Rescan configures (`cmake -S/-B`, first run
+  only) and builds the CMake game target (`CMAKE_PROJECT_NAME` from
+  the configured tree, `Debug`), never Studio itself and never
+  automatically; VS2026/CMake CLI builds keep working untouched. The
+  button disables while the build runs. Output streams to the Output
+  dock color-coded: errors red, warnings yellow, info in the theme's
+  default text color (palette-driven, correct in dark/light mode).
+  Switching scenes with unsaved Scene-tab edits prompts
+  Save / Don't Save / Cancel first (the editor re-parses from disk, so
+  unsaved work would otherwise be lost).
 - **Audio preview tabs** (`Audio - <name>`) — Audition-style stereo
   waveform lanes decoded in the background (progressive draw, played region
   highlighted, red playhead), with play/pause (or `Space`), `mm:ss / mm:ss`
@@ -145,7 +156,15 @@ cmake --build . --target IncogineIncoba   # packer only
   the viewport from the 1280×720 base (like the game's `windowHeight/720`
   factor), so layout matches at any canvas size and on any renderer
   backend (SDL3/OpenGL today — DirectX/Metal/Vulkan must preserve the
-  same design-pixel mapping). Toolbar: cursor tools **Select / Move /
+  same design-pixel mapping). Labels draw single-line, never wrapped
+  (the engine blits one text quad), in device pixel sizes matching the
+  engine's `setFontScale` re-rasterization. The **Window** combo
+  (640×360 … 2560×1440, always 16:9 like the game enforces on resize)
+  simulates the engine window: `GetWindowSize()` re-evaluates at that
+  size (positions, `Square` scale factors, glyph sizes), the camera
+  remaps 1:1 onto the simulated window, and unsaved edits survive the
+  switch — so resize behavior is checkable without running the game.
+  Toolbar: cursor tools **Select / Move /
   Rotate / Scale / Hand** (keys 1–5; rotate/scale drags arrive later,
   spins work now), 2D/3D toggle, Perspective/Orthographic/Isometric
   camera selector, 10px snap, Save to source. Hierarchy tree (objects
@@ -157,12 +176,18 @@ cmake --build . --target IncogineIncoba   # packer only
   follows the cursor during the drag; source spans rewrite once on
   release, and a refused drop snaps back to the press-time position).
   The Inspector's Anchor presets snap a placed label to the 9-point
-  window grid (Left/Center/Right × Top/Middle/Bottom over the 1280×720
-  design space, the same `GetWindowSize()` reference the engine
-  exposes) by writing constants through the normal text-position path,
-  so anchored labels stay draggable; labels sharing one loop `renderUI`
-  call can't drag or anchor (one edit would move siblings) and say so
-  instead. Dropping an asset creates a placeholder
+  window grid (Left/Center/Right × Top/Middle/Bottom over the simulated
+  window size) by writing constants through the normal text-position
+  path, so anchored labels stay draggable; labels sharing one loop
+  `renderUI` call can't drag or anchor (one edit would move siblings)
+  and say so instead. The **Stick** toggles (Left/Right/Top/Bottom)
+  constrain instead of placing: checked edges rewrite `renderUI` args
+  to `GetWindowSize()`-relative forms measured via `getSize()` (the
+  `versionFont` idiom), so the label holds its edge at any window size;
+  opposing pairs on one axis center the label, and unchecking bakes
+  constants back. Constrained labels keep drawing (Studio measures
+  glyphs with the real TTFs) but refuse drags/anchors/spins that would
+  bake their constraints — Hierarchy tags them `(constrained)`. Dropping an asset creates a placeholder
   `Square_N`. In 3D mode an orbitable grid previews camera math until
   Cube rendering lands. Edits apply to the in-memory model (dirty `*`)
   and flush on Save. Every committed edit pushes the pre-edit source
@@ -185,8 +210,13 @@ cmake --build . --target IncogineIncoba   # packer only
   `setColor`, and `renderUI` call sites. Constant args place the label
   directly; counted `for` loops over static data (menu tables, `sizeof`
   idioms, `Data.size()`) evaluate per iteration with C++ int/float
-  semantics at the 1280×720 design size, so menu lists render with real
-  content and positions. Loop-placed labels share one call site: drawn
+  semantics at the simulated window size (`GetWindowSize()` reports it;
+  default 1280×720), so menu lists render with real content and
+  positions at any simulated size. `getSize()` in layout math resolves
+  through an optional measurer (Studio supplies the TTF metrics), so
+  window-constrained labels place too — tracked with edge pins
+  (left/right/center, top/bottom/center) and a no-bake guard instead of
+  going dynamic. Loop-placed labels share one call site: drawn
   and selectable, but position rewrites refuse (`sharedSite`) instead of
   moving siblings. Truly computed layouts (measured text sizes, runtime
   selection state) stay dynamic and refuse rewrites instead of freezing

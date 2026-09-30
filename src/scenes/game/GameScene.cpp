@@ -1,4 +1,4 @@
-﻿#include "GameScene.h"
+#include "GameScene.h"
 #include "../../core/engine/engine.h"
 
 GameScene::GameScene() : Scene("Game Scene") {
@@ -10,7 +10,7 @@ GameScene::GameScene() : Scene("Game Scene") {
             std::cerr << "Failed to load menu index: \"Text\" font in GameScene::GameScene" << std::endl;
         }
     }
-    
+
 	audio = new Audio("audio/testbgm.ogg"); // resolved via AssetManager (disk first, embedded fallback)
 }
 
@@ -46,7 +46,7 @@ void GameScene::Render() {
     float scale = static_cast<float>(windowHeight) / 720; // 720 is base height
     steamfont.setFontScale(scale);
 
-    steamfont.renderUI((Engine::Instance(0, nullptr)->GetWindowSize().width / 4), (Engine::Instance(0, nullptr)->GetWindowSize().height / 2));
+    steamfont.renderUI(640, 360);
 
 	pauseMenu->Render();
 }

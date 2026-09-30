@@ -67,12 +67,12 @@ void PreviewSession::start(const QString& exe, const QStringList& args) {
     proc_->setWorkingDirectory(QFileInfo(exe).absolutePath());
     proc_->start(exe, args);
     if (!proc_->waitForStarted(5000)) {
-        emit statusChanged(tr("Failed to start the game process."));
+        emit statusChanged(tr("Failed to start the Incogine process."));
         return;
     }
     emit runningChanged(true);
     poll_->start();
-    emit statusChanged(tr("Game started — waiting for frames..."));
+    emit statusChanged(tr("Incogine started — waiting for frames..."));
 }
 
 void PreviewSession::stop() {
@@ -131,6 +131,6 @@ void PreviewSession::onProcessFinished(int exitCode, QProcess::ExitStatus status
     emit connectedChanged(false);
     emit runningChanged(false);
     emit statusChanged(status == QProcess::NormalExit
-                           ? tr("Game exited (code %1).").arg(exitCode)
-                           : tr("Game process crashed."));
+                           ? tr("Incogine exited (code %1).").arg(exitCode)
+                           : tr("Incogine process crashed."));
 }

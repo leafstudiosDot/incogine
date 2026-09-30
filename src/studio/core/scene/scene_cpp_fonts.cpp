@@ -9,8 +9,11 @@
 
 #include <cctype>
 #include <cstdint>
+#include <iomanip>
 #include <regex>
+#include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace icg {
 namespace studio {
@@ -305,8 +308,17 @@ struct EvalValue {
 struct EvalEnv {
     // Resolved identifiers (loop index, locals, window consts, constexprs).
     std::unordered_map<std::string, EvalValue> vars;
+    // Locals whose values derive from GetWindowSize()/getSize() (provenance
+    // for constraint detection: `yindex` carries no marker itself).
+    std::unordered_map<std::string, bool> windowVars;
     // `<name>.size()` counts for static data arrays.
     std::unordered_map<std::string, int64_t> sizes;
+    // Simulated engine window (GetWindowSize reports this).
+    int windowWidth = 1280;
+    int windowHeight = 720;
+    // Glyph measurement + model access for getSize() substitution.
+    FontMeasureFn measure = nullptr;
+    const SceneModel* model = nullptr;
 };
 
 namespace {
@@ -579,9 +591,10 @@ struct EvalParser {
 
 } // namespace
 
-// Replaces Engine::...->GetWindowSize().width|height with design constants
-// (preview forces 1280x720) so layout math evaluates.
-std::string NormalizeWindowAccess(std::string expr) {
+// Replaces Engine::...->GetWindowSize().width|height with the simulated
+// window dimensions so layout math evaluates as the running game computes.
+std::string NormalizeWindowAccess(std::string expr, int windowWidth,
+                                  int windowHeight) {
     static const std::regex getSizeRe(
         "Engine\\s*::\\s*Instance\\s*\\([^)]*\\)\\s*->\\s*GetWindowSize\\s*\\("
         "\\s*\\)\\s*\\.\\s*(width|height)");
@@ -590,7 +603,8 @@ std::string NormalizeWindowAccess(std::string expr) {
     std::string::const_iterator it = expr.begin();
     while (std::regex_search(it, expr.cend(), m, getSizeRe)) {
         out.append(it, m[0].first);
-        out += (m[1].str() == "width" ? "1280" : "720");
+        out += (m[1].str() == "width" ? std::to_string(windowWidth)
+                                      : std::to_string(windowHeight));
         it = m.suffix().first;
     }
     out.append(it, expr.cend());
@@ -598,11 +612,187 @@ std::string NormalizeWindowAccess(std::string expr) {
 }
 
 bool EvalExpr(const std::string& expr, const EvalEnv& env, EvalValue& out) {
-    const std::string normalized = NormalizeWindowAccess(expr);
+    const std::string normalized =
+        NormalizeWindowAccess(expr, env.windowWidth, env.windowHeight);
     EvalParser parser(normalized, env);
     out = parser.parseExpr();
     parser.skip();
     return parser.ok && parser.pos == normalized.size();
+}
+
+std::string NumStr(double v) {
+    std::ostringstream oss;
+    oss << std::setprecision(6) << std::noshowpoint << v;
+    return oss.str();
+}
+
+// True when an expression is window-relative: direct GetWindowSize() /
+// getSize() markers, or identifiers bound from window-relative locals
+// (provenance tracked in env.windowVars, e.g. `yindex`).
+bool IsWindowRelative(const std::string& expr, const EvalEnv& env) {
+    if (expr.find("GetWindowSize") != std::string::npos ||
+        expr.find("getSize") != std::string::npos) {
+        return true;
+    }
+    static const std::regex identRe("[A-Za-z_]\\w*");
+    std::string::const_iterator it = expr.begin();
+    std::smatch m;
+    while (std::regex_search(it, expr.cend(), m, identRe)) {
+        if (env.windowVars.find(m[0].str()) != env.windowVars.end()) {
+            return true;
+        }
+        it = m.suffix().first;
+        if (it == expr.cend()) {
+            break;
+        }
+    }
+    return false;
+}
+
+// Replaces `VAR.getSize().width|height` (bare Font or `VAR[const index]`)
+// with measured engine px. Works on a copy: false leaves expr untouched.
+bool SubstituteFontSizes(std::string& expr, const EvalEnv& env) {
+    if (expr.find("getSize") == std::string::npos || !env.measure ||
+        !env.model) {
+        return expr.find("getSize") == std::string::npos;
+    }
+    static const std::regex getSizeRe(
+        "([A-Za-z_]\\w*)\\s*(\\[[^\\]]+\\])?\\s*\\.\\s*getSize\\s*\\(\\s*\\)"
+        "\\s*\\.\\s*(width|height)");
+    std::string work = expr;
+    for (int pass = 0; pass < 8; ++pass) {
+        std::smatch m;
+        if (!std::regex_search(work, m, getSizeRe)) {
+            expr = work;
+            return true;
+        }
+        const std::string var = m[1].str();
+        const bool wantW = (m[3].str() == "width");
+        // Owning declaration for the raster size.
+        const FontDecl* decl = nullptr;
+        for (const FontDecl& d : env.model->fonts) {
+            if (d.varName == var) {
+                decl = &d;
+                break;
+            }
+        }
+        if (!decl || !decl->hasFile || decl->pointSize <= 0) {
+            return false;
+        }
+        // Content of the measured item (index-resolved for arrays).
+        int itemIdx = -1;
+        if (m[2].matched) {
+            EvalValue iv;
+            if (!EvalExpr(detail::Trim(m[2].str().substr(
+                                          1, m[2].str().size() - 2)),
+                          env, iv) ||
+                iv.isFloat) {
+                return false;
+            }
+            itemIdx = static_cast<int>(iv.i);
+        }
+        std::string content;
+        bool found = false;
+        for (const TextItem& t : env.model->texts) {
+            if (t.varName == var && t.index == itemIdx) {
+                content = t.content;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return false;
+        }
+        double w = 0, h = 0;
+        if (!env.measure(decl->file, decl->pointSize, env.windowHeight,
+                         content, w, h)) {
+            return false;
+        }
+        work.replace(static_cast<size_t>(m.position(0)),
+                     static_cast<size_t>(m.length(0)),
+                     NumStr(wantW ? w : h));
+    }
+    return false; // still nested after 8 passes: give up
+}
+
+// Layout evaluation: getSize() substitution first, then the evaluator.
+// Window-relative expressions evaluate to numbers here; constraint-ness
+// is tracked separately (pins/provenance), not by failure.
+bool EvalLayoutExpr(const std::string& expr, const EvalEnv& env,
+                    EvalValue& out) {
+    std::string substituted = expr;
+    if (!SubstituteFontSizes(substituted, env)) {
+        return false;
+    }
+    return EvalExpr(substituted, env, out);
+}
+
+// Edge pins for the constraint toggles, from the raw winning arg text
+// (whitespace-insensitive). Canonical Studio forms pin exactly; other
+// window-relative code leaves pins empty (custom constraint: toggles
+// enabled, all off). Plain numeric constants pin left/top (absolute
+// coords are origin-relative by definition).
+void DetectPins(const std::string& rawArg, const std::string& var, int index,
+                bool isX, std::string& pin) {
+    std::string flat;
+    flat.reserve(rawArg.size());
+    for (char c : rawArg) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            flat += c;
+        }
+    }
+    const std::string dim = isX ? "width" : "height";
+    const std::string edge = isX ? "right" : "bottom";
+    const std::string mid = "center";
+    const std::string home = isX ? "left" : "top";
+    // Canonical: Engine::Instance(0, nullptr)->GetWindowSize().{dim} (-
+    // VAR[idx].getSize().{dim} (2 - ...)?)? with optional numeric margin.
+    const std::string getSize =
+        std::string("Engine::Instance\\(0,nullptr\\)->GetWindowSize\\(\\)\\.") +
+        dim;
+    // Build with the concrete variable (identifiers are regex-safe).
+    const std::string varPart = var + "(\\[[^\\]]+\\])?";
+    std::smatch m;
+    const std::regex centerRe("^" + getSize + "/2-" + varPart +
+                              "\\.getSize\\(\\)\\." + dim + "/2([+-][0-9.]+)?$");
+    if (std::regex_match(flat, m, centerRe)) {
+        if ((!m[1].matched && index < 0) || (m[1].matched && [&] {
+                bool isConst = false;
+                return ConstIndex(
+                           m[1].str().substr(1, m[1].str().size() - 2),
+                           isConst) == index &&
+                       isConst;
+            }())) {
+            pin = mid;
+            return;
+        }
+    }
+    const std::regex edgeRe("^" + getSize + "-" + varPart +
+                            "\\.getSize\\(\\)\\." + dim + "([+-][0-9.]+)?$");
+    if (std::regex_match(flat, m, edgeRe)) {
+        if ((!m[1].matched && index < 0) || (m[1].matched && [&] {
+                bool isConst = false;
+                return ConstIndex(
+                           m[1].str().substr(1, m[1].str().size() - 2),
+                           isConst) == index &&
+                       isConst;
+            }())) {
+            pin = edge;
+            return;
+        }
+    }
+    if (flat.find("GetWindowSize()." + dim) != std::string::npos) {
+        // Custom window-relative code (e.g. via locals): constrained, but
+        // the pin matcher doesn't name it — toggles stay convertible.
+        pin.clear();
+        return;
+    }
+    double v = 0;
+    if (detail::ParseDouble(detail::Trim(rawArg), v)) {
+        pin = home;
+        return;
+    }
+    pin.clear();
 }
 
 // `<name>.size()` counts for static data arrays in the header (e.g.
@@ -632,8 +822,14 @@ std::unordered_map<std::string, int64_t> BuildSizes(const std::string& headerTex
 
 // Base environment: static `.size()` counts plus plain-numeric constexprs
 // (including the `sizeof(Arr)/sizeof(Arr[0])` idiom via the counts above).
-EvalEnv BuildBaseEnv(const std::string& headerText) {
+// GetWindowSize() evaluates to the simulated window.
+EvalEnv BuildBaseEnv(const std::string& headerText, WindowSize window,
+                     const SceneModel& model, FontMeasureFn measure) {
     EvalEnv env;
+    env.windowWidth = window.width;
+    env.windowHeight = window.height;
+    env.model = &model;
+    env.measure = measure;
     env.sizes = BuildSizes(headerText);
     static const std::regex sizeofRe(
         "sizeof\\s*\\(\\s*([A-Za-z_]\\w*)\\s*\\)\\s*/\\s*sizeof\\s*\\(\\s*\\1\\s*\\[0\\]\\s*\\)");
@@ -719,7 +915,14 @@ void ApplyVisibleLocals(const std::string& sourceText, size_t scopeBegin,
     std::smatch m;
     while (std::regex_search(it, window.cend(), m, localRe)) {
         EvalValue v;
-        if (EvalExpr(detail::Trim(m[3].str()), env, v)) {
+        const std::string rhs = detail::Trim(m[3].str());
+        // Provenance independent of evaluation success: `yindex` stays
+        // window-relative even when the loop index is unbound (fallback).
+        if (IsWindowRelative(rhs, env)) {
+            env.windowVars[m[2].str()] = true;
+        }
+        // Layout evaluation (getSize() resolves via env.measure/model).
+        if (EvalLayoutExpr(rhs, env, v)) {
             const std::string type = m[1].str();
             const bool intType =
                 (type == "int" || type == "long" || type == "unsigned" ||
@@ -822,12 +1025,37 @@ void RecordSiteSpans(const std::string& sourceText, size_t openOff,
     }
 }
 
+// Fills a winning renderUI site: evaluated values, arg spans, rewrite
+// guards, and constraint/pin metadata from the raw args (env carries the
+// locals provenance for transitively window-relative expressions).
+void PlaceItemAt(const std::string& sourceText, size_t openOff, size_t closeOff,
+                 const std::string& var, const std::string& xExpr,
+                 const std::string& yExpr, double xVal, double yVal,
+                 bool shared, const EvalEnv& env, TextItem& item) {
+    item.xExpr = xExpr;
+    item.yExpr = yExpr;
+    item.xNum = true;
+    item.yNum = true;
+    item.xVal = xVal;
+    item.yVal = yVal;
+    item.dynamicPos = false;
+    item.siteOpen = openOff;
+    item.siteClose = closeOff;
+    item.hasSite = true;
+    item.sharedSite = shared;
+    item.hasConstraint =
+        IsWindowRelative(xExpr, env) || IsWindowRelative(yExpr, env);
+    DetectPins(xExpr, var, item.index, true, item.xPin);
+    DetectPins(yExpr, var, item.index, false, item.yPin);
+    RecordSiteSpans(sourceText, openOff, closeOff, item);
+}
+
 } // namespace
 
 namespace detail {
 
 void ParseFonts(const std::string& headerText, const std::string& sourceText,
-                SceneModel& model) {
+                SceneModel& model, WindowSize window, FontMeasureFn measure) {
     const std::vector<size_t> srcStarts = LineStarts(sourceText);
     std::unordered_map<std::string, size_t> fontIndex;
 
@@ -894,7 +1122,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
     //     idiom counts, `Data.size()`). Unresolvable vectors keep zero
     //     items (e.g. submenu sized from a runtime selection).
     {
-        const EvalEnv base = BuildBaseEnv(headerText);
+        const EvalEnv base = BuildBaseEnv(headerText, window, model, measure);
         static const std::regex resizeCallRe(
             "([A-Za-z_]\\w*)\\s*\\.\\s*resize\\s*\\(");
         std::string::const_iterator it = sourceText.begin();
@@ -1069,7 +1297,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
     //     (e.g. `menuFonts[i].setTextContent(SettingsMenu[i].name)`).
     //     Dynamic aliases (submenu selections) stay unknown.
     {
-        const EvalEnv base = BuildBaseEnv(headerText);
+        const EvalEnv base = BuildBaseEnv(headerText, window, model, measure);
         const std::vector<ForLoop> textLoops = CollectForLoops(sourceText);
         std::unordered_map<std::string, std::vector<std::string>> menuCache;
         static const std::regex textCallRe(
@@ -1206,7 +1434,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
     //    anything else marks the item dynamic. Loop-placed items share
     //    one site: drawn, but SetTextPosition refuses (sharedSite).
     {
-        const EvalEnv base = BuildBaseEnv(headerText);
+        const EvalEnv base = BuildBaseEnv(headerText, window, model, measure);
         const std::vector<ForLoop> renderLoops = CollectForLoops(sourceText);
         static const std::regex renderCallRe(
             "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*renderUI\\s*\\(");
@@ -1266,35 +1494,26 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                                     ApplyVisibleLocals(sourceText, scopeBegin,
                                                        callOff, env);
                                     EvalValue xv, yv;
-                                    if (!EvalExpr(xExpr, env, xv) ||
-                                        !EvalExpr(yExpr, env, yv)) {
+                                    if (!EvalLayoutExpr(xExpr, env, xv) ||
+                                        !EvalLayoutExpr(yExpr, env, yv)) {
                                         continue;
                                     }
+                                    const double xNum =
+                                        xv.isFloat ? xv.f
+                                                   : static_cast<double>(xv.i);
+                                    const double yNum =
+                                        yv.isFloat ? yv.f
+                                                   : static_cast<double>(yv.i);
                                     int itemIdx = -1;
                                     if (bracketExpr.empty()) {
                                         // Scalar reused in a loop: place the
                                         // single item on last iteration.
                                         for (size_t ti : itemsOf(var)) {
                                             TextItem& item = model.texts[ti];
-                                            item.xExpr = xExpr;
-                                            item.yExpr = yExpr;
-                                            item.xNum = true;
-                                            item.yNum = true;
-                                            item.xVal = xv.isFloat ? xv.f
-                                                                   : static_cast<
-                                                                         double>(
-                                                                         xv.i);
-                                            item.yVal = yv.isFloat ? yv.f
-                                                                   : static_cast<
-                                                                         double>(
-                                                                         yv.i);
-                                            item.dynamicPos = false;
-                                            item.siteOpen = openOff;
-                                            item.siteClose = closeOff;
-                                            item.hasSite = true;
-                                            item.sharedSite = (count > 1);
-                                            RecordSiteSpans(sourceText, openOff,
-                                                            closeOff, item);
+                                            PlaceItemAt(sourceText, openOff,
+                                                        closeOff, var, xExpr,
+                                                        yExpr, xNum, yNum,
+                                                        (count > 1), env, item);
                                         }
                                         ++placed;
                                         continue;
@@ -1310,25 +1529,9 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                                         if (item.index != itemIdx) {
                                             continue;
                                         }
-                                        item.xExpr = xExpr;
-                                        item.yExpr = yExpr;
-                                        item.xNum = true;
-                                        item.yNum = true;
-                                        item.xVal = xv.isFloat
-                                                        ? xv.f
-                                                        : static_cast<double>(
-                                                              xv.i);
-                                        item.yVal = yv.isFloat
-                                                        ? yv.f
-                                                        : static_cast<double>(
-                                                              yv.i);
-                                        item.dynamicPos = false;
-                                        item.siteOpen = openOff;
-                                        item.siteClose = closeOff;
-                                        item.hasSite = true;
-                                        item.sharedSite = true;
-                                        RecordSiteSpans(sourceText, openOff,
-                                                        closeOff, item);
+                                        PlaceItemAt(sourceText, openOff,
+                                                    closeOff, var, xExpr, yExpr,
+                                                    xNum, yNum, true, env, item);
                                         ++placed;
                                     }
                                 }
@@ -1336,34 +1539,22 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                             }
                         }
                         if (!handledLoop) {
-                        // Non-loop sites: literals place directly; pure
-                        // window-math (e.g. `width / 4`) evaluates against
-                        // the design constants; anything calling into
-                        // measured sizes or members stays dynamic.
-                        double xv = 0, yv = 0;
-                        bool xNum = ParseDouble(xExpr, xv);
-                        bool yNum = ParseDouble(yExpr, yv);
-                        if (!xNum || !yNum) {
-                            EvalEnv callEnv = base;
-                            // Bounded window (same as the loop path):
-                            // preamble locals without leaking distant
-                            // functions' same-named values.
-                            const size_t scopeBegin =
-                                (callOff > 4000) ? callOff - 4000 : 0;
-                            ApplyVisibleLocals(sourceText, scopeBegin, callOff,
-                                               callEnv);
-                            EvalValue ev;
-                            if (!xNum && EvalExpr(xExpr, callEnv, ev)) {
-                                xv = ev.isFloat ? ev.f
-                                                : static_cast<double>(ev.i);
-                                xNum = true;
-                            }
-                            if (!yNum && EvalExpr(yExpr, callEnv, ev)) {
-                                yv = ev.isFloat ? ev.f
-                                                : static_cast<double>(ev.i);
-                                yNum = true;
-                            }
-                        }
+                        // Non-loop sites: evaluate against locals + the
+                        // simulated window (getSize() via measurement).
+                        // Anything unresolvable stays dynamic.
+                        EvalEnv callEnv = base;
+                        // Bounded window (same as the loop path):
+                        // preamble locals without leaking distant
+                        // functions' same-named values.
+                        const size_t scopeBegin =
+                            (callOff > 4000) ? callOff - 4000 : 0;
+                        ApplyVisibleLocals(sourceText, scopeBegin, callOff,
+                                           callEnv);
+                        EvalValue xev, yev;
+                        const bool xOk =
+                            EvalLayoutExpr(xExpr, callEnv, xev);
+                        const bool yOk =
+                            EvalLayoutExpr(yExpr, callEnv, yev);
                         for (size_t ti : itemsOf(var)) {
                             TextItem& item = model.texts[ti];
                             if (isConst && item.index != idx) {
@@ -1371,20 +1562,31 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                             }
                             // Variable-index non-loop sites stay last-wins
                             // (existing behavior for scalar reuse).
+                            if (xOk && yOk) {
+                                PlaceItemAt(sourceText, openOff, closeOff, var,
+                                            xExpr, yExpr,
+                                            xev.isFloat
+                                                ? xev.f
+                                                : static_cast<double>(xev.i),
+                                            yev.isFloat
+                                                ? yev.f
+                                                : static_cast<double>(yev.i),
+                                            false, callEnv, item);
+                                continue;
+                            }
                             item.xExpr = xExpr;
                             item.yExpr = yExpr;
-                            item.xNum = xNum;
-                            item.yNum = yNum;
-                            if (xNum) {
-                                item.xVal = xv;
-                            }
-                            if (yNum) {
-                                item.yVal = yv;
-                            }
-                            item.dynamicPos = !(xNum && yNum);
+                            item.xNum = false;
+                            item.yNum = false;
+                            item.dynamicPos = true;
                             item.siteOpen = openOff;
                             item.siteClose = closeOff;
                             item.hasSite = true;
+                            item.hasConstraint =
+                                IsWindowRelative(xExpr, callEnv) ||
+                                IsWindowRelative(yExpr, callEnv);
+                            DetectPins(xExpr, var, item.index, true, item.xPin);
+                            DetectPins(yExpr, var, item.index, false, item.yPin);
                             RecordSiteSpans(sourceText, openOff, closeOff,
                                             item);
                         }
@@ -1442,6 +1644,49 @@ bool SetTextPosition(SceneFile& file, const std::string& var, int index,
     }
     if (item->dynamicPos || !item->hasSite) {
         error = "dynamic layout for '" + var +
+                "' — edit the source instead of baking constants";
+        return false;
+    }
+    if (item->hasConstraint) {
+        error = "constrained layout for '" + var +
+                "' — unconstrain with the edge toggles or edit the source";
+        return false;
+    }
+    if (item->sharedSite) {
+        error = "shared loop layout for '" + var +
+                "' — one edit would move siblings; edit the source instead";
+        return false;
+    }
+    return SetTextExpression(file, var, item->index, x, y, error);
+}
+
+bool SetTextExpression(SceneFile& file, const std::string& var, int index,
+                       const std::string& x, const std::string& y,
+                       std::string& error) {
+    TextItem* item = nullptr;
+    for (TextItem& cand : file.model.texts) {
+        if (cand.varName != var) {
+            continue;
+        }
+        if (index < 0) {
+            if (cand.hasSite) {
+                item = &cand;
+                break;
+            }
+            if (!item) {
+                item = &cand;
+            }
+        } else if (cand.index == index) {
+            item = &cand;
+            break;
+        }
+    }
+    if (!item) {
+        error = "unknown text item '" + var + "'";
+        return false;
+    }
+    if (!item->hasSite) {
+        error = "no renderUI site for '" + var +
                 "' — edit the source instead of baking constants";
         return false;
     }

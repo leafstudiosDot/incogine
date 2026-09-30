@@ -326,8 +326,11 @@ bool MatchStatement(const std::string& raw, Statement& stmt) {
 
 bool ParseSceneText(const std::string& headerText, const std::string& sourceText,
                     const std::string& headerName, const std::string& sourceName,
-                    SceneFile& out, std::string& error) {
+                    SceneFile& out, std::string& error, WindowSize window,
+                    FontMeasureFn measure) {
     SceneFile file;
+    file.windowSize = window;
+    file.measure = measure;
     file.headerText = headerText;
     file.sourceText = sourceText;
     file.headerEol = detail::DetectEol(headerText);
@@ -573,7 +576,7 @@ bool ParseSceneText(const std::string& headerText, const std::string& sourceText
     }
 
     // Font/text labels: header decls + file-wide call sites.
-    detail::ParseFonts(headerText, sourceText, model);
+    detail::ParseFonts(headerText, sourceText, model, window, measure);
 
     // Body indent unit: first non-empty body line's leading whitespace.
     model.indent = "\t";
@@ -593,7 +596,8 @@ bool ParseSceneText(const std::string& headerText, const std::string& sourceText
 }
 
 bool ParseSceneFiles(const std::string& headerPath, const std::string& sourcePath,
-                     SceneFile& out, std::string& error) {
+                     SceneFile& out, std::string& error, WindowSize window,
+                     FontMeasureFn measure) {
     std::ifstream hIn(headerPath, std::ios::binary);
     if (!hIn) {
         error = "cannot open " + headerPath;
@@ -607,7 +611,8 @@ bool ParseSceneFiles(const std::string& headerPath, const std::string& sourcePat
     std::ostringstream hs, ss;
     hs << hIn.rdbuf();
     ss << sIn.rdbuf();
-    return ParseSceneText(hs.str(), ss.str(), headerPath, sourcePath, out, error);
+    return ParseSceneText(hs.str(), ss.str(), headerPath, sourcePath, out, error,
+                            window, measure);
 }
 } // namespace scenecpp
 } // namespace studio

@@ -36,8 +36,6 @@
 
 namespace {
 
-constexpr float kDesignWidth = 1280.0f;
-constexpr float kDesignHeight = 720.0f;
 constexpr float kSnapStep = 10.0f;
 
 double spinValue(QDoubleSpinBox* spin) {
@@ -93,7 +91,14 @@ QRectF SceneCanvas::viewRect() const {
     if (width() <= 0 || height() <= 0) {
         return QRectF();
     }
-    const QSize design(1280, 720);
+    // Simulated engine window aspect (always 16:9, like the game enforces
+    // on resize); falls back to the 1280x720 base without an editor.
+    int simW = 1280, simH = 720;
+    if (editor_) {
+        simW = editor_->simWindowWidth();
+        simH = editor_->simWindowHeight();
+    }
+    const QSize design(simW, simH);
     const QSize fitted = design.scaled(size(), Qt::KeepAspectRatio);
     const int x = (width() - fitted.width()) / 2;
     const int y = (height() - fitted.height()) / 2;
@@ -207,7 +212,8 @@ void HierarchyTree::dropEvent(QDropEvent* event) {
 SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* session,
                                QWidget* parent)
     : QWidget(parent), projectRoot_(projectRoot), session_(session) {
-    camera_ = new icg::Camera(icg::Camera::Make2D(kDesignWidth, kDesignHeight));
+    camera_ = new icg::Camera(icg::Camera::Make2D(static_cast<float>(windowWidth_),
+                                                         static_cast<float>(windowHeight_)));
 
     // Toolbar: dimension, camera, gizmo, snap, save.
     modeCombo_ = new QComboBox();
@@ -236,6 +242,16 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     toolbar->addWidget(cameraCombo_);
     toolbar->addWidget(gizmoCombo_);
     toolbar->addWidget(snapBox_);
+    // Simulated engine window: GetWindowSize() reports the chosen size and
+    // window-relative formulas re-evaluate, so resize behavior can be
+    // checked without running the game (engine forces 16:9 on resize).
+    toolbar->addWidget(new QLabel(tr("Window:")));
+    windowCombo_ = new QComboBox();
+    windowCombo_->addItems({tr("640×360"), tr("854×480"), tr("1280×720"),
+                            tr("1600×900"), tr("1920×1080"), tr("2560×1440")});
+    windowCombo_->setCurrentIndex(2);
+    windowCombo_->setToolTip(tr("Simulated engine window size (16:9, like the game)"));
+    toolbar->addWidget(windowCombo_);
     toolbar->addStretch(1);
     toolbar->addWidget(undoButton_);
     toolbar->addWidget(redoButton_);
@@ -284,11 +300,30 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
                 &SceneEditorTab::onSpinEdited);
     }
     inspectorLayout->addLayout(colorRow);
-    // Anchor presets for renderUI text labels: 9 design-space points over
-    // the 1280x720 window (Left/Center/Right x Top/Middle/Bottom), the same
-    // GetWindowSize() reference the engine exposes. Choosing one fills the
-    // Position spins and commits through the normal text path (constants,
-    // so the label stays draggable); shared/dynamic layouts disable it.
+    // Edge-constraint toggles (CSS-like stick: Left/Right/Top/Bottom).
+    // Checked edges rewrite renderUI args to GetWindowSize()-relative
+    // forms (measured via getSize(), the versionFont idiom), so the label
+    // holds its edge at any window size; unchecking bakes constants back.
+    // Opposing pairs on one axis center the label.
+    auto* edgeRow = new QHBoxLayout();
+    edgeRow->addWidget(new QLabel(tr("Stick:")));
+    const char* edgeNames[4] = {"Left", "Right", "Top", "Bottom"};
+    const char* edgeTips[4] = {
+        QT_TR_NOOP("Pin to the left edge (absolute x)"),
+        QT_TR_NOOP("Pin to the right edge (window width minus text width)"),
+        QT_TR_NOOP("Pin to the top edge (absolute y)"),
+        QT_TR_NOOP("Pin to the bottom edge (window height minus text height)")};
+    for (int e = 0; e < 4; ++e) {
+        edgeBtn_[e] = new QPushButton(tr(edgeNames[e]));
+        edgeBtn_[e]->setCheckable(true);
+        edgeBtn_[e]->setEnabled(false);
+        edgeBtn_[e]->setToolTip(tr(edgeTips[e]));
+        edgeRow->addWidget(edgeBtn_[e]);
+    }
+    inspectorLayout->addLayout(edgeRow);
+    // One-shot anchor presets: fill the Position spins with design-space
+    // points and commit constants (labels stay draggable); constrained or
+    // shared/dynamic layouts disable it — use the Stick toggles instead.
     auto* anchorRow = new QHBoxLayout();
     anchorRow->addWidget(new QLabel(tr("Anchor:")));
     anchorCombo_ = new QComboBox();
@@ -300,7 +335,7 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     anchorCombo_->setCurrentIndex(-1);
     anchorCombo_->setEnabled(false);
     anchorCombo_->setToolTip(
-        tr("Snap the label to a window anchor (1280x720 design space)."));
+        tr("Snap the label to a point of the simulated window (constants)."));
     anchorRow->addWidget(anchorCombo_, 1);
     inspectorLayout->addLayout(anchorRow);
     idLabel_ = new QLabel();
@@ -367,6 +402,12 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     // the slot resets the display to the placeholder afterwards.
     connect(anchorCombo_, &QComboBox::activated, this,
             &SceneEditorTab::onAnchorChanged);
+    for (int e = 0; e < 4; ++e) {
+        connect(edgeBtn_[e], &QPushButton::toggled, this,
+                [this, e](bool on) { applyEdgePin(e, on); });
+    }
+    connect(windowCombo_, &QComboBox::currentIndexChanged, this,
+            &SceneEditorTab::onWindowSizeChanged);
     connect(canvas_, &SceneCanvas::panBy, this, &SceneEditorTab::onPan);
     connect(canvas_, &SceneCanvas::zoomBy, this, &SceneEditorTab::onZoom2D);
     connect(canvas_, &SceneCanvas::orbitBy, this, &SceneEditorTab::onOrbit);
@@ -406,9 +447,19 @@ void SceneEditorTab::setScene(const QString& className, const QString& headerPat
     selectedVar_.clear();
     draggingObject_ = false;
     std::string error;
+    // Glyph measurement for getSize() evaluation (window-constrained
+    // labels keep their placement); Reparses reuse file.measure.
+    icg::studio::scenecpp::FontMeasureFn measure =
+        [this](const std::string& file, int pt, int winH,
+               const std::string& content, double& w, double& h) {
+            return measureFont(QString::fromStdString(file), pt, winH,
+                               QString::fromStdString(content), w, h);
+        };
     sceneOk_ = icg::studio::scenecpp::ParseSceneFiles(headerPath.toStdString(),
                                                       sourcePath.toStdString(),
-                                                      sceneFile_, error);
+                                                      sceneFile_, error,
+                                                      {windowWidth_, windowHeight_},
+                                                      measure);
     if (!sceneOk_) {
         setNote(tr("Scene source uses unrecognized patterns: %1")
                     .arg(QString::fromStdString(error)));
@@ -557,10 +608,11 @@ bool SceneEditorTab::objectRect(int objectIdx, float& x, float& y, float& w,
         obj.position.values.size() < 2) {
         return false;
     }
+    // Matches Square::Render exactly: pos + scale * live window size.
     x = static_cast<float>(obj.position.values[0]);
     y = static_cast<float>(obj.position.values[1]);
-    w = static_cast<float>(obj.scale.values[0]) * kDesignWidth;
-    h = static_cast<float>(obj.scale.values[1]) * kDesignHeight;
+    w = static_cast<float>(obj.scale.values[0]) * windowWidth_;
+    h = static_cast<float>(obj.scale.values[1]) * windowHeight_;
     return w > 0 && h > 0;
 }
 
@@ -633,6 +685,8 @@ void SceneEditorTab::rebuildHierarchy() {
                 : "[" + text.varName + "]");
         if (text.dynamicPos) {
             label += tr(" (dynamic)");
+        } else if (text.hasConstraint) {
+            label += tr(" (constrained)");
         }
         item->setText(0, label);
         item->setText(1, tr("Text"));
@@ -653,6 +707,11 @@ void SceneEditorTab::refreshInspector() {
     }
     if (anchorCombo_) {
         anchorCombo_->setEnabled(false); // anchors are text-label only
+    }
+    for (int e = 0; e < 4; ++e) {
+        if (edgeBtn_[e]) {
+            edgeBtn_[e]->setEnabled(false); // sticks are text-label only
+        }
     }
     const int idx = objectIndex(selectedVar_);
     const bool has = idx >= 0;
@@ -708,6 +767,11 @@ void SceneEditorTab::refreshTextInspector() {
         if (anchorCombo_) {
             anchorCombo_->setEnabled(false);
         }
+        for (int e = 0; e < 4; ++e) {
+            if (edgeBtn_[e]) {
+                edgeBtn_[e]->setEnabled(false);
+            }
+        }
         return;
     }
     const bool placed = !text->dynamicPos && text->xNum && text->yNum;
@@ -718,9 +782,7 @@ void SceneEditorTab::refreshTextInspector() {
         rotSpin_[i]->setEnabled(false);
         scaleSpin_[i]->setEnabled(false);
     }
-    posSpin_[0]->setEnabled(placed);
-    posSpin_[1]->setEnabled(placed);
-    posSpin_[2]->setEnabled(false);
+    posSpin_[2]->setValue(0.0);
     if (placed) {
         posSpin_[0]->setValue(text->xVal);
         posSpin_[1]->setValue(text->yVal);
@@ -728,7 +790,13 @@ void SceneEditorTab::refreshTextInspector() {
         posSpin_[0]->setValue(0.0);
         posSpin_[1]->setValue(0.0);
     }
-    posSpin_[2]->setValue(0.0);
+    // Constants only while the label is freely placed: constrained labels
+    // keep their window-relative args (baking would destroy them — use the
+    // Stick toggles), shared loop sites refuse for their siblings.
+    const bool freePlace = placed && !text->sharedSite && !text->hasConstraint;
+    posSpin_[0]->setEnabled(freePlace);
+    posSpin_[1]->setEnabled(freePlace);
+    posSpin_[2]->setEnabled(false);
     for (int i = 0; i < 3; ++i) {
         posSpin_[i]->blockSignals(false);
         rotSpin_[i]->blockSignals(false);
@@ -736,11 +804,31 @@ void SceneEditorTab::refreshTextInspector() {
     }
     if (anchorCombo_) {
         // Anchors commit constants through SetTextPosition, so they need a
-        // placed label with its own call site (shared loop layouts refuse).
+        // freely placed label (constraints refuse; shared loops refuse).
         anchorCombo_->blockSignals(true);
         anchorCombo_->setCurrentIndex(-1);
-        anchorCombo_->setEnabled(placed && !text->sharedSite);
+        anchorCombo_->setEnabled(freePlace);
         anchorCombo_->blockSignals(false);
+    }
+    // Stick toggles mirror the parsed edge pins; enabled for any placed
+    // label with its own call site (constraints included — that's the point).
+    const bool canPin = placed && !text->sharedSite;
+    const bool pinStates[4] = {text->xPin == "left", text->xPin == "right",
+                               text->yPin == "top", text->yPin == "bottom"};
+    // Center lights both toggles of its axis.
+    const bool showXCenter = (text->xPin == "center");
+    const bool showYCenter = (text->yPin == "center");
+    for (int e = 0; e < 4; ++e) {
+        if (edgeBtn_[e]) {
+            edgeBtn_[e]->blockSignals(true);
+            edgeBtn_[e]->setEnabled(canPin);
+            bool checked = pinStates[e];
+            if ((e <= 1 && showXCenter) || (e >= 2 && showYCenter)) {
+                checked = true;
+            }
+            edgeBtn_[e]->setChecked(checked);
+            edgeBtn_[e]->blockSignals(false);
+        }
     }
     for (int i = 0; i < 4; ++i) {
         colorSpin_[i]->blockSignals(true);
@@ -757,6 +845,10 @@ void SceneEditorTab::refreshTextInspector() {
     }
     if (!placed) {
         info += tr(" — dynamic layout, not draggable");
+    } else if (text->sharedSite) {
+        info += tr(" — shared loop layout, not draggable");
+    } else if (text->hasConstraint) {
+        info += tr(" — constrained to the window (Stick toggles), not draggable");
     }
     idLabel_->setText(info);
 }
@@ -865,7 +957,10 @@ bool SceneEditorTab::textBounds(const icg::studio::scenecpp::TextItem& text,
     if (!family.isEmpty()) {
         font.setFamily(family);
     }
-    font.setPointSizeF((text.pointSize > 0 ? text.pointSize : 16) * viewScale);
+    // Match paintOffline: pixel size, so picking bounds equal drawn bounds.
+    const int px = std::max(1, qRound((text.pointSize > 0 ? text.pointSize : 16) *
+                                      (windowHeight_ / 720.0f) * viewScale));
+    font.setPixelSize(px);
     const QFontMetricsF metrics(font);
     // Bounds in design pixels so picking matches what is drawn.
     const float scaleW = static_cast<float>(metrics.horizontalAdvance(content)) / viewScale;
@@ -1013,7 +1108,7 @@ void SceneEditorTab::onSpinEdited() {
     }
     if (selectedKind_ == "text") {
         const icg::studio::scenecpp::TextItem* text = selectedText();
-        if (!text || text->dynamicPos) {
+        if (!text || text->dynamicPos || text->hasConstraint) {
             return;
         }
         std::string error;
@@ -1075,14 +1170,14 @@ void SceneEditorTab::onAnchorChanged(int index) {
     }
     const icg::studio::scenecpp::TextItem* text = selectedText();
     if (!text || text->dynamicPos || !text->xNum || !text->yNum ||
-        text->sharedSite) {
-        setNote(tr("Anchor needs a placed label with its own renderUI call."));
+        text->sharedSite || text->hasConstraint) {
+        setNote(tr("Anchor needs a freely placed label with its own renderUI call."));
         reset();
         refreshInspector();
         return;
     }
-    const double ax = kFX[index % 3] * kDesignWidth;
-    const double ay = kFY[index / 3] * kDesignHeight;
+    const double ax = kFX[index % 3] * windowWidth_;
+    const double ay = kFY[index / 3] * windowHeight_;
     posSpin_[0]->blockSignals(true);
     posSpin_[1]->blockSignals(true);
     posSpin_[0]->setValue(ax);
@@ -1096,6 +1191,171 @@ void SceneEditorTab::onAnchorChanged(int index) {
         setNote(tr("Anchored to %1. Save to source to persist.")
                     .arg(anchorCombo_ ? anchorCombo_->itemText(index) : tr("anchor")));
     }
+}
+
+void SceneEditorTab::onWindowSizeChanged(int index) {
+    static const int kWidths[6] = {640, 854, 1280, 1600, 1920, 2560};
+    static const int kHeights[6] = {360, 480, 720, 900, 1080, 1440};
+    if (index < 0 || index > 5) {
+        return;
+    }
+    windowWidth_ = kWidths[index];
+    windowHeight_ = kHeights[index];
+    // Remap the 2D camera onto the simulated window, preserving view state.
+    if (camera_) {
+        const bool was2D = camera_->Is2D();
+        const icg::Camera::Projection proj = camera_->GetProjection();
+        const icg::Vec3 pan = camera_->GetPan();
+        const float zoom = camera_->GetZoom();
+        *camera_ = icg::Camera::Make2D(static_cast<float>(windowWidth_),
+                                       static_cast<float>(windowHeight_));
+        camera_->Set2D(was2D);
+        camera_->SetProjection(proj);
+        camera_->SetPan(pan.x, pan.y);
+        camera_->SetZoom(zoom);
+    }
+    if (!sceneOk_) {
+        canvas_->update();
+        return;
+    }
+    // Re-evaluate window-relative formulas at the new size. In-memory
+    // (unsaved) edits survive: Reparse folds the current line vectors
+    // back into the texts first.
+    sceneFile_.windowSize.width = windowWidth_;
+    sceneFile_.windowSize.height = windowHeight_;
+    std::string error;
+    if (!icg::studio::scenecpp::detail::Reparse(sceneFile_, error)) {
+        setNote(tr("Window-size re-evaluation failed: %1")
+                    .arg(QString::fromStdString(error)));
+        return;
+    }
+    setDirty(!sceneMatchesClean());
+    rebuildHierarchy();
+    refreshInspector();
+    refreshSourceView();
+    canvas_->update();
+    setNote(tr("Simulated window %1×%2 — window-relative layout re-evaluated.")
+                .arg(windowWidth_)
+                .arg(windowHeight_));
+}
+
+void SceneEditorTab::applyEdgePin(int edge, bool on) {
+    // CSS-like stick: each axis resolves to start/center/end/free from its
+    // two toggles. Writes preserve the label's evaluated position (margins
+    // from the current simulated window), so toggling never jumps —
+    // constraints only change resize behavior.
+    if (edge < 0 || edge > 3 || draggingObject_ || !ensureScene(tr("stick"))) {
+        refreshInspector();
+        return;
+    }
+    if (selectedKind_ != "text") {
+        refreshInspector();
+        return;
+    }
+    const icg::studio::scenecpp::TextItem* text = selectedText();
+    if (!text || text->dynamicPos || !text->xNum || !text->yNum ||
+        text->sharedSite) {
+        setNote(tr("Stick needs a placed label with its own renderUI call."));
+        refreshInspector();
+        return;
+    }
+    const bool isX = (edge <= 1);
+    const std::string curPin = isX ? text->xPin : text->yPin;
+    // Canonical forms use this item's own getSize(): bare var for scalars,
+    // [index] for array elements (each owns its call site here — shared
+    // loop sites are rejected above).
+    QString v = QString::fromStdString(text->varName);
+    if (text->index >= 0) {
+        v += QStringLiteral("[%1]").arg(text->index);
+    }
+    const QString winDisp = isX ? QStringLiteral("width") : QStringLiteral("height");
+    const QString winCall =
+        QStringLiteral("Engine::Instance(0, nullptr)->GetWindowSize().") + winDisp;
+    const QString sizeCall = v + QStringLiteral(".getSize().") + winDisp;
+    const double winNow = isX ? windowWidth_ : windowHeight_;
+    const double posNow = isX ? text->xVal : text->yVal;
+    // Measured text extent in engine px (same measurer as the parser).
+    double tw = 0, th = 0;
+    if (!measureFont(QString::fromStdString(text->fontFile), text->pointSize,
+                     windowHeight_, QString::fromStdString(text->content), tw,
+                     th)) {
+        setNote(tr("Stick needs a measurable font — set the font file first."));
+        refreshInspector();
+        return;
+    }
+    const double extent = isX ? tw : th;
+    auto marginSuffix = [](double m) {
+        if (qFuzzyIsNull(m)) {
+            return QString();
+        }
+        return m > 0 ? QStringLiteral(" - ") + formatDouble(m)
+                     : QStringLiteral(" + ") + formatDouble(-m);
+    };
+    // Desired pin per axis after this click ("": free/bake constants).
+    auto targetPin = [&](bool wantStart, bool wantEnd) {
+        if (wantStart && wantEnd) {
+            return std::string("center");
+        }
+        if (wantEnd) {
+            return std::string(isX ? "right" : "bottom");
+        }
+        if (wantStart) {
+            return std::string(isX ? "left" : "top");
+        }
+        return std::string();
+    };
+    bool startOn = false, endOn = false;
+    if (isX) {
+        startOn = edgeBtn_[0]->isChecked();
+        endOn = edgeBtn_[1]->isChecked();
+    } else {
+        startOn = edgeBtn_[2]->isChecked();
+        endOn = edgeBtn_[3]->isChecked();
+    }
+    // The origin pin can't be switched off (absolute coords are
+    // origin-relative); re-check and explain.
+    if (!startOn && !endOn && (curPin == (isX ? "left" : "top"))) {
+        setNote(tr("Already pinned to the %1 edge.").arg(isX ? tr("left") : tr("top")));
+        refreshInspector();
+        return;
+    }
+    const std::string want = targetPin(startOn, endOn);
+    QString newAxis;
+    if (want == "center") {
+        const double c = posNow - (winNow - extent) / 2.0;
+        newAxis = winCall + QStringLiteral(" / 2 - ") + sizeCall +
+                  QStringLiteral(" / 2") + marginSuffix(c);
+    } else if (want == (isX ? "right" : "bottom")) {
+        newAxis = winCall + QStringLiteral(" - ") + sizeCall +
+                  marginSuffix(winNow - posNow - extent);
+    } else {
+        newAxis = formatDouble(posNow); // start pin / free: bake
+    }
+    QString newX, newY;
+    if (isX) {
+        newX = newAxis;
+        newY = QString::fromStdString(text->yExpr);
+    } else {
+        newX = QString::fromStdString(text->xExpr);
+        newY = newAxis;
+    }
+    pushSceneUndo();
+    std::string error;
+    if (!icg::studio::scenecpp::SetTextExpression(
+            sceneFile_, text->varName, text->index, newX.toStdString(),
+            newY.toStdString(), error)) {
+        setNote(tr("Stick failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
+        refreshInspector();
+        return;
+    }
+    dropUndoIfNoChange();
+    setDirty(true);
+    refreshSourceView();
+    refreshInspector();
+    canvas_->update();
+    setNote(tr("Stuck to %1. Save to source to persist.")
+                .arg(edgeBtn_[edge]->text()));
 }
 
 void SceneEditorTab::onApplyLive() {
@@ -1117,9 +1377,9 @@ void SceneEditorTab::onApplyLive() {
     sendLive(true);
 }
 
-void SceneEditorTab::onSaveToSource() {
+bool SceneEditorTab::saveSceneToSource() {
     if (!ensureScene(tr("save"))) {
-        return;
+        return false;
     }
     // Byte-verbatim write (no QIODevice::Text): the serializer already
     // carries the detected EOL, and Text mode would translate every \n
@@ -1127,7 +1387,7 @@ void SceneEditorTab::onSaveToSource() {
     QFile sourceFile(sceneSource_);
     if (!sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setNote(tr("Cannot write %1").arg(sceneSource_));
-        return;
+        return false;
     }
     QTextStream stream(&sourceFile);
     stream << QString::fromStdString(icg::studio::scenecpp::SerializeSource(sceneFile_));
@@ -1143,14 +1403,20 @@ void SceneEditorTab::onSaveToSource() {
         } else {
             setNote(tr("Source saved; header write failed: %1").arg(sceneHeader_));
             setDirty(false);
-            return;
+            return false;
         }
     }
     setDirty(false);
     cleanSource_ = icg::studio::scenecpp::SerializeSource(sceneFile_);
     cleanHeader_ = icg::studio::scenecpp::SerializeHeader(sceneFile_);
     refreshUndoRedo();
-    setNote(tr("Saved — rebuild + relaunch the preview to run it."));
+    return true;
+}
+
+void SceneEditorTab::onSaveToSource() {
+    if (saveSceneToSource()) {
+        setNote(tr("Saved — rebuild + relaunch the preview to run it."));
+    }
 }
 
 QString SceneEditorTab::makeUniqueVar(const QString& base) const {
@@ -1223,7 +1489,7 @@ void SceneEditorTab::onDropFile(const QString& path, const QPoint& widgetPos) {
         return;
     }
     // Placeholder boxes until the engine supports textures/scripts on drop.
-    float worldX = kDesignWidth / 2.0f, worldY = kDesignHeight / 2.0f;
+    float worldX = windowWidth_ / 2.0f, worldY = windowHeight_ / 2.0f;
     if (widgetPos.x() >= 0 &&
         widgetToWorld(widgetPos, worldX, worldY) == false) {
         return;
@@ -1285,7 +1551,7 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
         }
     }
     int hitText = -1;
-    const float pickScale = static_cast<float>(canvas_->viewRect().width()) / kDesignWidth;
+    const float pickScale = static_cast<float>(canvas_->viewRect().width()) / windowWidth_;
     for (int i = static_cast<int>(sceneFile_.model.texts.size()) - 1; i >= 0; --i) {
         float x = 0, y = 0, w = 0, h = 0;
         if (!textBounds(sceneFile_.model.texts[i], pickScale, x, y, w, h)) {
@@ -1317,6 +1583,11 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
             // can only fail on release.
             draggingObject_ = false;
             setNote(tr("Shared loop layout — drag disabled; edit the source instead."));
+        } else if (text.hasConstraint) {
+            // Window-relative args: baking drag constants would destroy the
+            // constraint — unstick with the edge toggles first.
+            draggingObject_ = false;
+            setNote(tr("Constrained layout — drag disabled; use the Stick toggles or edit the source."));
         } else {
             draggingObject_ = gizmoCombo_->currentIndex() == 0;
             if (!draggingObject_) {
@@ -1479,7 +1750,7 @@ void SceneEditorTab::onPan(const QPoint& deltaPixels) {
     if (fitted.width() <= 0) {
         return;
     }
-    const float designPerPixel = kDesignWidth / static_cast<float>(fitted.width());
+    const float designPerPixel = windowWidth_ / static_cast<float>(fitted.width());
     const icg::Vec3 pan = camera_->GetPan();
     camera_->SetPan(pan.x - deltaPixels.x() * designPerPixel,
                     pan.y - deltaPixels.y() * designPerPixel);
@@ -1544,6 +1815,27 @@ QString SceneEditorTab::familyForFont(const QString& assetPath) {
     return family;
 }
 
+bool SceneEditorTab::measureFont(const QString& assetPath, int pointSizePt,
+                                 int windowHeight, const QString& content,
+                                 double& w, double& h) {
+    if (pointSizePt <= 0 || windowHeight <= 0) {
+        return false;
+    }
+    QFont font;
+    const QString family = familyForFont(assetPath);
+    if (!family.isEmpty()) {
+        font.setFamily(family);
+    }
+    // Engine raster px = base pt * fontScale; in-repo scenes scale by
+    // windowHeight/720, so the measurement matches getSize() there.
+    const int px = std::max(1, qRound(pointSizePt * (windowHeight / 720.0)));
+    font.setPixelSize(px);
+    const QFontMetricsF metrics(font);
+    w = static_cast<double>(metrics.horizontalAdvance(content));
+    h = static_cast<double>(metrics.ascent() + metrics.descent());
+    return true;
+}
+
 void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
     // Pure black like the game's glClearColor — the viewport must match
     // what the game sees.
@@ -1599,7 +1891,10 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
     // windowHeight/720 factor, so layout matches at any canvas size — and
     // stays backend-agnostic (SDL3/OpenGL today, DirectX/Metal/Vulkan later
     // must preserve the same design-pixel mapping).
-    const float viewScale = rw / kDesignWidth;
+    // Canvas px per engine px, times the engine's own glyph scale
+    // (scenes scale fonts by windowHeight/720 via setFontScale).
+    const float viewScale = rw / windowWidth_;
+    const float glyphScale = (windowHeight_ / 720.0f) * viewScale;
     for (const auto& text : sceneFile_.model.texts) {
         if (text.dynamicPos || !text.xNum || !text.yNum) {
             continue;
@@ -1613,7 +1908,13 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
         if (!family.isEmpty()) {
             font.setFamily(family);
         }
-        font.setPointSizeF((text.pointSize > 0 ? text.pointSize : 16) * viewScale);
+        // Pixel size, not point size: the engine re-rasterizes the TTF at
+        // pointSize*scale device px, while Qt points scale with screen DPI
+        // (30pt -> 40px at 96 DPI). Pixel size keeps Studio glyphs the same
+        // device pixels as the game at the same view scale.
+        const int px = std::max(1, qRound((text.pointSize > 0 ? text.pointSize : 16) *
+                                          glyphScale));
+        font.setPixelSize(px);
         painter->setFont(font);
         if (text.hasColor) {
             painter->setPen(QColor(text.color[0], text.color[1], text.color[2],
@@ -1623,8 +1924,14 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
         }
         const QPointF at = toWidget(static_cast<float>(text.xVal),
                                     static_cast<float>(text.yVal));
-        painter->drawText(QRectF(at.x(), at.y(), view.right() - at.x(), 400),
-                          Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, content);
+        // Single line, ever: the engine draws one textTexture quad
+        // (TTF_RenderText_Blended), never wrapped. The rect extends well
+        // past the view so layout never depends on x (Qt clips at the
+        // widget like GL clips at the window).
+        const QFontMetricsF metrics(font);
+        const float lineH = static_cast<float>(metrics.height());
+        painter->drawText(QRectF(at.x(), at.y(), view.width() * 2.0, lineH),
+                          Qt::AlignLeft | Qt::AlignTop | Qt::TextSingleLine, content);
     }
     // Selection + gizmo overlay on top.
     drawOverlay(painter, view);
@@ -1662,7 +1969,7 @@ void SceneEditorTab::drawOverlay(QPainter* painter, const QRectF& fitted) {
     if (selectedKind_ == "text") {
         const icg::studio::scenecpp::TextItem* text = selectedText();
         float x = 0, y = 0, w = 0, h = 0;
-        const float gizmoScale = rw / kDesignWidth;
+        const float gizmoScale = rw / windowWidth_;
         if (text && textBounds(*text, gizmoScale, x, y, w, h)) {
             const QPointF topLeft = toWidget(x, y);
             const QPointF bottomRight = toWidget(x + w, y + h);
@@ -1698,7 +2005,7 @@ void SceneEditorTab::drawOverlay(QPainter* painter, const QRectF& fitted) {
         const double radius = qMax(8.0, static_cast<double>(qMin(w, h)) * 0.4);
         painter->setPen(QPen(Qt::cyan, 2));
         painter->drawEllipse(center,
-                             radius * rw / kDesignWidth, radius * rh / kDesignHeight);
+                             radius * rw / windowWidth_, radius * rh / windowHeight_);
     } else {
         const QPointF topLeft = toWidget(x, y);
         const QPointF bottomRight = toWidget(x + w, y + h);

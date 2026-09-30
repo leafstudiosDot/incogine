@@ -15,6 +15,7 @@
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -23,6 +24,7 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTextCursor>
+#include <QRegularExpression>
 #include <QTextDocument>
 #include <QTextStream>
 #include <QToolBar>
@@ -135,6 +137,12 @@ void StudioMainWindow::buildMenus() {
     tb->addAction(tr("Save"), this, &StudioMainWindow::onSaveCurrentFile);
     tb->addAction(tr("Refresh"), this, &StudioMainWindow::onRefreshProject);
     tb->addAction(tr("Rescan scenes"), this, &StudioMainWindow::onDiscoverScenes);
+    // Manual game compile only (never Studio itself, never automatic):
+    // builds the CMake game target so scene/source edits can be tested.
+    compileAction_ = tb->addAction(tr("Compile Incogine"), this,
+                                   &StudioMainWindow::onCompileGame);
+    compileAction_->setToolTip(
+        tr("Configure (first run) and build the Incogine target with CMake"));
 }
 
 void StudioMainWindow::buildCentral() {
@@ -380,7 +388,7 @@ void StudioMainWindow::buildDocks() {
     previewConsole_->setReadOnly(true);
     previewConsole_->setMaximumBlockCount(5000);
     previewConsole_->setPlaceholderText(
-        tr("Game process output appears here while a preview runs."));
+        tr("Incogine process output appears here while a preview runs."));
     consoleDock->setWidget(previewConsole_);
     addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
     tabifyDockWidget(outDock, consoleDock);
@@ -491,6 +499,119 @@ void StudioMainWindow::refreshEditActions() {
     if (redoAction_) {
         redoAction_->setEnabled(text && text->document()->isRedoAvailable());
     }
+}
+
+QString StudioMainWindow::gameTargetName() const {
+    // Desktop game target == the CMake top-level project name. Read it from
+    // the configured build tree so a renamed project keeps working; the
+    // Studio target itself is never built from here.
+    QFile cache(QString::fromStdString(projectRoot_) + QStringLiteral("/build/CMakeCache.txt"));
+    if (cache.open(QIODevice::ReadOnly)) {
+        while (!cache.atEnd()) {
+            const QString line = QString::fromUtf8(cache.readLine());
+            if (line.startsWith(QStringLiteral("CMAKE_PROJECT_NAME:STATIC="))) {
+                const QString name =
+                    line.mid(int(QStringLiteral("CMAKE_PROJECT_NAME:STATIC=").size()))
+                        .trimmed();
+                if (!name.isEmpty()) {
+                    return name;
+                }
+            }
+        }
+    }
+    return QStringLiteral("Incogine");
+}
+
+void StudioMainWindow::startGameBuild() {
+    const QString buildPath = QString::fromStdString(projectRoot_) + QStringLiteral("/build");
+    logBuildLine(tr("Building target %1 (Debug) ...").arg(gameTargetName()));
+    compileProcess_->setProgram(QStringLiteral("cmake"));
+    compileProcess_->setArguments({QStringLiteral("--build"), buildPath,
+                                   QStringLiteral("--target"), gameTargetName(),
+                                   QStringLiteral("--config"), QStringLiteral("Debug")});
+}
+
+void StudioMainWindow::onCompileGame() {
+    if (compileProcess_ && compileProcess_->state() != QProcess::NotRunning) {
+        return; // already running; button is disabled anyway
+    }
+    if (!compileProcess_) {
+        compileProcess_ = new QProcess(this);
+        connect(compileProcess_, &QProcess::readyReadStandardOutput, this,
+                &StudioMainWindow::onCompileOutput);
+        connect(compileProcess_, &QProcess::readyReadStandardError, this,
+                &StudioMainWindow::onCompileOutput);
+        connect(compileProcess_, &QProcess::errorOccurred, this,
+                &StudioMainWindow::onCompileError);
+        connect(compileProcess_,
+                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+                &StudioMainWindow::onCompileFinished);
+    }
+    compileBuffer_.clear();
+    compileAction_->setEnabled(false);
+    const QString root = QString::fromStdString(projectRoot_);
+    const QString buildPath = root + QStringLiteral("/build");
+    if (!QFile::exists(buildPath + QStringLiteral("/CMakeCache.txt"))) {
+        // First run: configure with the default generator (newest VS on
+        // Windows), then chain into the build when it succeeds.
+        compileConfiguring_ = true;
+        logBuildLine(tr("Configuring %1 ...").arg(buildPath));
+        compileProcess_->setProgram(QStringLiteral("cmake"));
+        compileProcess_->setArguments(
+            {QStringLiteral("-S"), root, QStringLiteral("-B"), buildPath});
+    } else {
+        compileConfiguring_ = false;
+        startGameBuild();
+    }
+    compileProcess_->start();
+}
+
+void StudioMainWindow::onCompileOutput() {
+    if (!compileProcess_) {
+        return;
+    }
+    compileBuffer_ += QString::fromLocal8Bit(compileProcess_->readAllStandardOutput());
+    compileBuffer_ += QString::fromLocal8Bit(compileProcess_->readAllStandardError());
+    int nl = -1;
+    while ((nl = compileBuffer_.indexOf(QLatin1Char('\n'))) >= 0) {
+        QString line = compileBuffer_.left(nl);
+        compileBuffer_ = compileBuffer_.mid(nl + 1);
+        if (!line.isEmpty() && line.back() == QLatin1Char('\r')) {
+            line.chop(1);
+        }
+        logBuildLine(line);
+    }
+}
+
+void StudioMainWindow::onCompileError(QProcess::ProcessError error) {
+    if (compileProcess_ && compileProcess_->state() == QProcess::NotRunning) {
+        logBuildLine(tr("Could not start cmake (error %1). Is CMake on PATH?")
+                         .arg(static_cast<int>(error)));
+        compileConfiguring_ = false;
+        compileAction_->setEnabled(true);
+    }
+}
+
+void StudioMainWindow::onCompileFinished(int exitCode, QProcess::ExitStatus status) {
+    if (!compileBuffer_.isEmpty()) {
+        logBuildLine(compileBuffer_);
+        compileBuffer_.clear();
+    }
+    const bool ok = (status == QProcess::NormalExit && exitCode == 0);
+    if (compileConfiguring_) {
+        compileConfiguring_ = false;
+        if (ok) {
+            startGameBuild(); // chain configure -> build, stay disabled
+            compileProcess_->start();
+            return;
+        }
+        logBuildLine(tr("Configure failed (exit %1).").arg(exitCode));
+    } else if (ok) {
+        logBuildLine(tr("Build finished: %1 OK.").arg(gameTargetName()));
+    } else {
+        logBuildLine(tr("Build finished with errors (exit %1).").arg(exitCode));
+    }
+    compileAction_->setEnabled(true);
 }
 
 CodeEditor* StudioMainWindow::openCodePage(const QString& path, int line) {
@@ -973,6 +1094,25 @@ void StudioMainWindow::onSceneSelected(QTreeWidgetItem* item) {
         if (sceneName.isEmpty()) {
             sceneName = className;
         }
+        if (className == sceneEditor_->sceneClass() && !sceneEditor_->isDirty()) {
+            central_->setCurrentWidget(sceneTab_); // same scene, nothing to do
+            return;
+        }
+        // Unsaved scene edits never survive a switch (setScene re-parses
+        // from disk), so offer Save / Don't Save / Cancel first.
+        if (sceneEditor_->isDirty()) {
+            auto answer = QMessageBox::question(
+                this, tr("Unsaved scene changes"),
+                tr("Scene %1 has unsaved changes. Save before switching?")
+                    .arg(sceneEditor_->sceneClass()),
+                QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+            if (answer == QMessageBox::Cancel) {
+                return;
+            }
+            if (answer == QMessageBox::Save && !sceneEditor_->saveSceneToSource()) {
+                return; // write failed (noted in the tab); stay put
+            }
+        }
         selectedSceneClass_ = className;
         sceneEditor_->setScene(className, header,
                                top->data(1, Qt::UserRole).toString());
@@ -1092,4 +1232,34 @@ bool StudioMainWindow::restoreGeometryFromSettings() {
 
 void StudioMainWindow::log(const QString& msg) {
     output_->appendPlainText(msg);
+}
+
+// Build-console line: errors red, warnings yellow, everything else in the
+// theme's default text color (palette-driven, so dark/light mode both
+// read correctly). Plain-text insert keeps the existing log content
+// intact — no HTML round trip.
+void StudioMainWindow::logBuildLine(const QString& line) {
+    static const QRegularExpression isError(
+        QStringLiteral("\\berror\\b|\\bfatal\\b|\\bfailed\\b|:error "),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression isWarning(
+        QStringLiteral("\\bwarning\\b|:warning "),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression isZeroCount(
+        QStringLiteral("^\\s*0\\s+(error|warning)"),
+        QRegularExpression::CaseInsensitiveOption);
+    QColor color = output_->palette().color(QPalette::Text);
+    if (!isZeroCount.match(line).hasMatch()) {
+        if (isError.match(line).hasMatch()) {
+            color = Qt::red;
+        } else if (isWarning.match(line).hasMatch()) {
+            color = Qt::darkYellow; // readable on both dark and light themes
+        }
+    }
+    QTextCursor cursor(output_->document());
+    cursor.movePosition(QTextCursor::End);
+    QTextCharFormat format;
+    format.setForeground(color);
+    cursor.insertText(line + QStringLiteral("\n"), format);
+    output_->ensureCursorVisible();
 }

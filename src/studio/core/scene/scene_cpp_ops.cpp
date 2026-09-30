@@ -97,8 +97,11 @@ bool Reparse(SceneFile& file, std::string& error) {
     file.sourceText = SerializeSource(file);
     file.headerText = SerializeHeader(file);
     SceneFile fresh;
+    fresh.windowSize = file.windowSize;
+    fresh.measure = file.measure;
     if (!ParseSceneText(file.headerText, file.sourceText, file.model.headerFile,
-                        file.model.sourceFile, fresh, error)) {
+                        file.model.sourceFile, fresh, error, file.windowSize,
+                        file.measure)) {
         return false;
     }
     file.model = std::move(fresh.model);

@@ -18,8 +18,8 @@
 //     literal `f.setTextContent("..");`, numeric `f.setColor(..);`, and
 //     `f.renderUI(x, y);` sites (constant args = placed, else dynamic).
 //     Counted `for` loops over static data evaluate per-iteration: locals
-//     (`int y = ...` layout math with C++ int/float semantics, 1280x720
-//     design constants for GetWindowSize) and `Data[i].name` content
+//     (`int y = ...` layout math with C++ int/float semantics, simulated
+//     window dimensions for GetWindowSize) and `Data[i].name` content
 //     resolve per item; loop-placed items are drawn but share one site,
 //     so SetTextPosition refuses them (sharedSite) instead of moving
 //     siblings. Runtime-dependent sizes/colors (submenu selections)
@@ -51,6 +51,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -108,6 +109,23 @@ struct ObjectModel {
     bool hasConstruct = false;
 };
 
+// Simulated engine window for layout evaluation: GetWindowSize() reports
+// these dimensions (the engine forces 16:9 on resize), so window-relative
+// formulas evaluate exactly as the running game computes them.
+struct WindowSize {
+    int width = 1280;
+    int height = 720;
+};
+
+// Measures rasterized text in engine px, mirroring Font::getSize() after
+// setFontScale (null by default: the Qt-free core cannot rasterize).
+// Studio supplies a Qt implementation so window-constrained labels
+// (`width - label.getSize().width`, the versionFont idiom) still place;
+// without one such labels stay dynamic.
+using FontMeasureFn = std::function<bool(
+    const std::string& fontFile, int pointSizePt, int windowHeight,
+    const std::string& content, double& w, double& h)>;
+
 // A drawable text label: `Font` members (`Font f;` / `Font f[N];`) with
 // their file/size (setFontFile), literal content (setTextContent), color,
 // and renderUI call sites. Positions from constant numeric call args are
@@ -131,6 +149,16 @@ struct TextItem {
     // True when the winning site serves several items (loop body): placed
     // and drawn, but rewrites refuse (one edit would move siblings).
     bool sharedSite = false;
+    // True when the winning renderUI args are window-relative
+    // (GetWindowSize()/getSize()): placed and drawn via measurement, but
+    // rewrites refuse — baking constants would destroy the constraint.
+    bool hasConstraint = false;
+    // Edge pins for the constraint toggles: x in {"", left, right, center},
+    // y in {"", top, bottom, center}. Plain constants pin left/top; ""
+    // means free (constant but window-independent) or custom/hand-written
+    // window-relative code the pin matcher doesn't name.
+    std::string xPin;
+    std::string yPin;
     std::string fontFile;
     int pointSize = 0;
 };
@@ -175,13 +203,21 @@ struct SceneFile {
     bool sourceTrailingNewline = true;
     std::vector<std::string> sourceLines;
     std::vector<std::string> headerLines;
+    // Window size the model was evaluated at (parser-side GetWindowSize).
+    WindowSize windowSize;
+    // Glyph measurer for getSize() evaluation (see FontMeasureFn).
+    FontMeasureFn measure;
 };
 
 bool ParseSceneText(const std::string& headerText, const std::string& sourceText,
                     const std::string& headerName, const std::string& sourceName,
-                    SceneFile& out, std::string& error);
+                    SceneFile& out, std::string& error,
+                    WindowSize window = WindowSize(),
+                    FontMeasureFn measure = nullptr);
 bool ParseSceneFiles(const std::string& headerPath, const std::string& sourcePath,
-                     SceneFile& out, std::string& error);
+                     SceneFile& out, std::string& error,
+                     WindowSize window = WindowSize(),
+                     FontMeasureFn measure = nullptr);
 
 // A line-span replacement (1-based, inclusive). Empty text deletes;
 // insert with endLine + 1 == beginLine.
@@ -210,6 +246,12 @@ bool SetParentObject(SceneFile& file, const std::string& var,
 bool SetTextPosition(SceneFile& file, const std::string& var, int index,
                      const std::string& x, const std::string& y,
                      std::string& error);
+// Splices renderUI arguments verbatim (no placed/constant guards beyond
+// site ownership): the edge-constraint toggles' writer. Refuses unknown
+// items, missing sites, and shared loop sites.
+bool SetTextExpression(SceneFile& file, const std::string& var, int index,
+                       const std::string& x, const std::string& y,
+                       std::string& error);
 struct AddResult {
     bool headerUpdated = false;
 };
