@@ -140,6 +140,29 @@ int main(int argc, char** argv) {
                 }
             }
             std::cout << "self-test: visible loading overlays " << visibleOverlays << "\n";
+            // Offline scene render must paint more than background: grab the
+            // editor canvas (Credits scene = border only) and count lit pixels.
+            if (auto* canvas = win.findChild<SceneCanvas*>()) {
+                const QImage shot = canvas->grab().toImage();
+                int lit = 0, bright = 0;
+                for (int y = 0; y < shot.height(); y += 4) {
+                    const QRgb* line =
+                        reinterpret_cast<const QRgb*>(shot.constScanLine(y));
+                    for (int x = 0; x < shot.width(); x += 4) {
+                        const QRgb p = line[x];
+                        const int sum = qRed(p) + qGreen(p) + qBlue(p);
+                        if (sum > 24) {
+                            ++lit;
+                        }
+                        if (sum > 200) {
+                            ++bright; // border / text / selection only
+                        }
+                    }
+                }
+                std::cout << "self-test: canvas lit pixels " << lit
+                          << " bright " << bright
+                          << (bright > 0 ? "" : " FAILED") << "\n";
+            }
         });
         QTimer::singleShot(500, &app, &QApplication::quit);
     }

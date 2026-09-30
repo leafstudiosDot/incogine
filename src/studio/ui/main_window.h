@@ -9,6 +9,7 @@
 #include <string>
 
 class QFileSystemModel;
+class QAction;
 class QCloseEvent;
 class QPlainTextEdit;
 class QTreeView;
@@ -65,6 +66,7 @@ private slots:
     void onFocusSearch();
     void onTabCloseRequested(int index);
     void onSceneDirtyChanged(bool dirty);
+    void onPreviewConsole(const QString& text);
     void cycleTab(int direction);
     void log(const QString& msg);
 
@@ -95,6 +97,7 @@ private:
     QWidget* openFontPage(const QString& path);
     bool saveCodePage(CodeEditor* editor, const QString& path);
     bool closePage(QWidget* page); // false = user cancelled
+    void refreshEditActions(); // Undo/Redo target the current code page
 
     std::string projectRoot_;
     QFileSystemModel* projectModel_ = nullptr;
@@ -105,7 +108,10 @@ private:
     QFileSystemModel* contextModel_ = nullptr;
     QTreeWidget* sceneTree_ = nullptr;
     QPlainTextEdit* output_ = nullptr;
+    QPlainTextEdit* previewConsole_ = nullptr;
     QTabWidget* central_ = nullptr;
+    QAction* undoAction_ = nullptr; // code pages (per-tab document history)
+    QAction* redoAction_ = nullptr;
     QWidget* sceneTab_ = nullptr;
     QString sceneTabBaseTitle_ = "Scene";
     QString selectedSceneClass_;

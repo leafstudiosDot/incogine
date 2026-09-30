@@ -11,10 +11,12 @@
 #include <QTreeWidget>
 #include <QWidget>
 #include <QElapsedTimer>
+#include <QMap>
 #include <QPointF>
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "../core/scene/scene_cpp.h"
 #include "preview_session.h"
@@ -46,6 +48,8 @@ public:
     void setEditorCamera(icg::Camera* camera) { camera_ = camera; }
     void setEditor(SceneEditorTab* editor) { editor_ = editor; }
     void setMode2D(bool enabled);
+    // 16:9 design rect when offline (no frame); equals fittedRect live.
+    QRectF viewRect() const;
 
 signals:
     void pickRequested(const QPoint& widgetPos);
@@ -106,9 +110,19 @@ public:
     QString sceneClass() const { return sceneClass_; }
     int sceneObjectCount() const;
     int gizmoMode() const; // 0 Move, 1 Rotate, 2 Scale
+    // Undo/redo over committed source states (per scene tab instance).
+    bool canUndoScene() const { return !undoStack_.empty(); }
+    bool canRedoScene() const { return !redoStack_.empty(); }
+    void undoScene();
+    void redoScene();
     // Overlay + picking helpers used by the canvas.
     void drawOverlay(QPainter* painter, const QRectF& fitted);
     bool isMode2D() const;
+    // Offline scene paint (no live frame): border, boxes, texts, gizmo.
+    void paintOffline(QPainter* painter, const QRectF& view);
+    // Selection: objects ("object") and font labels ("text", index in model).
+    QString selectedKind() const { return selectedKind_; }
+    int selectedIndex() const;
 
 signals:
     void dirtyChanged(bool dirty);
@@ -124,10 +138,10 @@ private slots:
     void onSaveToSource();
     void onAddObject();
     void onDeleteObject();
-    void onFramesUpdated();
     void onPick(const QPoint& widgetPos);
     void onDragMove(const QPoint& widgetPos);
     void onDragFinish();
+    void onAnchorChanged(int index);
     void onDropFile(const QString& path, const QPoint& widgetPos);
     void onPan(const QPoint& deltaPixels);
     void onZoom2D(double factor, const QPoint& widgetPos);
@@ -137,6 +151,7 @@ private slots:
 private:
     void rebuildHierarchy();
     void refreshInspector();
+    void refreshTextInspector();
     void refreshSourceView();
     void setDirty(bool dirty);
     void setNote(const QString& text);
@@ -149,6 +164,13 @@ private:
     bool widgetToWorld(const QPoint& widgetPos, float& outX, float& outY);
     // Parser object index by var, or -1.
     int objectIndex(const QString& var) const;
+    const icg::studio::scenecpp::ObjectModel* selectedObject() const;
+    const icg::studio::scenecpp::TextItem* selectedText() const;
+    // Design-pixel bounds of a placed text label at a viewport scale
+    // (fonts scale with the view like the game's windowHeight/720 factor);
+    // false when dynamic.
+    bool textBounds(const icg::studio::scenecpp::TextItem& text, float viewScale,
+                    float& x, float& y, float& w, float& h) const;
     // Numeric rect of an object in design pixels; false when non-numeric.
     bool objectRect(int objectIdx, float& x, float& y, float& w, float& h) const;
     QString makeUniqueVar(const QString& base) const;
@@ -170,11 +192,34 @@ private:
     QDoubleSpinBox* rotSpin_[3] = {nullptr, nullptr, nullptr};
     QDoubleSpinBox* scaleSpin_[3] = {nullptr, nullptr, nullptr};
     QDoubleSpinBox* colorSpin_[4] = {nullptr, nullptr, nullptr, nullptr};
+    QComboBox* anchorCombo_ = nullptr; // renderUI anchor presets (texts)
+    QPushButton* undoButton_ = nullptr; // scene source history (per tab)
+    QPushButton* redoButton_ = nullptr;
     QLabel* idLabel_ = nullptr;
     QPushButton* applyButton_ = nullptr;
     QPushButton* addButton_ = nullptr;
     QPushButton* deleteButton_ = nullptr;
     QPlainTextEdit* sourceView_ = nullptr;
+
+    QMap<QString, QString> fontFamilies_; // asset path -> loaded family
+    QString familyForFont(const QString& assetPath);
+
+    // ---- scene source history (undo/redo, per tab instance) ----
+    struct SceneHistoryEntry {
+        std::string sourceText;
+        std::string headerText;
+    };
+    static constexpr size_t kSceneHistoryCap = 50;
+    std::vector<SceneHistoryEntry> undoStack_;
+    std::vector<SceneHistoryEntry> redoStack_;
+    std::string cleanSource_; // last saved (or loaded) state for dirty checks
+    std::string cleanHeader_;
+    SceneHistoryEntry currentSnapshot() const;
+    void pushSceneUndo();   // snapshot pre-edit state, clears redo
+    void dropUndoIfNoChange(); // pop the snapshot when the op was a no-op
+    bool restoreSnapshot(const SceneHistoryEntry& entry, std::string& error);
+    void refreshUndoRedo(); // button enabled states
+    bool sceneMatchesClean() const;
 
     icg::studio::scenecpp::SceneFile sceneFile_;
     bool sceneOk_ = false;
@@ -182,10 +227,15 @@ private:
     QString sceneHeader_;
     QString sceneSource_;
     QString selectedVar_;
+    QString selectedKind_; // "object", "text", or empty
+    int selectedIndex_ = -1; // model index for the current selection
     bool dirty_ = false;
     bool headerDirty_ = false;
     bool draggingObject_ = false;
     QPointF dragGrabOffset_; // design-pixel offset, filled at press
+    double dragStartX_ = 0.0; // press-time model position (failed-drop restore)
+    double dragStartY_ = 0.0;
+    bool dragStartValid_ = false;
     QElapsedTimer liveClock_; // throttles live sends during drags/spins
     float orbitYaw_ = -45.0f;
     float orbitPitch_ = 20.0f;

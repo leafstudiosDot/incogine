@@ -49,10 +49,13 @@ signals:
     void statusChanged(const QString& text);
     void runningChanged(bool running);
     void connectedChanged(bool connected);
+    // Raw game process output (stdout/stderr) for the Preview Console dock.
+    void consoleOutput(const QString& text);
 
 private slots:
     void onPoll();
     void onProcessFinished(int exitCode, QProcess::ExitStatus status);
+    void onProcessOutput();
 
 private:
     QProcess* proc_ = nullptr;

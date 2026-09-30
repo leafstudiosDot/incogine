@@ -10,6 +10,8 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
+#include <QFontDatabase>
+#include <QFontMetrics>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -20,6 +22,7 @@
 #include <QPaintEvent>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSplitter>
 #include <QTabWidget>
 #include <QTextStream>
@@ -29,6 +32,7 @@
 #include <cmath>
 
 #include "../../core/render/camera.h"
+#include "../core/scene/scene_cpp_detail.h"
 
 namespace {
 
@@ -62,12 +66,38 @@ void SceneCanvas::setMode2D(bool enabled) {
 }
 
 void SceneCanvas::paintEvent(QPaintEvent* event) {
-    PreviewCanvas::paintEvent(event);
+    if (!frame_.isNull()) {
+        PreviewCanvas::paintEvent(event);
+    } else if (editor_) {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        editor_->paintOffline(&painter, viewRect());
+        return;
+    } else {
+        PreviewCanvas::paintEvent(event);
+        return;
+    }
     if (editor_) {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
-        editor_->drawOverlay(&painter, fittedRect());
+        editor_->drawOverlay(&painter, viewRect());
     }
+}
+
+QRectF SceneCanvas::viewRect() const {
+    // Live frames define the rect; offline, the 16:9 design area is fitted
+    // the same way so mapping stays identical in both modes.
+    if (!frame_.isNull()) {
+        return fittedRect();
+    }
+    if (width() <= 0 || height() <= 0) {
+        return QRectF();
+    }
+    const QSize design(1280, 720);
+    const QSize fitted = design.scaled(size(), Qt::KeepAspectRatio);
+    const int x = (width() - fitted.width()) / 2;
+    const int y = (height() - fitted.height()) / 2;
+    return QRectF(x, y, fitted.width(), fitted.height());
 }
 
 void SceneCanvas::mousePressEvent(QMouseEvent* event) {
@@ -191,6 +221,12 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     gizmoCombo_->setToolTip(tr("Drag moves in 2D; rotate/scale via the Inspector"));
     snapBox_ = new QCheckBox(tr("Snap 10px"));
     snapBox_->setToolTip(tr("Snap viewport drags to a 10px grid"));
+    undoButton_ = new QPushButton(tr("Undo"));
+    undoButton_->setToolTip(tr("Undo the last scene source change (this tab only)"));
+    undoButton_->setEnabled(false);
+    redoButton_ = new QPushButton(tr("Redo"));
+    redoButton_->setToolTip(tr("Redo the undone scene source change (this tab only)"));
+    redoButton_->setEnabled(false);
     saveButton_ = new QPushButton(tr("Save to source"));
     saveButton_->setToolTip(tr("Write scene .cpp/.h changes to disk"));
 
@@ -201,6 +237,8 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     toolbar->addWidget(gizmoCombo_);
     toolbar->addWidget(snapBox_);
     toolbar->addStretch(1);
+    toolbar->addWidget(undoButton_);
+    toolbar->addWidget(redoButton_);
     toolbar->addWidget(saveButton_);
 
     canvas_ = new SceneCanvas(session_);
@@ -246,6 +284,25 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
                 &SceneEditorTab::onSpinEdited);
     }
     inspectorLayout->addLayout(colorRow);
+    // Anchor presets for renderUI text labels: 9 design-space points over
+    // the 1280x720 window (Left/Center/Right x Top/Middle/Bottom), the same
+    // GetWindowSize() reference the engine exposes. Choosing one fills the
+    // Position spins and commits through the normal text path (constants,
+    // so the label stays draggable); shared/dynamic layouts disable it.
+    auto* anchorRow = new QHBoxLayout();
+    anchorRow->addWidget(new QLabel(tr("Anchor:")));
+    anchorCombo_ = new QComboBox();
+    anchorCombo_->addItems({tr("Top-Left"), tr("Top-Center"), tr("Top-Right"),
+                            tr("Middle-Left"), tr("Center"), tr("Middle-Right"),
+                            tr("Bottom-Left"), tr("Bottom-Center"),
+                            tr("Bottom-Right")});
+    anchorCombo_->setPlaceholderText(tr("Anchor…"));
+    anchorCombo_->setCurrentIndex(-1);
+    anchorCombo_->setEnabled(false);
+    anchorCombo_->setToolTip(
+        tr("Snap the label to a window anchor (1280x720 design space)."));
+    anchorRow->addWidget(anchorCombo_, 1);
+    inspectorLayout->addLayout(anchorRow);
     idLabel_ = new QLabel();
     inspectorLayout->addWidget(idLabel_);
     applyButton_ = new QPushButton(tr("Apply live"));
@@ -289,13 +346,27 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     connect(hierarchy_, &HierarchyTree::reparentRequested, this, &SceneEditorTab::onReparent);
     connect(applyButton_, &QPushButton::clicked, this, &SceneEditorTab::onApplyLive);
     connect(saveButton_, &QPushButton::clicked, this, &SceneEditorTab::onSaveToSource);
+    connect(undoButton_, &QPushButton::clicked, this, &SceneEditorTab::undoScene);
+    connect(redoButton_, &QPushButton::clicked, this, &SceneEditorTab::redoScene);
+    // Tab-local history shortcuts: WidgetWithChildrenShortcut keeps them
+    // inside this tab, so each Code tab keeps its own document history.
+    auto* undoShortcut = new QShortcut(QKeySequence::Undo, this);
+    undoShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(undoShortcut, &QShortcut::activated, this, &SceneEditorTab::undoScene);
+    auto* redoShortcut = new QShortcut(QKeySequence::Redo, this);
+    redoShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(redoShortcut, &QShortcut::activated, this, &SceneEditorTab::redoScene);
     connect(addButton_, &QPushButton::clicked, this, &SceneEditorTab::onAddObject);
     connect(deleteButton_, &QPushButton::clicked, this, &SceneEditorTab::onDeleteObject);
-    connect(session_, &PreviewSession::framesUpdated, this,
-            &SceneEditorTab::onFramesUpdated);
+    // Deliberately NOT connected to framesUpdated: the Scene tab renders
+    // the parsed layout itself and never switches to the live view.
     connect(canvas_, &SceneCanvas::pickRequested, this, &SceneEditorTab::onPick);
     connect(canvas_, &SceneCanvas::dragMoved, this, &SceneEditorTab::onDragMove);
     connect(canvas_, &SceneCanvas::dragFinished, this, &SceneEditorTab::onDragFinish);
+    // `activated` (not currentIndexChanged): fires only on user picks, and
+    // the slot resets the display to the placeholder afterwards.
+    connect(anchorCombo_, &QComboBox::activated, this,
+            &SceneEditorTab::onAnchorChanged);
     connect(canvas_, &SceneCanvas::panBy, this, &SceneEditorTab::onPan);
     connect(canvas_, &SceneCanvas::zoomBy, this, &SceneEditorTab::onZoom2D);
     connect(canvas_, &SceneCanvas::orbitBy, this, &SceneEditorTab::onOrbit);
@@ -303,6 +374,9 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     connect(canvas_, &SceneCanvas::dropFile, this, &SceneEditorTab::onDropFile);
     onCameraChanged(0);
     setNote(tr("Select a scene in the Scenes panel to start editing."));
+    // NOTE: the Scene tab never shows live preview frames (see Preview
+    // tab). It renders the parsed layout itself, so editing works with no
+    // game process running.
 }
 
 SceneEditorTab::~SceneEditorTab() {
@@ -347,9 +421,109 @@ void SceneEditorTab::setScene(const QString& className, const QString& headerPat
     }
     setDirty(false);
     headerDirty_ = false;
+    // Fresh history per loaded scene; the clean baseline drives dirty
+    // checks after undo/redo instead of a blind dirty flag.
+    undoStack_.clear();
+    redoStack_.clear();
+    cleanSource_ = icg::studio::scenecpp::SerializeSource(sceneFile_);
+    cleanHeader_ = icg::studio::scenecpp::SerializeHeader(sceneFile_);
+    refreshUndoRedo();
     rebuildHierarchy();
     refreshInspector();
     refreshSourceView();
+}
+
+SceneEditorTab::SceneHistoryEntry SceneEditorTab::currentSnapshot() const {
+    return {icg::studio::scenecpp::SerializeSource(sceneFile_),
+            icg::studio::scenecpp::SerializeHeader(sceneFile_)};
+}
+
+void SceneEditorTab::pushSceneUndo() {
+    undoStack_.push_back(currentSnapshot());
+    while (undoStack_.size() > kSceneHistoryCap) {
+        undoStack_.erase(undoStack_.begin());
+    }
+    redoStack_.clear();
+    refreshUndoRedo();
+}
+
+void SceneEditorTab::dropUndoIfNoChange() {
+    if (undoStack_.empty()) {
+        return;
+    }
+    const SceneHistoryEntry now = currentSnapshot();
+    if (now.sourceText == undoStack_.back().sourceText &&
+        now.headerText == undoStack_.back().headerText) {
+        undoStack_.pop_back();
+    }
+    refreshUndoRedo();
+}
+
+bool SceneEditorTab::sceneMatchesClean() const {
+    return icg::studio::scenecpp::SerializeSource(sceneFile_) == cleanSource_ &&
+           icg::studio::scenecpp::SerializeHeader(sceneFile_) == cleanHeader_;
+}
+
+bool SceneEditorTab::restoreSnapshot(const SceneHistoryEntry& entry,
+                                     std::string& error) {
+    sceneFile_.sourceText = entry.sourceText;
+    sceneFile_.headerText = entry.headerText;
+    sceneFile_.sourceLines = icg::studio::scenecpp::detail::SplitLines(
+        sceneFile_.sourceText, sceneFile_.sourceEol);
+    sceneFile_.headerLines = icg::studio::scenecpp::detail::SplitLines(
+        sceneFile_.headerText, sceneFile_.headerEol);
+    if (!icg::studio::scenecpp::detail::Reparse(sceneFile_, error)) {
+        return false;
+    }
+    setDirty(!sceneMatchesClean());
+    rebuildHierarchy();
+    refreshInspector();
+    refreshSourceView();
+    canvas_->update();
+    return true;
+}
+
+void SceneEditorTab::undoScene() {
+    if (!ensureScene(tr("undo")) || undoStack_.empty()) {
+        setNote(tr("Nothing to undo."));
+        return;
+    }
+    redoStack_.push_back(currentSnapshot());
+    const SceneHistoryEntry entry = undoStack_.back();
+    undoStack_.pop_back();
+    std::string error;
+    if (!restoreSnapshot(entry, error)) {
+        setNote(tr("Undo failed: %1").arg(QString::fromStdString(error)));
+        return;
+    }
+    refreshUndoRedo();
+    setNote(tr("Undone. Save to source to persist."));
+}
+
+void SceneEditorTab::redoScene() {
+    if (!ensureScene(tr("redo")) || redoStack_.empty()) {
+        setNote(tr("Nothing to redo."));
+        return;
+    }
+    undoStack_.push_back(currentSnapshot());
+    const SceneHistoryEntry entry = redoStack_.back();
+    redoStack_.pop_back();
+    std::string error;
+    if (!restoreSnapshot(entry, error)) {
+        setNote(tr("Redo failed: %1").arg(QString::fromStdString(error)));
+        return;
+    }
+    refreshUndoRedo();
+    setNote(tr("Redone. Save to source to persist."));
+}
+
+void SceneEditorTab::refreshUndoRedo() {
+    if (undoButton_) {
+        undoButton_->setEnabled(!undoStack_.empty());
+    }
+    if (redoButton_) {
+        redoButton_->setEnabled(!redoStack_.empty());
+    }
 }
 
 int SceneEditorTab::objectIndex(const QString& var) const {
@@ -391,7 +565,7 @@ bool SceneEditorTab::objectRect(int objectIdx, float& x, float& y, float& w,
 }
 
 bool SceneEditorTab::widgetToWorld(const QPoint& widgetPos, float& outX, float& outY) {
-    const QRectF fitted = canvas_->fittedRect();
+    const QRectF fitted = canvas_->viewRect();
     if (fitted.width() <= 0 || fitted.height() <= 0) {
         return false;
     }
@@ -416,7 +590,7 @@ void SceneEditorTab::rebuildHierarchy() {
     }
     const auto& objects = sceneFile_.model.objects;
     QMap<QString, QTreeWidgetItem*> items;
-    // Roots first (unknown parents stay top-level), then attach children.
+    // Objects: roots first (unknown parents stay top-level), then children.
     for (const auto& obj : objects) {
         const QString var = QString::fromStdString(obj.varName);
         auto* item = new QTreeWidgetItem();
@@ -426,6 +600,8 @@ void SceneEditorTab::rebuildHierarchy() {
         item->setText(0, label);
         item->setText(1, QString::fromStdString(obj.typeName));
         item->setData(0, Qt::UserRole, var);
+        item->setData(0, Qt::UserRole + 1, "object");
+        item->setData(0, Qt::UserRole + 2, -1);
         item->setFlags(item->flags() | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
         items.insert(var, item);
     }
@@ -445,19 +621,53 @@ void SceneEditorTab::rebuildHierarchy() {
             items[parent]->addChild(item);
         }
     }
+    // Font labels: always top-level (the engine has no text parenting).
+    // Dynamic ones are listed but not placed; reparent drags reject them.
+    for (const auto& text : sceneFile_.model.texts) {
+        const QString var = QString::fromStdString(text.varName);
+        auto* item = new QTreeWidgetItem();
+        QString label = QString::fromStdString(
+            text.hasContent && !text.content.empty()
+                ? (text.content.size() > 24 ? text.content.substr(0, 24) + "..."
+                                            : text.content)
+                : "[" + text.varName + "]");
+        if (text.dynamicPos) {
+            label += tr(" (dynamic)");
+        }
+        item->setText(0, label);
+        item->setText(1, tr("Text"));
+        item->setData(0, Qt::UserRole, var);
+        item->setData(0, Qt::UserRole + 1, "text");
+        item->setData(0, Qt::UserRole + 2, text.index);
+        hierarchy_->addTopLevelItem(item);
+    }
     hierarchy_->expandAll();
 }
 
 void SceneEditorTab::refreshInspector() {
+    applyButton_->setEnabled(false);
+    deleteButton_->setEnabled(false);
+    if (selectedKind_ == "text") {
+        refreshTextInspector();
+        return;
+    }
+    if (anchorCombo_) {
+        anchorCombo_->setEnabled(false); // anchors are text-label only
+    }
     const int idx = objectIndex(selectedVar_);
     const bool has = idx >= 0;
-    applyButton_->setEnabled(false);
     deleteButton_->setEnabled(has);
     if (!has) {
         idLabel_->setText(tr("No selection."));
         return;
     }
     const auto& obj = sceneFile_.model.objects[idx];
+    for (int i = 0; i < 3; ++i) {
+        rotSpin_[i]->setEnabled(true);
+        scaleSpin_[i]->setEnabled(true);
+        posSpin_[i]->setEnabled(true);
+    }
+    posSpin_[2]->setEnabled(true);
     auto fill = [](QDoubleSpinBox* spins[3],
                    const icg::studio::scenecpp::VecExpr& vec, bool known,
                    double fallback) {
@@ -488,6 +698,67 @@ void SceneEditorTab::refreshInspector() {
     } else {
         idLabel_->setText(tr("No file id — Save to source assigns one."));
     }
+}
+
+void SceneEditorTab::refreshTextInspector() {
+    const icg::studio::scenecpp::TextItem* text = selectedText();
+    deleteButton_->setEnabled(false); // text sites are removed in source
+    if (!text) {
+        idLabel_->setText(tr("No selection."));
+        if (anchorCombo_) {
+            anchorCombo_->setEnabled(false);
+        }
+        return;
+    }
+    const bool placed = !text->dynamicPos && text->xNum && text->yNum;
+    for (int i = 0; i < 3; ++i) {
+        posSpin_[i]->blockSignals(true);
+        rotSpin_[i]->blockSignals(true);
+        scaleSpin_[i]->blockSignals(true);
+        rotSpin_[i]->setEnabled(false);
+        scaleSpin_[i]->setEnabled(false);
+    }
+    posSpin_[0]->setEnabled(placed);
+    posSpin_[1]->setEnabled(placed);
+    posSpin_[2]->setEnabled(false);
+    if (placed) {
+        posSpin_[0]->setValue(text->xVal);
+        posSpin_[1]->setValue(text->yVal);
+    } else {
+        posSpin_[0]->setValue(0.0);
+        posSpin_[1]->setValue(0.0);
+    }
+    posSpin_[2]->setValue(0.0);
+    for (int i = 0; i < 3; ++i) {
+        posSpin_[i]->blockSignals(false);
+        rotSpin_[i]->blockSignals(false);
+        scaleSpin_[i]->blockSignals(false);
+    }
+    if (anchorCombo_) {
+        // Anchors commit constants through SetTextPosition, so they need a
+        // placed label with its own call site (shared loop layouts refuse).
+        anchorCombo_->blockSignals(true);
+        anchorCombo_->setCurrentIndex(-1);
+        anchorCombo_->setEnabled(placed && !text->sharedSite);
+        anchorCombo_->blockSignals(false);
+    }
+    for (int i = 0; i < 4; ++i) {
+        colorSpin_[i]->blockSignals(true);
+        colorSpin_[i]->setEnabled(false); // text color edits stay in source for now
+        colorSpin_[i]->setValue(text->hasColor ? text->color[i] : 255.0);
+        colorSpin_[i]->blockSignals(false);
+    }
+    QString info = QString::fromStdString(text->fontFile);
+    if (text->pointSize > 0) {
+        info += tr(" %1pt").arg(text->pointSize);
+    }
+    if (!text->hasContent || text->content.empty()) {
+        info += tr(" (no literal content)");
+    }
+    if (!placed) {
+        info += tr(" — dynamic layout, not draggable");
+    }
+    idLabel_->setText(info);
 }
 
 void SceneEditorTab::refreshSourceView() {
@@ -536,11 +807,74 @@ int SceneEditorTab::gizmoMode() const {
 void SceneEditorTab::onHierarchyClicked(QTreeWidgetItem* item) {
     if (!item) {
         selectedVar_.clear();
+        selectedKind_.clear();
+        selectedIndex_ = -1;
     } else {
         selectedVar_ = item->data(0, Qt::UserRole).toString();
+        selectedKind_ = item->data(0, Qt::UserRole + 1).toString();
+        if (selectedKind_.isEmpty()) {
+            selectedKind_ = "object"; // legacy items
+        }
+        selectedIndex_ = item->data(0, Qt::UserRole + 2).toInt();
     }
     refreshInspector();
     canvas_->update();
+}
+
+const icg::studio::scenecpp::ObjectModel* SceneEditorTab::selectedObject() const {
+    if (selectedKind_ != "object") {
+        return nullptr;
+    }
+    const std::string name = selectedVar_.toStdString();
+    for (const auto& obj : sceneFile_.model.objects) {
+        if (obj.varName == name) {
+            return &obj;
+        }
+    }
+    return nullptr;
+}
+
+const icg::studio::scenecpp::TextItem* SceneEditorTab::selectedText() const {
+    if (selectedKind_ != "text") {
+        return nullptr;
+    }
+    const std::string name = selectedVar_.toStdString();
+    for (const auto& text : sceneFile_.model.texts) {
+        if (text.varName == name && text.index == selectedIndex_) {
+            return &text;
+        }
+    }
+    return nullptr;
+}
+
+bool SceneEditorTab::textBounds(const icg::studio::scenecpp::TextItem& text,
+                                float viewScale, float& x, float& y, float& w,
+                                float& h) const {
+    if (text.dynamicPos || !text.xNum || !text.yNum || viewScale <= 0.0f) {
+        return false;
+    }
+    QString content = QString::fromStdString(text.content);
+    if (content.isEmpty()) {
+        content = QString("[%1]").arg(QString::fromStdString(text.varName));
+    }
+    QFont font;
+    // familyForFont is non-const (caches); cast is safe here (outer const).
+    const QString family =
+        const_cast<SceneEditorTab*>(this)->familyForFont(
+            QString::fromStdString(text.fontFile));
+    if (!family.isEmpty()) {
+        font.setFamily(family);
+    }
+    font.setPointSizeF((text.pointSize > 0 ? text.pointSize : 16) * viewScale);
+    const QFontMetricsF metrics(font);
+    // Bounds in design pixels so picking matches what is drawn.
+    const float scaleW = static_cast<float>(metrics.horizontalAdvance(content)) / viewScale;
+    const float scaleH = static_cast<float>(metrics.height()) / viewScale;
+    x = static_cast<float>(text.xVal);
+    y = static_cast<float>(text.yVal);
+    w = scaleW;
+    h = scaleH;
+    return w > 0 && h > 0;
 }
 
 void SceneEditorTab::onReparent(const QString& childVar, const QString& newParentVar) {
@@ -550,6 +884,14 @@ void SceneEditorTab::onReparent(const QString& childVar, const QString& newParen
     if (childVar.isEmpty()) {
         rebuildHierarchy();
         return;
+    }
+    // Texts cannot parent (the engine has no such concept).
+    for (const auto& text : sceneFile_.model.texts) {
+        if (text.varName == childVar.toStdString()) {
+            setNote(tr("Font labels cannot parent — engine has no text hierarchy."));
+            rebuildHierarchy();
+            return;
+        }
     }
     // Cycle guard on the model before rewriting.
     if (!newParentVar.isEmpty()) {
@@ -574,12 +916,15 @@ void SceneEditorTab::onReparent(const QString& childVar, const QString& newParen
         }
     }
     std::string error;
+    pushSceneUndo();
     if (!icg::studio::scenecpp::SetParentObject(sceneFile_, childVar.toStdString(),
                                                 newParentVar.toStdString(), error)) {
         setNote(tr("Reparent failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
         rebuildHierarchy();
         return;
     }
+    dropUndoIfNoChange();
     setDirty(true);
     rebuildHierarchy();
     refreshSourceView();
@@ -666,23 +1011,99 @@ void SceneEditorTab::onSpinEdited() {
     if (draggingObject_ || !ensureScene(tr("edit"))) {
         return;
     }
+    if (selectedKind_ == "text") {
+        const icg::studio::scenecpp::TextItem* text = selectedText();
+        if (!text || text->dynamicPos) {
+            return;
+        }
+        std::string error;
+        pushSceneUndo();
+        if (!icg::studio::scenecpp::SetTextPosition(
+                sceneFile_, text->varName, text->index,
+                formatDouble(posSpin_[0]->value()).toStdString(),
+                formatDouble(posSpin_[1]->value()).toStdString(), error)) {
+            setNote(tr("Edit failed: %1").arg(QString::fromStdString(error)));
+            dropUndoIfNoChange();
+            refreshInspector();
+            return;
+        }
+        dropUndoIfNoChange();
+        setDirty(true);
+        refreshSourceView();
+        canvas_->update();
+        return;
+    }
     const int idx = objectIndex(selectedVar_);
     if (idx < 0) {
         return;
     }
     std::string error;
+    pushSceneUndo();
     if (!applySpinsToModel(error)) {
         setNote(tr("Edit failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
         refreshInspector();
         return;
     }
+    dropUndoIfNoChange();
     setDirty(true);
     refreshSourceView();
     sendLive();
 }
 
+void SceneEditorTab::onAnchorChanged(int index) {
+    // 9-point window anchor grid over the 1280x720 design space (the same
+    // GetWindowSize() reference the engine exposes). Commits constants so
+    // the label stays draggable and round-trippable; the combo resets to
+    // its placeholder so it never displays a stale anchor.
+    static const double kFX[3] = {0.0, 0.5, 1.0};
+    static const double kFY[3] = {0.0, 0.5, 1.0};
+    auto reset = [&]() {
+        if (anchorCombo_) {
+            anchorCombo_->blockSignals(true);
+            anchorCombo_->setCurrentIndex(-1);
+            anchorCombo_->blockSignals(false);
+        }
+    };
+    if (index < 0 || index > 8 || draggingObject_ || !ensureScene(tr("anchor"))) {
+        reset();
+        return;
+    }
+    if (selectedKind_ != "text") {
+        reset();
+        return;
+    }
+    const icg::studio::scenecpp::TextItem* text = selectedText();
+    if (!text || text->dynamicPos || !text->xNum || !text->yNum ||
+        text->sharedSite) {
+        setNote(tr("Anchor needs a placed label with its own renderUI call."));
+        reset();
+        refreshInspector();
+        return;
+    }
+    const double ax = kFX[index % 3] * kDesignWidth;
+    const double ay = kFY[index / 3] * kDesignHeight;
+    posSpin_[0]->blockSignals(true);
+    posSpin_[1]->blockSignals(true);
+    posSpin_[0]->setValue(ax);
+    posSpin_[1]->setValue(ay);
+    posSpin_[0]->blockSignals(false);
+    posSpin_[1]->blockSignals(false);
+    reset();
+    onSpinEdited(); // commits through the normal text position path
+    const icg::studio::scenecpp::TextItem* moved = selectedText();
+    if (moved && !moved->dynamicPos && moved->xVal == ax && moved->yVal == ay) {
+        setNote(tr("Anchored to %1. Save to source to persist.")
+                    .arg(anchorCombo_ ? anchorCombo_->itemText(index) : tr("anchor")));
+    }
+}
+
 void SceneEditorTab::onApplyLive() {
     if (!ensureScene(tr("apply"))) {
+        return;
+    }
+    if (selectedKind_ == "text") {
+        setNote(tr("Font labels have no live objects — save to source instead."));
         return;
     }
     const int idx = objectIndex(selectedVar_);
@@ -700,8 +1121,11 @@ void SceneEditorTab::onSaveToSource() {
     if (!ensureScene(tr("save"))) {
         return;
     }
+    // Byte-verbatim write (no QIODevice::Text): the serializer already
+    // carries the detected EOL, and Text mode would translate every \n
+    // into \r\n on Windows — doubling CRLF files into blank lines.
     QFile sourceFile(sceneSource_);
-    if (!sourceFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+    if (!sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setNote(tr("Cannot write %1").arg(sceneSource_));
         return;
     }
@@ -710,7 +1134,7 @@ void SceneEditorTab::onSaveToSource() {
     sourceFile.close();
     if (headerDirty_) {
         QFile headerFile(sceneHeader_);
-        if (headerFile.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+        if (headerFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
             QTextStream hstream(&headerFile);
             hstream << QString::fromStdString(
                 icg::studio::scenecpp::SerializeHeader(sceneFile_));
@@ -723,6 +1147,9 @@ void SceneEditorTab::onSaveToSource() {
         }
     }
     setDirty(false);
+    cleanSource_ = icg::studio::scenecpp::SerializeSource(sceneFile_);
+    cleanHeader_ = icg::studio::scenecpp::SerializeHeader(sceneFile_);
+    refreshUndoRedo();
     setNote(tr("Saved — rebuild + relaunch the preview to run it."));
 }
 
@@ -754,6 +1181,10 @@ void SceneEditorTab::onDeleteObject() {
     if (!ensureScene(tr("delete"))) {
         return;
     }
+    if (selectedKind_ == "text") {
+        setNote(tr("Font labels are removed in source for now (render call + decl)."));
+        return;
+    }
     const int idx = objectIndex(selectedVar_);
     if (idx < 0) {
         return;
@@ -761,11 +1192,16 @@ void SceneEditorTab::onDeleteObject() {
     const std::string var = selectedVar_.toStdString();
     icg::studio::scenecpp::RemoveResult result;
     std::string error;
+    pushSceneUndo();
     if (!icg::studio::scenecpp::RemoveObject(sceneFile_, var, result, error)) {
         setNote(tr("Delete failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
         return;
     }
+    dropUndoIfNoChange();
     selectedVar_.clear();
+    selectedKind_.clear();
+    selectedIndex_ = -1;
     setDirty(true);
     rebuildHierarchy();
     refreshInspector();
@@ -803,13 +1239,16 @@ void SceneEditorTab::onDropFile(const QString& path, const QPoint& widgetPos) {
     const QString var = makeUniqueVar("Square");
     icg::studio::scenecpp::AddResult result;
     std::string error;
+    pushSceneUndo();
     if (!icg::studio::scenecpp::AddObject(
             sceneFile_, "Square", var.toStdString(), display.toStdString(), nextId(),
             true, formatDouble(worldX).toStdString(), formatDouble(worldY).toStdString(),
             "0", result, error)) {
         setNote(tr("Drop failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
         return;
     }
+    dropUndoIfNoChange();
     headerDirty_ = headerDirty_ || result.headerUpdated;
     selectedVar_ = var;
     setDirty(true);
@@ -833,29 +1272,72 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
         return;
     }
     // Topmost = last in file order (painter's algorithm, no depth test).
-    int hit = -1;
+    // Texts paint above boxes, so they pick first.
+    int hitObject = -1;
     for (int i = static_cast<int>(sceneFile_.model.objects.size()) - 1; i >= 0; --i) {
         float x = 0, y = 0, w = 0, h = 0;
         if (!objectRect(i, x, y, w, h)) {
             continue;
         }
         if (worldX >= x && worldX <= x + w && worldY >= y && worldY <= y + h) {
-            hit = i;
+            hitObject = i;
             break;
         }
     }
-    if (hit < 0) {
+    int hitText = -1;
+    const float pickScale = static_cast<float>(canvas_->viewRect().width()) / kDesignWidth;
+    for (int i = static_cast<int>(sceneFile_.model.texts.size()) - 1; i >= 0; --i) {
+        float x = 0, y = 0, w = 0, h = 0;
+        if (!textBounds(sceneFile_.model.texts[i], pickScale, x, y, w, h)) {
+            continue;
+        }
+        if (worldX >= x && worldX <= x + w && worldY >= y && worldY <= y + h) {
+            hitText = i;
+            break;
+        }
+    }
+    if (hitText < 0 && hitObject < 0) {
         selectedVar_.clear();
+        selectedKind_.clear();
+        selectedIndex_ = -1;
         draggingObject_ = false;
+        dragStartValid_ = false;
+    } else if (hitText >= 0) {
+        const auto& text = sceneFile_.model.texts[hitText];
+        selectedVar_ = QString::fromStdString(text.varName);
+        selectedKind_ = "text";
+        selectedIndex_ = text.index;
+        dragGrabOffset_ = QPointF(worldX - text.xVal, worldY - text.yVal);
+        dragStartX_ = text.xVal;
+        dragStartY_ = text.yVal;
+        dragStartValid_ = true;
+        if (text.sharedSite) {
+            // One renderUI call draws every sibling: a rewrite would move
+            // them all, so the parser refuses — don't start a drag that
+            // can only fail on release.
+            draggingObject_ = false;
+            setNote(tr("Shared loop layout — drag disabled; edit the source instead."));
+        } else {
+            draggingObject_ = gizmoCombo_->currentIndex() == 0;
+            if (!draggingObject_) {
+                setNote(tr("Rotate/Scale drag arrives later — use the Inspector spins."));
+            }
+        }
     } else {
         selectedVar_ =
-            QString::fromStdString(sceneFile_.model.objects[hit].varName);
-        const auto& obj = sceneFile_.model.objects[hit];
+            QString::fromStdString(sceneFile_.model.objects[hitObject].varName);
+        selectedKind_ = "object";
+        selectedIndex_ = -1;
+        const auto& obj = sceneFile_.model.objects[hitObject];
         if (obj.hasPosition && obj.position.numeric && obj.position.values.size() >= 2) {
-            dragGrabOffset_ = QPoint(static_cast<int>(worldX - obj.position.values[0]),
-                                     static_cast<int>(worldY - obj.position.values[1]));
+            dragGrabOffset_ = QPointF(worldX - obj.position.values[0],
+                                      worldY - obj.position.values[1]);
+            dragStartX_ = obj.position.values[0];
+            dragStartY_ = obj.position.values[1];
+            dragStartValid_ = true;
         } else {
-            dragGrabOffset_ = QPoint(0, 0);
+            dragGrabOffset_ = QPointF(0, 0);
+            dragStartValid_ = false;
         }
         draggingObject_ = gizmoCombo_->currentIndex() == 0;
         if (!draggingObject_) {
@@ -890,6 +1372,30 @@ void SceneEditorTab::onDragMove(const QPoint& widgetPos) {
     posSpin_[1]->setValue(ny);
     posSpin_[0]->blockSignals(false);
     posSpin_[1]->blockSignals(false);
+    // Live-mutate the in-memory model so the canvas repaints the dragged
+    // item at the cursor (realtime feedback). Source spans are rewritten
+    // once, on release, by onDragFinish; a failed finish restores the
+    // press-time snapshot below.
+    if (selectedKind_ == "text") {
+        const std::string name = selectedVar_.toStdString();
+        for (auto& text : sceneFile_.model.texts) {
+            if (text.varName == name && text.index == selectedIndex_) {
+                text.xVal = nx;
+                text.yVal = ny;
+                break;
+            }
+        }
+    } else {
+        const int idx = objectIndex(selectedVar_);
+        if (idx >= 0) {
+            auto& obj = sceneFile_.model.objects[idx];
+            if (obj.hasPosition && obj.position.numeric &&
+                obj.position.values.size() >= 2) {
+                obj.position.values[0] = nx;
+                obj.position.values[1] = ny;
+            }
+        }
+    }
     sendLive();
     canvas_->update();
 }
@@ -900,18 +1406,76 @@ void SceneEditorTab::onDragFinish() {
     }
     draggingObject_ = false;
     std::string error;
-    if (!applySpinsToModel(error)) {
-        setNote(tr("Drag apply failed: %1").arg(QString::fromStdString(error)));
+    if (selectedKind_ == "text") {
+        const icg::studio::scenecpp::TextItem* text = selectedText();
+        pushSceneUndo();
+        if (!text || !icg::studio::scenecpp::SetTextPosition(
+                         sceneFile_, text->varName, text->index,
+                         formatDouble(posSpin_[0]->value()).toStdString(),
+                         formatDouble(posSpin_[1]->value()).toStdString(), error)) {
+            // Restore the press-time snapshot: the live drag above moved
+            // the in-memory item, but the source rewrite refused.
+            if (dragStartValid_) {
+                const std::string name = selectedVar_.toStdString();
+                for (auto& item : sceneFile_.model.texts) {
+                    if (item.varName == name && item.index == selectedIndex_) {
+                        item.xVal = dragStartX_;
+                        item.yVal = dragStartY_;
+                        break;
+                    }
+                }
+            }
+            setNote(tr("Drag apply failed: %1").arg(QString::fromStdString(error)));
+            dragStartValid_ = false;
+            dropUndoIfNoChange(); // source untouched: drop the pushed snapshot
+            refreshInspector();
+            canvas_->update();
+            return;
+        }
+        dragStartValid_ = false;
+        dropUndoIfNoChange(); // click-without-move pushes a no-op: drop it
+        setDirty(true);
+        refreshSourceView();
+        refreshInspector();
+        canvas_->update();
+        setNote(tr("Moved. Save to source to persist (text has no live preview)."));
         return;
     }
+    pushSceneUndo();
+    if (!applySpinsToModel(error)) {
+        // Restore the press-time position: the live drag moved the
+        // in-memory object, but the source rewrite refused.
+        if (dragStartValid_) {
+            const int idx = objectIndex(selectedVar_);
+            if (idx >= 0) {
+                auto& obj = sceneFile_.model.objects[idx];
+                if (obj.hasPosition && obj.position.numeric &&
+                    obj.position.values.size() >= 2) {
+                    obj.position.values[0] = dragStartX_;
+                    obj.position.values[1] = dragStartY_;
+                }
+            }
+        }
+        dragStartValid_ = false;
+        setNote(tr("Drag apply failed: %1").arg(QString::fromStdString(error)));
+        dropUndoIfNoChange();
+        refreshInspector();
+        canvas_->update();
+        return;
+    }
+    dragStartValid_ = false;
+    dragStartValid_ = false;
+    dropUndoIfNoChange();
     setDirty(true);
     refreshSourceView();
+    refreshInspector();
+    canvas_->update();
     sendLive(true);
     setNote(tr("Moved. Save to source to persist."));
 }
 
 void SceneEditorTab::onPan(const QPoint& deltaPixels) {
-    const QRectF fitted = canvas_->fittedRect();
+    const QRectF fitted = canvas_->viewRect();
     if (fitted.width() <= 0) {
         return;
     }
@@ -958,9 +1522,112 @@ void SceneEditorTab::onZoom3D(double factor) {
     canvas_->update();
 }
 
-void SceneEditorTab::onFramesUpdated() {
-    canvas_->setFrame(session_->frameBytes(), session_->frameWidth(),
-                      session_->frameHeight());
+QString SceneEditorTab::familyForFont(const QString& assetPath) {
+    if (assetPath.isEmpty()) {
+        return QString();
+    }
+    auto it = fontFamilies_.find(assetPath);
+    if (it != fontFamilies_.end()) {
+        return it.value();
+    }
+    const QString full =
+        QString::fromStdString(projectRoot_ + "/src/assets/" + assetPath.toStdString());
+    const int id = QFontDatabase::addApplicationFont(full);
+    QString family;
+    if (id != -1) {
+        const QStringList families = QFontDatabase::applicationFontFamilies(id);
+        if (!families.isEmpty()) {
+            family = families.first();
+        }
+    }
+    fontFamilies_.insert(assetPath, family);
+    return family;
+}
+
+void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
+    // Pure black like the game's glClearColor — the viewport must match
+    // what the game sees.
+    painter->fillRect(rect(), Qt::black);
+    if (view.width() <= 0 || view.height() <= 0 || !sceneOk_) {
+        painter->setPen(Qt::gray);
+        painter->drawText(rect(), Qt::AlignCenter,
+                          tr("Select a scene in the Scenes panel"));
+        return;
+    }
+    const float rw = static_cast<float>(view.width());
+    const float rh = static_cast<float>(view.height());
+    auto toWidget = [&](float worldX, float worldY) {
+        const icg::Vec3 s = camera_->WorldToScreen({worldX, worldY, 0}, rw, rh);
+        return QPointF(view.x() + s.x, view.y() + s.y);
+    };
+    // 1px border: exactly what the game sees (16:9 design area).
+    painter->setPen(QPen(Qt::white, 1));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawRect(QRectF(view.x() + 0.5, view.y() + 0.5, view.width() - 1,
+                             view.height() - 1));
+    // Boxes: Squares filled, others outlined + labeled.
+    for (size_t i = 0; i < sceneFile_.model.objects.size(); ++i) {
+        const auto& obj = sceneFile_.model.objects[i];
+        float x = 0, y = 0, w = 0, h = 0;
+        if (!objectRect(static_cast<int>(i), x, y, w, h)) {
+            continue;
+        }
+        const QPointF a = toWidget(x, y);
+        const QPointF b = toWidget(x + w, y + h);
+        const QRectF rect(a, b);
+        if (obj.typeName == "Square" && obj.hasColor && obj.color.numeric &&
+            obj.color.values.size() >= 4) {
+            painter->setBrush(QColor(static_cast<int>(obj.color.values[0]),
+                                     static_cast<int>(obj.color.values[1]),
+                                     static_cast<int>(obj.color.values[2]),
+                                     static_cast<int>(obj.color.values[3])));
+            painter->setPen(Qt::NoPen);
+        } else {
+            painter->setBrush(Qt::NoBrush);
+            painter->setPen(QPen(Qt::white, 1, Qt::DashLine));
+        }
+        painter->drawRect(rect);
+        if (obj.typeName != "Square") {
+            painter->setPen(Qt::white);
+            painter->drawText(rect.adjusted(2, 2, -2, -2),
+                              Qt::AlignLeft | Qt::AlignTop | Qt::TextSingleLine,
+                              QString::fromStdString(obj.varName));
+        }
+    }
+    // Font labels at their placed positions (dynamic ones are listed, not drawn).
+    // Sizes scale with the viewport (base 1280x720) like the game's
+    // windowHeight/720 factor, so layout matches at any canvas size — and
+    // stays backend-agnostic (SDL3/OpenGL today, DirectX/Metal/Vulkan later
+    // must preserve the same design-pixel mapping).
+    const float viewScale = rw / kDesignWidth;
+    for (const auto& text : sceneFile_.model.texts) {
+        if (text.dynamicPos || !text.xNum || !text.yNum) {
+            continue;
+        }
+        QString content = QString::fromStdString(text.content);
+        if (content.isEmpty()) {
+            content = QString("[%1]").arg(QString::fromStdString(text.varName));
+        }
+        QFont font;
+        const QString family = familyForFont(QString::fromStdString(text.fontFile));
+        if (!family.isEmpty()) {
+            font.setFamily(family);
+        }
+        font.setPointSizeF((text.pointSize > 0 ? text.pointSize : 16) * viewScale);
+        painter->setFont(font);
+        if (text.hasColor) {
+            painter->setPen(QColor(text.color[0], text.color[1], text.color[2],
+                                   text.color[3]));
+        } else {
+            painter->setPen(Qt::white);
+        }
+        const QPointF at = toWidget(static_cast<float>(text.xVal),
+                                    static_cast<float>(text.yVal));
+        painter->drawText(QRectF(at.x(), at.y(), view.right() - at.x(), 400),
+                          Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, content);
+    }
+    // Selection + gizmo overlay on top.
+    drawOverlay(painter, view);
 }
 
 void SceneEditorTab::drawOverlay(QPainter* painter, const QRectF& fitted) {
@@ -990,6 +1657,19 @@ void SceneEditorTab::drawOverlay(QPainter* painter, const QRectF& fitted) {
         painter->drawLine(toWidget3D({0, 0, 0}), toWidget3D({640, 0, 0}));
         painter->setPen(Qt::blue);
         painter->drawLine(toWidget3D({0, 0, 0}), toWidget3D({0, 0, 640}));
+        return;
+    }
+    if (selectedKind_ == "text") {
+        const icg::studio::scenecpp::TextItem* text = selectedText();
+        float x = 0, y = 0, w = 0, h = 0;
+        const float gizmoScale = rw / kDesignWidth;
+        if (text && textBounds(*text, gizmoScale, x, y, w, h)) {
+            const QPointF topLeft = toWidget(x, y);
+            const QPointF bottomRight = toWidget(x + w, y + h);
+            painter->setPen(QPen(Qt::yellow, 1, Qt::DashLine));
+            painter->setBrush(Qt::NoBrush);
+            painter->drawRect(QRectF(topLeft, bottomRight));
+        }
         return;
     }
     const int idx = objectIndex(selectedVar_);

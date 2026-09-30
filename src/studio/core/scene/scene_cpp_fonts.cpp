@@ -8,6 +8,7 @@
 #include "scene_cpp_detail.h"
 
 #include <cctype>
+#include <cstdint>
 #include <regex>
 #include <unordered_map>
 
@@ -78,9 +79,11 @@ int ResolveArraySize(const std::string& headerText, const std::string& expr) {
         }
     }
     {
-        // `Type name[] = { ... };` — count top-level initializers.
+        // `Type name[] = { ... };` and bare `name = { ... };` (e.g. static
+        // const vectors) — count top-level initializers. Lookups are by
+        // exact name, so extra entries are harmless.
         static const std::regex arrayInitRe(
-            "([A-Za-z_]\\w*)\\s*\\[\\s*\\]\\s*=\\s*\\{");
+            "([A-Za-z_]\\w*)\\s*(?:\\[\\s*\\])?\\s*=\\s*\\{");
         std::string::const_iterator it = headerText.begin();
         std::smatch m;
         while (std::regex_search(it, headerText.cend(), m, arrayInitRe)) {
@@ -141,6 +144,684 @@ int ResolveArraySize(const std::string& headerText, const std::string& expr) {
     return 0;
 }
 
+// Counted for-loop with a constant-stepped index from a literal start:
+// `for (... <var> = <init>; ... <bound-op> <bound>; ...) { body }`.
+struct ForLoop {
+    std::string var;
+    std::string initExpr;
+    std::string boundOp; // "<", "<=", "!="
+    std::string boundExpr;
+    size_t bodyBegin = 0; // absolute offsets of the '{...}' body
+    size_t bodyEnd = 0;
+};
+
+std::vector<ForLoop> CollectForLoops(const std::string& sourceText) {
+    std::vector<ForLoop> loops;
+    static const std::regex forRe(
+        "for\\s*\\(\\s*(?:int|unsigned|long|std::size_t|size_t|auto)\\s+"
+        "([A-Za-z_]\\w*)\\s*=\\s*([^;]+);\\s*\\1\\s*(<|<=|!=)\\s*([^;]+);[^)]*\\)");
+    std::string::const_iterator it = sourceText.begin();
+    std::smatch m;
+    while (std::regex_search(it, sourceText.cend(), m, forRe)) {
+        const size_t matchOff =
+            static_cast<size_t>(m.position(0) + (it - sourceText.begin()));
+        const size_t matchEnd = matchOff + static_cast<size_t>(m.length(0));
+        const size_t openOff = sourceText.find('{', matchEnd);
+        if (openOff == std::string::npos) {
+            it = m.suffix().first;
+            if (it == sourceText.cend()) {
+                break;
+            }
+            continue;
+        }
+        const size_t closeOff = detail::MatchBracket(sourceText, openOff, '}');
+        if (closeOff == std::string::npos) {
+            it = m.suffix().first;
+            if (it == sourceText.cend()) {
+                break;
+            }
+            continue;
+        }
+        ForLoop loop;
+        loop.var = m[1].str();
+        loop.initExpr = detail::Trim(m[2].str());
+        loop.boundOp = m[3].str();
+        loop.boundExpr = detail::Trim(m[4].str());
+        loop.bodyBegin = openOff;
+        loop.bodyEnd = closeOff + 1;
+        loops.push_back(loop);
+        it = sourceText.begin() + closeOff + 1;
+    }
+    return loops;
+}
+
+// Raw constexpr values (name -> right-hand side) shared by size resolution
+// and the loop evaluator.
+std::unordered_map<std::string, std::string> CollectConstexpr(
+    const std::string& headerText) {
+    std::unordered_map<std::string, std::string> out;
+    static const std::regex constexprRe(
+        "constexpr\\s+(?:const\\s+)?[A-Za-z_][\\w\\s\\*:]*?\\b([A-Za-z_]\\w*)\\s*="
+        "\\s*([^;]+);");
+    std::string::const_iterator it = headerText.begin();
+    std::smatch m;
+    while (std::regex_search(it, headerText.cend(), m, constexprRe)) {
+        out[m[1].str()] = detail::Trim(m[2].str());
+        it = m.suffix().first;
+        if (it == headerText.cend()) {
+            break;
+        }
+    }
+    return out;
+}
+
+// Top-level element count of a braced initializer (`Name = { ... }`,
+// brackets optional so static vectors count too). 0 when absent.
+int CountBracedInit(const std::string& headerText, const std::string& arrayName) {
+    static const std::regex arrayInitRe(
+        "([A-Za-z_]\\w*)\\s*(?:\\[\\s*\\])?\\s*=\\s*\\{");
+    std::string::const_iterator it = headerText.begin();
+    std::smatch m;
+    while (std::regex_search(it, headerText.cend(), m, arrayInitRe)) {
+        if (m[1].str() != arrayName) {
+            it = m.suffix().first;
+            if (it == headerText.cend()) {
+                break;
+            }
+            continue;
+        }
+        const size_t matchOff =
+            static_cast<size_t>(m.position(0) + (it - headerText.begin()));
+        const size_t openOff = headerText.find('{', matchOff);
+        if (openOff == std::string::npos) {
+            return 0;
+        }
+        const size_t closeOff = detail::MatchBracket(headerText, openOff, '}');
+        if (closeOff == std::string::npos || closeOff <= openOff + 1) {
+            return 0;
+        }
+        int count = 0;
+        for (const std::string& part : detail::SplitTopLevel(
+                 headerText.substr(openOff + 1, closeOff - openOff - 1), ',')) {
+            if (!detail::Trim(part).empty()) {
+                ++count;
+            }
+        }
+        return (count >= 1 && count <= 4096) ? count : 0;
+    }
+    return 0;
+}
+
+// Top-level string-first elements of a braced initializer: menu item names
+// (`SettingsMenu = { { "Video", {...} }, ... }`) or plain string arrays.
+std::vector<std::string> ParseMenuNames(const std::string& headerText,
+                                        const std::string& arrayName) {
+    std::vector<std::string> names;
+    static const std::regex arrayInitRe(
+        "([A-Za-z_]\\w*)\\s*(?:\\[\\s*\\])?\\s*=\\s*\\{");
+    std::string::const_iterator it = headerText.begin();
+    std::smatch m;
+    while (std::regex_search(it, headerText.cend(), m, arrayInitRe)) {
+        if (m[1].str() != arrayName) {
+            it = m.suffix().first;
+            if (it == headerText.cend()) {
+                break;
+            }
+            continue;
+        }
+        const size_t matchOff =
+            static_cast<size_t>(m.position(0) + (it - headerText.begin()));
+        const size_t openOff = headerText.find('{', matchOff);
+        if (openOff == std::string::npos) {
+            return names;
+        }
+        const size_t closeOff = detail::MatchBracket(headerText, openOff, '}');
+        if (closeOff == std::string::npos) {
+            return names;
+        }
+        static const std::regex firstString("\"((?:[^\"\\\\]|\\\\.)*)\"");
+        for (const std::string& part : detail::SplitTopLevel(
+                 headerText.substr(openOff + 1, closeOff - openOff - 1), ',')) {
+            std::smatch sm;
+            const std::string trimmed = detail::Trim(part);
+            if (std::regex_search(trimmed, sm, firstString)) {
+                names.push_back(sm[1].str());
+            }
+        }
+        return names;
+    }
+    return names;
+}
+
+// Tiny expression evaluator with C++ int/float semantics for layout math:
+// literals, identifiers, +-*/%(), unary minus, static_cast<arithmetic>(),
+// C-style (arithmetic) casts. Anything else (calls, members) fails.
+struct EvalValue {
+    bool isFloat = false;
+    int64_t i = 0;
+    double f = 0.0;
+};
+
+struct EvalEnv {
+    // Resolved identifiers (loop index, locals, window consts, constexprs).
+    std::unordered_map<std::string, EvalValue> vars;
+    // `<name>.size()` counts for static data arrays.
+    std::unordered_map<std::string, int64_t> sizes;
+};
+
+namespace {
+
+struct EvalParser {
+    const std::string& text;
+    size_t pos = 0;
+    const EvalEnv& env;
+    bool ok = true;
+
+    explicit EvalParser(const std::string& text, const EvalEnv& env)
+        : text(text), env(env) {}
+
+    void skip() {
+        while (pos < text.size() &&
+               std::isspace(static_cast<unsigned char>(text[pos]))) {
+            ++pos;
+        }
+    }
+
+    EvalValue parseExpr() {
+        EvalValue left = parseTerm();
+        while (ok) {
+            skip();
+            if (pos >= text.size() || (text[pos] != '+' && text[pos] != '-')) {
+                break;
+            }
+            const char op = text[pos++];
+            EvalValue right = parseTerm();
+            left = applyBinary(op, left, right);
+        }
+        return left;
+    }
+
+    EvalValue parseTerm() {
+        EvalValue left = parseFactor();
+        while (ok) {
+            skip();
+            if (pos >= text.size() ||
+                (text[pos] != '*' && text[pos] != '/' && text[pos] != '%')) {
+                break;
+            }
+            const char op = text[pos++];
+            EvalValue right = parseFactor();
+            if ((op == '%' || op == '/') && !ok) {
+                return left;
+            }
+            if (op == '%' && (left.isFloat || right.isFloat)) {
+                ok = false; // C++ rejects % on floats; fail, don't guess
+                return left;
+            }
+            if (op == '/' &&
+                ((right.isFloat && right.f == 0.0) ||
+                 (!right.isFloat && right.i == 0))) {
+                ok = false; // divide by zero: unknown, not zero
+                return left;
+            }
+            left = applyBinary(op, left, right);
+        }
+        return left;
+    }
+
+    EvalValue parseFactor() {
+        skip();
+        if (pos >= text.size()) {
+            ok = false;
+            return {};
+        }
+        if (text[pos] == '(') {
+            // C-style cast `(float)x` or parenthesized group.
+            size_t save = pos;
+            ++pos;
+            skip();
+            std::string word;
+            while (pos < text.size() &&
+                   (std::isalnum(static_cast<unsigned char>(text[pos])) ||
+                    text[pos] == '_' || text[pos] == ':')) {
+                word += text[pos++];
+            }
+            skip();
+            if ((word == "float" || word == "double" || word == "int" ||
+                 word == "long" || word == "unsigned") &&
+                pos < text.size() && text[pos] == ')') {
+                ++pos;
+                EvalValue inner = parseFactor();
+                return castTo(inner, word == "float" || word == "double");
+            }
+            pos = save + 1; // plain group (skip the '(')
+            EvalValue inner = parseExpr();
+            skip();
+            if (pos >= text.size() || text[pos] != ')') {
+                ok = false;
+                return {};
+            }
+            ++pos;
+            return inner;
+        }
+        if (text[pos] == '-') {
+            ++pos;
+            EvalValue inner = parseFactor();
+            if (inner.isFloat) {
+                inner.f = -inner.f;
+            } else {
+                inner.i = -inner.i;
+            }
+            return inner;
+        }
+        if (text.compare(pos, 11, "static_cast") == 0) {
+            pos += 11;
+            skip();
+            if (pos >= text.size() || text[pos] != '<') {
+                ok = false;
+                return {};
+            }
+            ++pos;
+            std::string type;
+            while (pos < text.size() && text[pos] != '>') {
+                type += text[pos++];
+            }
+            if (pos >= text.size()) {
+                ok = false;
+                return {};
+            }
+            ++pos; // '>'
+            skip();
+            if (pos >= text.size() || text[pos] != '(') {
+                ok = false;
+                return {};
+            }
+            ++pos;
+            EvalValue inner = parseExpr();
+            skip();
+            if (pos >= text.size() || text[pos] != ')') {
+                ok = false;
+                return {};
+            }
+            ++pos;
+            const std::string t = detail::Trim(type);
+            return castTo(inner, t == "float" || t == "double");
+        }
+        if (std::isdigit(static_cast<unsigned char>(text[pos])) ||
+            text[pos] == '.') {
+            return parseNumber();
+        }
+        if (std::isalpha(static_cast<unsigned char>(text[pos])) ||
+            text[pos] == '_') {
+            std::string name;
+            while (pos < text.size() &&
+                   (std::isalnum(static_cast<unsigned char>(text[pos])) ||
+                    text[pos] == '_')) {
+                name += text[pos++];
+            }
+            skip();
+            // `<name>.size()` for counted static arrays.
+            if (pos < text.size() && text[pos] == '.') {
+                size_t save = pos;
+                ++pos;
+                std::string member;
+                while (pos < text.size() &&
+                       (std::isalnum(static_cast<unsigned char>(text[pos])) ||
+                        text[pos] == '_')) {
+                    member += text[pos++];
+                }
+                skip();
+                if (member == "size" && pos < text.size() && text[pos] == '(') {
+                    ++pos;
+                    skip();
+                    if (pos < text.size() && text[pos] == ')') {
+                        ++pos;
+                        const auto it = env.sizes.find(name);
+                        if (it != env.sizes.end()) {
+                            EvalValue v;
+                            v.i = it->second;
+                            return v;
+                        }
+                    }
+                }
+                pos = save;
+                ok = false;
+                return {};
+            }
+            const auto it = env.vars.find(name);
+            if (it == env.vars.end()) {
+                ok = false; // unknown identifier (calls land here too)
+                return {};
+            }
+            return it->second;
+        }
+        ok = false;
+        return {};
+    }
+
+    EvalValue parseNumber() {
+        size_t start = pos;
+        while (pos < text.size() && std::isdigit(static_cast<unsigned char>(text[pos]))) {
+            ++pos;
+        }
+        bool isFloat = false;
+        if (pos < text.size() && text[pos] == '.') {
+            isFloat = true;
+            ++pos;
+            while (pos < text.size() &&
+                   std::isdigit(static_cast<unsigned char>(text[pos]))) {
+                ++pos;
+            }
+        }
+        if (pos < text.size() && (text[pos] == 'f' || text[pos] == 'F')) {
+            isFloat = true;
+            ++pos;
+        }
+        while (pos < text.size() && (text[pos] == 'u' || text[pos] == 'U' ||
+                                     text[pos] == 'l' || text[pos] == 'L')) {
+            ++pos; // integer suffixes (100u, 5ull)
+        }
+        EvalValue v;
+        try {
+            if (isFloat) {
+                v.isFloat = true;
+                v.f = std::stod(text.substr(start, pos - start));
+            } else {
+                v.i = std::stoll(text.substr(start, pos - start));
+            }
+        } catch (...) {
+            ok = false;
+        }
+        return v;
+    }
+
+    static EvalValue castTo(const EvalValue& v, bool toFloat) {
+        EvalValue out;
+        if (toFloat) {
+            out.isFloat = true;
+            out.f = v.isFloat ? v.f : static_cast<double>(v.i);
+        } else {
+            out.i = v.isFloat ? static_cast<int64_t>(v.f) : v.i;
+        }
+        return out;
+    }
+
+    static EvalValue applyBinary(char op, const EvalValue& a, const EvalValue& b) {
+        EvalValue out;
+        if (a.isFloat || b.isFloat) {
+            const double x = a.isFloat ? a.f : static_cast<double>(a.i);
+            const double y = b.isFloat ? b.f : static_cast<double>(b.i);
+            out.isFloat = true;
+            switch (op) {
+                case '+': out.f = x + y; break;
+                case '-': out.f = x - y; break;
+                case '*': out.f = x * y; break;
+                case '/': out.f = (y != 0.0) ? x / y : 0.0; break;
+                default: out.f = 0.0; break; // '%' on floats fails below
+            }
+            if (op == '%') {
+                out.isFloat = false;
+                out.i = 0;
+            }
+            return out;
+        }
+        switch (op) {
+            case '+': out.i = a.i + b.i; break;
+            case '-': out.i = a.i - b.i; break;
+            case '*': out.i = a.i * b.i; break;
+            case '/': out.i = (b.i != 0) ? a.i / b.i : 0; break; // truncates
+            case '%': out.i = (b.i != 0) ? a.i % b.i : 0; break;
+            default: break;
+        }
+        return out;
+    }
+};
+
+} // namespace
+
+// Replaces Engine::...->GetWindowSize().width|height with design constants
+// (preview forces 1280x720) so layout math evaluates.
+std::string NormalizeWindowAccess(std::string expr) {
+    static const std::regex getSizeRe(
+        "Engine\\s*::\\s*Instance\\s*\\([^)]*\\)\\s*->\\s*GetWindowSize\\s*\\("
+        "\\s*\\)\\s*\\.\\s*(width|height)");
+    std::smatch m;
+    std::string out;
+    std::string::const_iterator it = expr.begin();
+    while (std::regex_search(it, expr.cend(), m, getSizeRe)) {
+        out.append(it, m[0].first);
+        out += (m[1].str() == "width" ? "1280" : "720");
+        it = m.suffix().first;
+    }
+    out.append(it, expr.cend());
+    return out;
+}
+
+bool EvalExpr(const std::string& expr, const EvalEnv& env, EvalValue& out) {
+    const std::string normalized = NormalizeWindowAccess(expr);
+    EvalParser parser(normalized, env);
+    out = parser.parseExpr();
+    parser.skip();
+    return parser.ok && parser.pos == normalized.size();
+}
+
+// `<name>.size()` counts for static data arrays in the header (e.g.
+// SettingsMenu -> 5 via its braced initializer). Used both for
+// `v.resize(Data.size())` sizing and loop-bound evaluation.
+std::unordered_map<std::string, int64_t> BuildSizes(const std::string& headerText) {
+    std::unordered_map<std::string, int64_t> sizes;
+    static const std::regex arrayInitRe(
+        "([A-Za-z_]\\w*)\\s*(?:\\[\\s*\\])?\\s*=\\s*\\{");
+    std::string::const_iterator it = headerText.begin();
+    std::smatch m;
+    while (std::regex_search(it, headerText.cend(), m, arrayInitRe)) {
+        const std::string name = m[1].str();
+        if (sizes.find(name) == sizes.end()) {
+            const int n = CountBracedInit(headerText, name);
+            if (n >= 1 && n <= 4096) {
+                sizes[name] = n;
+            }
+        }
+        it = m.suffix().first;
+        if (it == headerText.cend()) {
+            break;
+        }
+    }
+    return sizes;
+}
+
+// Base environment: static `.size()` counts plus plain-numeric constexprs
+// (including the `sizeof(Arr)/sizeof(Arr[0])` idiom via the counts above).
+EvalEnv BuildBaseEnv(const std::string& headerText) {
+    EvalEnv env;
+    env.sizes = BuildSizes(headerText);
+    static const std::regex sizeofRe(
+        "sizeof\\s*\\(\\s*([A-Za-z_]\\w*)\\s*\\)\\s*/\\s*sizeof\\s*\\(\\s*\\1\\s*\\[0\\]\\s*\\)");
+    for (const auto& kv : CollectConstexpr(headerText)) {
+        EvalValue v;
+        EvalEnv empty;
+        empty.sizes = env.sizes;
+        if (EvalExpr(kv.second, empty, v)) {
+            env.vars[kv.first] = v;
+            continue;
+        }
+        std::smatch m;
+        const std::string rhs = detail::Trim(kv.second);
+        if (std::regex_match(rhs, m, sizeofRe)) {
+            const auto ai = env.sizes.find(m[1].str());
+            if (ai != env.sizes.end()) {
+                EvalValue sv;
+                sv.i = ai->second;
+                env.vars[kv.first] = sv;
+            }
+        }
+    }
+    return env;
+}
+
+// Iteration count for a counted loop, or -1 when the bound is dynamic.
+// Caps at 256 to bound pathological expansion.
+int LoopRange(const ForLoop& loop, const EvalEnv& base) {
+    EvalValue initV, boundV;
+    if (!EvalExpr(loop.initExpr, base, initV) || initV.isFloat) {
+        return -1;
+    }
+    if (!EvalExpr(loop.boundExpr, base, boundV) || boundV.isFloat) {
+        return -1;
+    }
+    const int64_t init = initV.i;
+    const int64_t bound = boundV.i;
+    int64_t count = -1;
+    if (loop.boundOp == "<") {
+        count = bound - init;
+    } else if (loop.boundOp == "<=") {
+        count = bound - init + 1;
+    } else if (loop.boundOp == "!=") {
+        count = bound - init; // constant-stepped forward loops only
+    }
+    if (count < 0 || count > 256) {
+        return -1;
+    }
+    return static_cast<int>(count);
+}
+
+// Innermost loop containing absolute offset off, or nullptr.
+const ForLoop* EnclosingLoop(const std::vector<ForLoop>& loops, size_t off) {
+    const ForLoop* best = nullptr;
+    for (const ForLoop& loop : loops) {
+        if (off >= loop.bodyBegin && off < loop.bodyEnd) {
+            if (!best || (loop.bodyEnd - loop.bodyBegin) <
+                             (best->bodyEnd - best->bodyBegin)) {
+                best = &loop;
+            }
+        }
+    }
+    return best;
+}
+
+// Evaluates `int|float|double|auto name = <expr>;` declarations in
+// [scopeBegin, callOff) in source order, threading the environment so
+// later locals see earlier ones (and the loop index when set). `for`
+// headers are skipped. int-ish types truncate floats (C++ semantics).
+void ApplyVisibleLocals(const std::string& sourceText, size_t scopeBegin,
+                        size_t callOff, EvalEnv& env) {
+    if (scopeBegin >= callOff || callOff > sourceText.size()) {
+        return;
+    }
+    static const std::regex localRe(
+        "(?:^|;|\\{|\\})\\s*(?:const\\s+)?(int|float|double|auto|unsigned|long|"
+        "std::size_t|size_t)\\s+([A-Za-z_]\\w*)\\s*=\\s*([^;]+);");
+    // Strip comments so trailing `// ...` notes don't break the `;`-to-
+    // next-decl anchor (offsets unused here, only declaration order).
+    const std::string window = detail::StripComments(
+        sourceText.substr(scopeBegin, callOff - scopeBegin));
+    std::string::const_iterator it = window.begin();
+    std::smatch m;
+    while (std::regex_search(it, window.cend(), m, localRe)) {
+        EvalValue v;
+        if (EvalExpr(detail::Trim(m[3].str()), env, v)) {
+            const std::string type = m[1].str();
+            const bool intType =
+                (type == "int" || type == "long" || type == "unsigned" ||
+                 type == "size_t" || type == "std::size_t");
+            const bool floatType = (type == "float" || type == "double");
+            if (intType && v.isFloat) {
+                EvalValue t;
+                t.i = static_cast<int64_t>(v.f); // C++ truncates toward zero
+                v = t;
+            } else if (floatType && !v.isFloat) {
+                EvalValue t;
+                t.isFloat = true;
+                t.f = static_cast<double>(v.i);
+                v = t;
+            }
+            env.vars[m[2].str()] = v;
+        }
+        it = m.suffix().first;
+        if (it == window.cend()) {
+            break;
+        }
+    }
+}
+
+// Records renderUI argument spans (leading whitespace excluded) for the
+// rewrite path. Shared with both the constant and loop-evaluated paths.
+void RecordSiteSpans(const std::string& sourceText, size_t openOff,
+                     size_t closeOff, TextItem& item) {
+    for (int k = 0; k < 2; ++k) {
+        size_t scan = openOff + 1;
+        int depth = 0, seen = 0;
+        size_t a0 = scan, a1 = closeOff;
+        bool inS = false, inC = false, inL = false, inB = false;
+        char q = 0;
+        for (; scan < closeOff; ++scan) {
+            const char c = sourceText[scan];
+            const char n =
+                scan + 1 < closeOff ? sourceText[scan + 1] : 0;
+            if (inL) {
+                if (c == '\n') {
+                    inL = false;
+                }
+                continue;
+            }
+            if (inB) {
+                if (c == '*' && n == '/') {
+                    ++scan;
+                    inB = false;
+                }
+                continue;
+            }
+            if (inS || inC) {
+                if (c == '\\' && n) {
+                    ++scan;
+                } else if (c == q) {
+                    inS = inC = false;
+                }
+                continue;
+            }
+            if (c == '/' && n == '/') {
+                inL = true;
+                ++scan;
+                continue;
+            }
+            if (c == '/' && n == '*') {
+                inB = true;
+                ++scan;
+                continue;
+            }
+            if (c == '"' || c == '\'') {
+                inS = (c == '"');
+                inC = (c == '\'');
+                q = c;
+                continue;
+            }
+            if (c == '(' || c == '[' || c == '{') {
+                ++depth;
+            } else if (c == ')' || c == ']' || c == '}') {
+                --depth;
+            } else if (c == ',' && depth == 0) {
+                if (seen == k) {
+                    a1 = scan;
+                    break;
+                }
+                ++seen;
+                a0 = scan + 1;
+            }
+        }
+        while (a0 < a1 &&
+               std::isspace(static_cast<unsigned char>(sourceText[a0]))) {
+            ++a0;
+        }
+        if (k == 0) {
+            item.arg1Begin = a0;
+            item.arg1End = a1;
+        } else {
+            item.arg2Begin = a0;
+            item.arg2End = a1;
+        }
+    }
+}
+
 } // namespace
 
 namespace detail {
@@ -150,11 +831,14 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
     const std::vector<size_t> srcStarts = LineStarts(sourceText);
     std::unordered_map<std::string, size_t> fontIndex;
 
-    // 1. Member declarations from the header (literal sizes plus the
-    //    codebase's constexpr/sizeof idioms; anything else stays unknown).
+    // 1. Member declarations from the header: `Font f;`, `Font f[N];`
+    //    (literal/constexpr/sizeof sizes), and `std::vector<Font> v;`
+    //    (sized later by a `v.resize(...)` scan). Anything else unknown.
     {
         static const std::regex declRe(
             "^\\s*Font\\s+([A-Za-z_]\\w*)\\s*(?:\\[\\s*([^\\]]+)\\s*\\])?\\s*;");
+        static const std::regex vectorDeclRe(
+            "^\\s*(?:std::)?vector\\s*<\\s*Font\\s*>\\s+([A-Za-z_]\\w*)\\s*;");
         size_t start = 0;
         while (start <= headerText.size()) {
             size_t eol = headerText.find('\n', start);
@@ -191,11 +875,70 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                     item.index = decl.isArray ? i : -1;
                     model.texts.push_back(item);
                 }
+            } else if (std::regex_match(line, m, vectorDeclRe)) {
+                FontDecl decl;
+                decl.varName = m[1].str();
+                decl.isVector = true;
+                // Sized below by `v.resize(...)`; items added then.
+                fontIndex[decl.varName] = model.fonts.size();
+                model.fonts.push_back(decl);
             }
             if (eol == headerText.size()) {
                 break;
             }
             start = eol + 1;
+        }
+    }
+    // 1b. `std::vector<Font>` sizing via `v.resize(<count>)` with the same
+    //     evaluator used for loop bounds (literals, constexprs, sizeof
+    //     idiom counts, `Data.size()`). Unresolvable vectors keep zero
+    //     items (e.g. submenu sized from a runtime selection).
+    {
+        const EvalEnv base = BuildBaseEnv(headerText);
+        static const std::regex resizeCallRe(
+            "([A-Za-z_]\\w*)\\s*\\.\\s*resize\\s*\\(");
+        std::string::const_iterator it = sourceText.begin();
+        std::smatch m;
+        while (std::regex_search(it, sourceText.cend(), m, resizeCallRe)) {
+            const size_t callOff =
+                static_cast<size_t>(m.position(0) + (it - sourceText.begin()));
+            const size_t openOff = sourceText.find('(', callOff);
+            size_t adv = (openOff == std::string::npos)
+                             ? sourceText.size()
+                             : openOff + 1;
+            if (openOff != std::string::npos) {
+                const size_t closeOff =
+                    detail::MatchBracket(sourceText, openOff, ')');
+                if (closeOff != std::string::npos) {
+                    const auto fit = fontIndex.find(m[1].str());
+                    if (fit != fontIndex.end()) {
+                        FontDecl& decl = model.fonts[fit->second];
+                        if (decl.isVector && !decl.isArray) {
+                            EvalValue v;
+                            if (EvalExpr(
+                                    detail::Trim(sourceText.substr(
+                                        openOff + 1,
+                                        closeOff - openOff - 1)),
+                                    base, v) &&
+                                !v.isFloat && v.i >= 1 && v.i <= 4096) {
+                                decl.isArray = true;
+                                decl.arraySize = static_cast<int>(v.i);
+                                for (int i = 0; i < decl.arraySize; ++i) {
+                                    TextItem item;
+                                    item.varName = decl.varName;
+                                    item.index = i;
+                                    model.texts.push_back(item);
+                                }
+                            }
+                        }
+                    }
+                    adv = closeOff + 1;
+                }
+            }
+            it = sourceText.begin() + (adv <= sourceText.size() ? adv : sourceText.size());
+            if (adv >= sourceText.size()) {
+                break;
+            }
         }
     }
     if (model.fonts.empty()) {
@@ -254,8 +997,12 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
             it = m.suffix().first;
         }
     }
-    // 4. Numeric setColor(r, g, b, a) — last wins per item.
+    // 4. Numeric setColor(r, g, b, a) — last wins per item. Per-iteration
+    //    colors inside loops depend on runtime selection state, so
+    //    variable-index calls enclosed in a loop are skipped (items keep
+    //    their default rather than baking one branch for all).
     {
+        const std::vector<ForLoop> colorLoops = CollectForLoops(sourceText);
         static const std::regex colorCallRe(
             "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*setColor\\s*\\(");
         std::string::const_iterator it = sourceText.begin();
@@ -290,6 +1037,11 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                                     m[2].str().substr(1, m[2].str().size() - 2),
                                     isConst);
                             }
+                            const bool inLoop =
+                                EnclosingLoop(colorLoops, callOff) != nullptr;
+                            const bool skipLoopColor =
+                                inLoop && m[2].matched && !isConst;
+                            if (!skipLoopColor) {
                             for (size_t ti : itemsOf(var)) {
                                 TextItem& item = model.texts[ti];
                                 if (isConst && item.index != idx) {
@@ -299,6 +1051,143 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                                     item.color[k] = rgba[k];
                                 }
                                 item.hasColor = true;
+                            }
+                            }
+                        }
+                    }
+                    adv = closeOff + 1;
+                }
+            }
+            it = sourceText.begin() + (adv <= sourceText.size() ? adv : sourceText.size());
+            if (adv >= sourceText.size()) {
+                break;
+            }
+        }
+    }
+    // 4b. Data-driven setTextContent(Data[i].name) inside counted loops:
+    //     resolves per-iteration content from header initializers
+    //     (e.g. `menuFonts[i].setTextContent(SettingsMenu[i].name)`).
+    //     Dynamic aliases (submenu selections) stay unknown.
+    {
+        const EvalEnv base = BuildBaseEnv(headerText);
+        const std::vector<ForLoop> textLoops = CollectForLoops(sourceText);
+        std::unordered_map<std::string, std::vector<std::string>> menuCache;
+        static const std::regex textCallRe(
+            "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*setTextContent\\s*\\(");
+        std::string::const_iterator it = sourceText.begin();
+        std::smatch m;
+        while (std::regex_search(it, sourceText.cend(), m, textCallRe)) {
+            const size_t callOff =
+                static_cast<size_t>(m.position(0) + (it - sourceText.begin()));
+            const size_t openOff = sourceText.find('(', callOff);
+            size_t adv = (openOff == std::string::npos)
+                             ? sourceText.size()
+                             : openOff + 1;
+            if (openOff != std::string::npos) {
+                const size_t closeOff = MatchBracket(sourceText, openOff, ')');
+                if (closeOff != std::string::npos) {
+                    const std::string inner =
+                        Trim(sourceText.substr(openOff + 1,
+                                               closeOff - openOff - 1));
+                    // Skip literals (handled above); look for Data[idx].name
+                    // (struct arrays) or Data[idx] (plain string arrays).
+                    static const std::regex dataRe(
+                        "^([A-Za-z_]\\w*)\\s*\\[([^\\]]+)\\]\\s*(?:\\.\\s*name"
+                        "\\s*)?$");
+                    std::smatch dm;
+                    if (std::regex_match(inner, dm, dataRe)) {
+                        const std::string dataName = dm[1].str();
+                        const std::string idxExpr = Trim(dm[2].str());
+                        const ForLoop* loop =
+                            EnclosingLoop(textLoops, callOff);
+                        if (loop != nullptr) {
+                            const int count = LoopRange(*loop, base);
+                            if (count > 0) {
+                                auto mc = menuCache.find(dataName);
+                                if (mc == menuCache.end()) {
+                                    menuCache[dataName] =
+                                        ParseMenuNames(headerText, dataName);
+                                    mc = menuCache.find(dataName);
+                                }
+                                if (static_cast<int>(mc->second.size()) >=
+                                    count) {
+                                    EvalValue initV;
+                                    if (EvalExpr(loop->initExpr, base, initV) &&
+                                        !initV.isFloat) {
+                                        const std::string targetVar =
+                                            m[1].str();
+                                        std::string targetIdxExpr;
+                                        if (m[2].matched) {
+                                            const std::string b =
+                                                m[2].str();
+                                            targetIdxExpr = Trim(
+                                                b.substr(1, b.size() - 2));
+                                        }
+                                        for (int k = 0; k < count; ++k) {
+                                            EvalEnv env = base;
+                                            env.vars[loop->var].i =
+                                                initV.i + k;
+                                            EvalValue dataIdx, targetIdx;
+                                            if (!EvalExpr(idxExpr, env,
+                                                          dataIdx) ||
+                                                dataIdx.isFloat) {
+                                                continue;
+                                            }
+                                            int itemIdx = -1;
+                                            if (targetIdxExpr.empty()) {
+                                                // Scalar target reused across
+                                                // iterations: last wins.
+                                                for (size_t ti :
+                                                     itemsOf(targetVar)) {
+                                                    TextItem& item =
+                                                        model.texts[ti];
+                                                    const int64_t di =
+                                                        dataIdx.i - initV.i;
+                                                    if (di >= 0 &&
+                                                        di < static_cast<
+                                                            int64_t>(
+                                                            mc->second
+                                                                .size())) {
+                                                        item.content =
+                                                            mc->second[
+                                                                static_cast<
+                                                                    size_t>(
+                                                                    di)];
+                                                        item.hasContent = true;
+                                                    }
+                                                }
+                                                continue;
+                                            }
+                                            if (!EvalExpr(targetIdxExpr, env,
+                                                          targetIdx) ||
+                                                targetIdx.isFloat) {
+                                                continue;
+                                            }
+                                            itemIdx = static_cast<int>(
+                                                targetIdx.i);
+                                            for (size_t ti :
+                                                 itemsOf(targetVar)) {
+                                                TextItem& item =
+                                                    model.texts[ti];
+                                                if (item.index != itemIdx) {
+                                                    continue;
+                                                }
+                                                const int64_t di =
+                                                    dataIdx.i - initV.i;
+                                                // Common case: same index
+                                                // into data and fonts.
+                                                if (di >= 0 &&
+                                                    di < static_cast<int64_t>(
+                                                        mc->second.size())) {
+                                                    item.content =
+                                                        mc->second[static_cast<
+                                                            size_t>(di)];
+                                                    item.hasContent = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -312,8 +1201,13 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
         }
     }
     // 5. renderUI(x, y) sites — last site wins per item; constant numeric
-    //    args place the item, anything else marks it dynamic.
+    //    args place the item directly, counted-loop bodies evaluate
+    //    per-iteration (locals + loop index, 1280x720 design constants),
+    //    anything else marks the item dynamic. Loop-placed items share
+    //    one site: drawn, but SetTextPosition refuses (sharedSite).
     {
+        const EvalEnv base = BuildBaseEnv(headerText);
+        const std::vector<ForLoop> renderLoops = CollectForLoops(sourceText);
         static const std::regex renderCallRe(
             "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*renderUI\\s*\\(");
         std::string::const_iterator it = sourceText.begin();
@@ -335,21 +1229,148 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                         const std::string var = m[1].str();
                         bool isConst = false;
                         int idx = -1;
+                        std::string bracketExpr;
                         if (m[2].matched) {
-                            idx = ConstIndex(
-                                m[2].str().substr(1, m[2].str().size() - 2),
-                                isConst);
+                            const std::string b = m[2].str();
+                            bracketExpr =
+                                Trim(b.substr(1, b.size() - 2));
+                            idx = ConstIndex(bracketExpr, isConst);
                         }
                         const std::string xExpr = Trim(parts[0]);
                         const std::string yExpr = Trim(parts[1]);
+                        const ForLoop* loop =
+                            EnclosingLoop(renderLoops, callOff);
+                        bool handledLoop = false;
+                        if (loop != nullptr) {
+                            const int count = LoopRange(*loop, base);
+                            EvalValue initV;
+                            if (count > 0 &&
+                                EvalExpr(loop->initExpr, base, initV) &&
+                                !initV.isFloat) {
+                                // Scope start: enclosing function body when
+                                // findable, else a bounded window before the
+                                // loop (avoids leaking prior functions'
+                                // locals while keeping preamble locals).
+                                size_t scopeBegin = 0;
+                                if (loop->bodyBegin > 4000) {
+                                    scopeBegin = loop->bodyBegin - 4000;
+                                }
+                                // Prefer the enclosing '{' of the function:
+                                // last line-start '{' before the loop that
+                                // closes after the call is complex, so the
+                                // bounded window above suffices for v1.
+                                int placed = 0;
+                                for (int k = 0; k < count; ++k) {
+                                    EvalEnv env = base;
+                                    env.vars[loop->var].i = initV.i + k;
+                                    ApplyVisibleLocals(sourceText, scopeBegin,
+                                                       callOff, env);
+                                    EvalValue xv, yv;
+                                    if (!EvalExpr(xExpr, env, xv) ||
+                                        !EvalExpr(yExpr, env, yv)) {
+                                        continue;
+                                    }
+                                    int itemIdx = -1;
+                                    if (bracketExpr.empty()) {
+                                        // Scalar reused in a loop: place the
+                                        // single item on last iteration.
+                                        for (size_t ti : itemsOf(var)) {
+                                            TextItem& item = model.texts[ti];
+                                            item.xExpr = xExpr;
+                                            item.yExpr = yExpr;
+                                            item.xNum = true;
+                                            item.yNum = true;
+                                            item.xVal = xv.isFloat ? xv.f
+                                                                   : static_cast<
+                                                                         double>(
+                                                                         xv.i);
+                                            item.yVal = yv.isFloat ? yv.f
+                                                                   : static_cast<
+                                                                         double>(
+                                                                         yv.i);
+                                            item.dynamicPos = false;
+                                            item.siteOpen = openOff;
+                                            item.siteClose = closeOff;
+                                            item.hasSite = true;
+                                            item.sharedSite = (count > 1);
+                                            RecordSiteSpans(sourceText, openOff,
+                                                            closeOff, item);
+                                        }
+                                        ++placed;
+                                        continue;
+                                    }
+                                    EvalValue bv;
+                                    if (!EvalExpr(bracketExpr, env, bv) ||
+                                        bv.isFloat) {
+                                        continue;
+                                    }
+                                    itemIdx = static_cast<int>(bv.i);
+                                    for (size_t ti : itemsOf(var)) {
+                                        TextItem& item = model.texts[ti];
+                                        if (item.index != itemIdx) {
+                                            continue;
+                                        }
+                                        item.xExpr = xExpr;
+                                        item.yExpr = yExpr;
+                                        item.xNum = true;
+                                        item.yNum = true;
+                                        item.xVal = xv.isFloat
+                                                        ? xv.f
+                                                        : static_cast<double>(
+                                                              xv.i);
+                                        item.yVal = yv.isFloat
+                                                        ? yv.f
+                                                        : static_cast<double>(
+                                                              yv.i);
+                                        item.dynamicPos = false;
+                                        item.siteOpen = openOff;
+                                        item.siteClose = closeOff;
+                                        item.hasSite = true;
+                                        item.sharedSite = true;
+                                        RecordSiteSpans(sourceText, openOff,
+                                                        closeOff, item);
+                                        ++placed;
+                                    }
+                                }
+                                handledLoop = (placed > 0);
+                            }
+                        }
+                        if (!handledLoop) {
+                        // Non-loop sites: literals place directly; pure
+                        // window-math (e.g. `width / 4`) evaluates against
+                        // the design constants; anything calling into
+                        // measured sizes or members stays dynamic.
                         double xv = 0, yv = 0;
-                        const bool xNum = ParseDouble(xExpr, xv);
-                        const bool yNum = ParseDouble(yExpr, yv);
+                        bool xNum = ParseDouble(xExpr, xv);
+                        bool yNum = ParseDouble(yExpr, yv);
+                        if (!xNum || !yNum) {
+                            EvalEnv callEnv = base;
+                            // Bounded window (same as the loop path):
+                            // preamble locals without leaking distant
+                            // functions' same-named values.
+                            const size_t scopeBegin =
+                                (callOff > 4000) ? callOff - 4000 : 0;
+                            ApplyVisibleLocals(sourceText, scopeBegin, callOff,
+                                               callEnv);
+                            EvalValue ev;
+                            if (!xNum && EvalExpr(xExpr, callEnv, ev)) {
+                                xv = ev.isFloat ? ev.f
+                                                : static_cast<double>(ev.i);
+                                xNum = true;
+                            }
+                            if (!yNum && EvalExpr(yExpr, callEnv, ev)) {
+                                yv = ev.isFloat ? ev.f
+                                                : static_cast<double>(ev.i);
+                                yNum = true;
+                            }
+                        }
                         for (size_t ti : itemsOf(var)) {
                             TextItem& item = model.texts[ti];
                             if (isConst && item.index != idx) {
                                 continue;
                             }
+                            // Variable-index non-loop sites stay last-wins
+                            // (existing behavior for scalar reuse).
                             item.xExpr = xExpr;
                             item.yExpr = yExpr;
                             item.xNum = xNum;
@@ -364,84 +1385,9 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
                             item.siteOpen = openOff;
                             item.siteClose = closeOff;
                             item.hasSite = true;
-                            // Argument spans for the rewrite path (leading
-                            // whitespace excluded so splices keep separators).
-                            for (int k = 0; k < 2; ++k) {
-                                // Re-split: find k-th top-level comma.
-                                size_t scan = openOff + 1;
-                                int depth = 0, seen = 0;
-                                size_t a0 = scan, a1 = closeOff;
-                                bool inS = false, inC = false, inL = false,
-                                     inB = false;
-                                char q = 0;
-                                for (; scan < closeOff; ++scan) {
-                                    const char c = sourceText[scan];
-                                    const char n = scan + 1 < closeOff
-                                                       ? sourceText[scan + 1]
-                                                       : 0;
-                                    if (inL) {
-                                        if (c == '\n') {
-                                            inL = false;
-                                        }
-                                        continue;
-                                    }
-                                    if (inB) {
-                                        if (c == '*' && n == '/') {
-                                            ++scan;
-                                            inB = false;
-                                        }
-                                        continue;
-                                    }
-                                    if (inS || inC) {
-                                        if (c == '\\' && n) {
-                                            ++scan;
-                                        } else if (c == q) {
-                                            inS = inC = false;
-                                        }
-                                        continue;
-                                    }
-                                    if (c == '/' && n == '/') {
-                                        inL = true;
-                                        ++scan;
-                                        continue;
-                                    }
-                                    if (c == '/' && n == '*') {
-                                        inB = true;
-                                        ++scan;
-                                        continue;
-                                    }
-                                    if (c == '"' || c == '\'') {
-                                        inS = (c == '"');
-                                        inC = (c == '\'');
-                                        q = c;
-                                        continue;
-                                    }
-                                    if (c == '(' || c == '[' || c == '{') {
-                                        ++depth;
-                                    } else if (c == ')' || c == ']' || c == '}') {
-                                        --depth;
-                                    } else if (c == ',' && depth == 0) {
-                                        if (seen == k) {
-                                            a1 = scan;
-                                            break;
-                                        }
-                                        ++seen;
-                                        a0 = scan + 1;
-                                    }
-                                }
-                                while (a0 < a1 &&
-                                       std::isspace(static_cast<unsigned char>(
-                                           sourceText[a0]))) {
-                                    ++a0;
-                                }
-                                if (k == 0) {
-                                    item.arg1Begin = a0;
-                                    item.arg1End = a1;
-                                } else {
-                                    item.arg2Begin = a0;
-                                    item.arg2End = a1;
-                                }
-                            }
+                            RecordSiteSpans(sourceText, openOff, closeOff,
+                                            item);
+                        }
                         }
                     }
                     adv = closeOff + 1;
@@ -497,6 +1443,11 @@ bool SetTextPosition(SceneFile& file, const std::string& var, int index,
     if (item->dynamicPos || !item->hasSite) {
         error = "dynamic layout for '" + var +
                 "' — edit the source instead of baking constants";
+        return false;
+    }
+    if (item->sharedSite) {
+        error = "shared loop layout for '" + var +
+                "' — one edit would move siblings; edit the source instead";
         return false;
     }
     // Trim trailing whitespace inside each arg span, then splice the later

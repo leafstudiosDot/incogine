@@ -22,6 +22,7 @@
 #include <QSplitter>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QTextStream>
 #include <QToolBar>
@@ -73,6 +74,21 @@ void StudioMainWindow::buildMenus() {
     file->addAction(tr("E&xit"), this, &QWidget::close);
 
     QMenu* edit = menuBar()->addMenu(tr("&Edit"));
+    undoAction_ = edit->addAction(tr("Undo"), this, [this] {
+        if (auto* editor = currentCodeEditor()) {
+            editor->editor()->undo();
+        }
+    });
+    undoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Undo));
+    undoAction_->setEnabled(false);
+    redoAction_ = edit->addAction(tr("Redo"), this, [this] {
+        if (auto* editor = currentCodeEditor()) {
+            editor->editor()->redo();
+        }
+    });
+    redoAction_->setShortcuts(QKeySequence::keyBindings(QKeySequence::Redo));
+    redoAction_->setEnabled(false);
+    edit->addSeparator();
     edit->addAction(tr("Find..."), this, [this] {
         if (auto* editor = currentCodeEditor()) {
             editor->openFind(false);
@@ -133,6 +149,8 @@ void StudioMainWindow::buildCentral() {
     setCentralWidget(central_);
     connect(central_, &QTabWidget::tabCloseRequested,
             this, &StudioMainWindow::onTabCloseRequested);
+    connect(central_, &QTabWidget::currentChanged,
+            this, &StudioMainWindow::refreshEditActions);
 
     // Previous/next tab buttons in the corner + Ctrl+Tab shortcuts.
     auto* pager = new QWidget();
@@ -356,6 +374,27 @@ void StudioMainWindow::buildDocks() {
     tabifyDockWidget(outDock, searchDock_);
     connect(searchPanel_, &SearchPanel::openFile, this,
             [this](const QString& path, int line) { onOpenFile(path, line); });
+
+    auto* consoleDock = new QDockWidget(tr("Preview Console"), this);
+    previewConsole_ = new QPlainTextEdit();
+    previewConsole_->setReadOnly(true);
+    previewConsole_->setMaximumBlockCount(5000);
+    previewConsole_->setPlaceholderText(
+        tr("Game process output appears here while a preview runs."));
+    consoleDock->setWidget(previewConsole_);
+    addDockWidget(Qt::BottomDockWidgetArea, consoleDock);
+    tabifyDockWidget(outDock, consoleDock);
+    connect(session_, &PreviewSession::consoleOutput, this,
+            &StudioMainWindow::onPreviewConsole);
+}
+
+void StudioMainWindow::onPreviewConsole(const QString& text) {
+    if (!previewConsole_) {
+        return;
+    }
+    previewConsole_->moveCursor(QTextCursor::End);
+    previewConsole_->insertPlainText(text);
+    previewConsole_->moveCursor(QTextCursor::End);
 }
 
 namespace {
@@ -441,6 +480,19 @@ CodeEditor* StudioMainWindow::currentCodeEditor() const {
     return qobject_cast<CodeEditor*>(central_->currentWidget());
 }
 
+void StudioMainWindow::refreshEditActions() {
+    // Each code page owns its QTextDocument, so Undo/Redo histories are
+    // naturally per-tab; the actions just target whichever page is front.
+    auto* editor = currentCodeEditor();
+    QPlainTextEdit* text = editor ? editor->editor() : nullptr;
+    if (undoAction_) {
+        undoAction_->setEnabled(text && text->document()->isUndoAvailable());
+    }
+    if (redoAction_) {
+        redoAction_->setEnabled(text && text->document()->isRedoAvailable());
+    }
+}
+
 CodeEditor* StudioMainWindow::openCodePage(const QString& path, int line) {
     const QString key = canonicalPath(path);
     if (QWidget* existing = filePages_.value(key, nullptr)) {
@@ -452,13 +504,27 @@ CodeEditor* StudioMainWindow::openCodePage(const QString& path, int line) {
         return nullptr;
     }
     QFile f(path);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    // Raw bytes (no QIODevice::Text): Text mode would translate line
+    // endings on read, and translating back on save doubles CRLF files
+    // into blank lines. EOL/BOM ride along as page properties instead so
+    // untouched files round-trip byte-identically.
+    if (!f.open(QIODevice::ReadOnly)) {
         log(tr("Cannot open %1").arg(path));
         return nullptr;
     }
-    QTextStream in(&f);
+    const QByteArray raw = f.readAll();
+    f.close();
+    QByteArray body = raw;
+    const bool hasBom = body.startsWith("\xEF\xBB\xBF");
+    if (hasBom) {
+        body = body.mid(3);
+    }
+    const bool isCrlf = body.contains("\r\n");
+    QTextStream in(&body, QIODevice::ReadOnly);
     auto* editor = new CodeEditor();
     editor->setText(in.readAll());
+    editor->setProperty("fileEol", isCrlf ? QStringLiteral("\r\n") : QStringLiteral("\n"));
+    editor->setProperty("fileBom", hasBom);
     editor->setLanguageFromPath(path);
     editor->gotoLine(line);
     editor->editor()->document()->setModified(false);
@@ -469,6 +535,11 @@ CodeEditor* StudioMainWindow::openCodePage(const QString& path, int line) {
     filePages_.insert(key, editor);
     connect(editor->editor()->document(), &QTextDocument::modificationChanged,
             this, [this, editor](bool) { updatePageTitle(editor); });
+    // Keep the Edit-menu Undo/Redo states in sync with this page.
+    connect(editor->editor()->document(), &QTextDocument::undoAvailable,
+            this, &StudioMainWindow::refreshEditActions);
+    connect(editor->editor()->document(), &QTextDocument::redoAvailable,
+            this, &StudioMainWindow::refreshEditActions);
     central_->setCurrentWidget(editor);
     refreshPinnedCloseButtons();
     log(tr("Opened %1").arg(path));
@@ -521,12 +592,22 @@ bool StudioMainWindow::saveCodePage(CodeEditor* editor, const QString& path) {
         return false;
     }
     QFile f(path);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate)) {
+    // Verbatim write: the document normalizes to \n internally, so restore
+    // the file's original EOL/BOM instead of letting Text mode guess.
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         log(tr("Cannot write %1").arg(path));
         return false;
     }
-    QTextStream out(&f);
-    out << editor->text();
+    QString text = editor->text();
+    if (editor->property("fileEol").toString() == QStringLiteral("\r\n")) {
+        text.replace(QStringLiteral("\n"), QStringLiteral("\r\n"));
+    }
+    QByteArray raw = text.toUtf8();
+    if (editor->property("fileBom").toBool()) {
+        raw.prepend("\xEF\xBB\xBF");
+    }
+    f.write(raw);
+    f.close();
     editor->editor()->document()->setModified(false);
     updatePageTitle(editor);
     log(tr("Saved %1").arg(path));

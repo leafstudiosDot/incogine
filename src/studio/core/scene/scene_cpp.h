@@ -12,9 +12,18 @@
 //     `v->setName("Literal");` / `v->setId(123);`
 //     `v->setPosition(Position(..));` (+ Scale/Rotation/Color pairs)
 //     `v->addComponent(...);` / `v->setParent(...);` (recorded, raw args)
-//     `Font f;` / `Font f[N];` (header) with `f.setFontFile("..", pts);`
+//     `Font f;` / `Font f[N];` (header, literal/constexpr/sizeof sizes)
+//     plus `std::vector<Font> v;` sized by a constant `v.resize(...)`
+//     (e.g. `v.resize(Data.size())` over a header braced initializer).
 //     literal `f.setTextContent("..");`, numeric `f.setColor(..);`, and
 //     `f.renderUI(x, y);` sites (constant args = placed, else dynamic).
+//     Counted `for` loops over static data evaluate per-iteration: locals
+//     (`int y = ...` layout math with C++ int/float semantics, 1280x720
+//     design constants for GetWindowSize) and `Data[i].name` content
+//     resolve per item; loop-placed items are drawn but share one site,
+//     so SetTextPosition refuses them (sharedSite) instead of moving
+//     siblings. Runtime-dependent sizes/colors (submenu selections)
+//     stay unknown and are never guessed.
 //   Everything else (font setup, if/for blocks, Update()/Render() code,
 //   non-Object allocations like `new PauseMenu()`) is Unknown and never
 //   rewritten. Multi-line statements are supported; edits splice exact
@@ -119,6 +128,9 @@ struct TextItem {
     size_t siteOpen = 0, siteClose = 0;
     size_t arg1Begin = 0, arg1End = 0, arg2Begin = 0, arg2End = 0;
     bool hasSite = false;
+    // True when the winning site serves several items (loop body): placed
+    // and drawn, but rewrites refuse (one edit would move siblings).
+    bool sharedSite = false;
     std::string fontFile;
     int pointSize = 0;
 };
@@ -127,6 +139,7 @@ struct FontDecl {
     std::string varName;
     bool isArray = false;
     int arraySize = 1;
+    bool isVector = false;
     std::string file;
     int pointSize = 0;
     bool hasFile = false;

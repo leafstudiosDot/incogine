@@ -99,6 +99,11 @@ cmake --build . --target IncogineIncoba   # packer only
   show a `*` marker until saved; closing a dirty tab asks Save/Discard/
   Cancel. Credits, Project Settings, and Scene tabs stay pinned and
   unclosable. `File → Save all files` saves every dirty tab.
+  `Edit → Undo/Redo` (`Ctrl+Z` / `Ctrl+Shift+Z`) target the front code
+  tab; each code tab owns its document, so histories stay per-tab.
+  Saves are byte-verbatim: files are read raw and the original EOL
+  (CRLF vs LF) and UTF-8 BOM ride along as page properties, so
+  untouched files round-trip byte-identically.
 - **Audio preview tabs** (`Audio - <name>`) — Audition-style stereo
   waveform lanes decoded in the background (progressive draw, played region
   highlighted, red playhead), with play/pause (or `Space`), `mm:ss / mm:ss`
@@ -131,20 +136,40 @@ cmake --build . --target IncogineIncoba   # packer only
   `<incogine_version>` field stays read-only (mirrored from
   `src/core/engine/version.h`); `<name>` must remain a single token because it
   becomes the executable filename.
-- **Scene editor tab (Unity-style, Phase 3).** The Scene tab is the
-  editor viewport and needs **no running game**: it parses the scene
-  sources and draws objects (exact `Square` rects) plus font labels in the
-  1280×720 design space, framed by a 1px border showing what the game
-  sees. Toolbar: cursor tools **Select / Move / Rotate / Scale / Hand**
-  (keys 1–5; rotate/scale drags arrive later, spins work now), 2D/3D
-  toggle, Perspective/Orthographic/Isometric camera selector, 10px snap,
-  Save to source. Hierarchy tree with drag-reparent (rewrites `setParent`,
-  cycle-guarded), Inspector (Position/Rotation/Scale + RGBA for Squares,
-  file id, Apply live, Add/Delete), Source view. Click/drag moves boxes
-  with live preview when connected; dropping an asset creates a
-  placeholder `Square_N`. In 3D mode an orbitable grid previews camera
-  math until Cube rendering lands. Edits apply to the in-memory model
-  (dirty `*`) and flush on Save.
+- **Scene editor tab (Unity-style, Phase 3).** The Scene tab edits
+  directly from the parsed `.cpp/.h` — **no game process needed** (live
+  pixels belong to the Preview tab; this canvas never switches to them).
+  Offline it draws the layout itself: parser-known boxes (exact `Square`
+  rects) and font labels (real TTFs) in the 1280×720 design space, framed
+  by a **1px border showing exactly what the game sees**. Sizes scale with
+  the viewport from the 1280×720 base (like the game's `windowHeight/720`
+  factor), so layout matches at any canvas size and on any renderer
+  backend (SDL3/OpenGL today — DirectX/Metal/Vulkan must preserve the
+  same design-pixel mapping). Toolbar: cursor tools **Select / Move /
+  Rotate / Scale / Hand** (keys 1–5; rotate/scale drags arrive later,
+  spins work now), 2D/3D toggle, Perspective/Orthographic/Isometric
+  camera selector, 10px snap, Save to source. Hierarchy tree (objects
+  nest, font labels listed with dynamic ones tagged) with drag-reparent
+  (rewrites `setParent`, cycle-guarded; texts can't parent), Inspector
+  (Position/Rotation/Scale + RGBA for Squares, file id, Apply live,
+  Add/Delete), Anchor presets, Source view. Click/drag moves boxes and
+  constant-positioned text with realtime viewport feedback (the model
+  follows the cursor during the drag; source spans rewrite once on
+  release, and a refused drop snaps back to the press-time position).
+  The Inspector's Anchor presets snap a placed label to the 9-point
+  window grid (Left/Center/Right × Top/Middle/Bottom over the 1280×720
+  design space, the same `GetWindowSize()` reference the engine
+  exposes) by writing constants through the normal text-position path,
+  so anchored labels stay draggable; labels sharing one loop `renderUI`
+  call can't drag or anchor (one edit would move siblings) and say so
+  instead. Dropping an asset creates a placeholder
+  `Square_N`. In 3D mode an orbitable grid previews camera math until
+  Cube rendering lands. Edits apply to the in-memory model (dirty `*`)
+  and flush on Save. Every committed edit pushes the pre-edit source
+  onto a per-tab undo stack (toolbar Undo/Redo, `Ctrl+Z` /
+  `Ctrl+Shift+Z`, 50 entries; no-op commits are dropped), and Save to
+  source writes the serializer output byte-verbatim, so only rewritten
+  spans change — a dragged font moves exactly one line.
 - **Scene panel.** Discovery scans `src/scenes/` for
   `class X : public Scene`, shows the declared `Scene("…")` name,
   header/source locations, and whether the scene ships in the `Puroko`
@@ -153,16 +178,22 @@ cmake --build . --target IncogineIncoba   # packer only
   and targets Preview launches at it; no Code tab is opened.
 - **Round-trip parser** (`src/studio/core/scene/scene_cpp.h`): constructor
   patterns (`new Square/Cube/Object`, `setName`/`setId`, transform/color
-  calls, `addComponent`/`setParent`) rewrite exact spans — rename,
-  transform, id, parent, add, remove — with byte-identical no-op round
+  calls, `addComponent`/`setParent`) plus `Font` member declarations
+  (`Font f;`, `Font f[N];`, and `std::vector<Font>` sized by a constant
+  `resize(...)`), `setFontFile`, `setTextContent` (literals plus
+  data-driven `Data[i]` / `Data[i].name` inside counted loops), numeric
+  `setColor`, and `renderUI` call sites. Constant args place the label
+  directly; counted `for` loops over static data (menu tables, `sizeof`
+  idioms, `Data.size()`) evaluate per iteration with C++ int/float
+  semantics at the 1280×720 design size, so menu lists render with real
+  content and positions. Loop-placed labels share one call site: drawn
+  and selectable, but position rewrites refuse (`sharedSite`) instead of
+  moving siblings. Truly computed layouts (measured text sizes, runtime
+  selection state) stay dynamic and refuse rewrites instead of freezing
+  expressions. All ops rewrite exact spans — rename, transform, id,
+  parent, add, remove, text position — with byte-identical no-op round
   trips, while `Update()`/`Render()` code, control blocks, and
-  non-Object allocations stay verbatim. The implementation is split by
-  concern: `scene/scene_cpp_text.cpp` (EOL/lines, comments, bracket matching),
-  `scene/scene_cpp.cpp` (constructor scan + statement matching),
-  `scene/scene_cpp_fonts.cpp` (`Font`/text labels), `scene/scene_cpp_ops.cpp`
-  (splices, mutations, serialization), with shared internals in
-  `scene/scene_cpp_detail.h`. Shared XML trimming/escaping/tag lookup used by
-  the project/credits models lives in `xml/xml_util.h`.
+  non-Object allocations stay verbatim.
 - **Preview tab (passive monitor).** The former Viewport tab now only runs
   and watches: game picker with dev-build binding, Launch/Stop, live
   frames, status. One shared session object feeds both tabs, so Scene and
@@ -176,6 +207,9 @@ cmake --build . --target IncogineIncoba   # packer only
   (`Position`/`Scale`/`Rotation`/`Color`, components `Transform`/`Sprite`/
   `ScriptComponent`); live-object property binding lands with the scene format.
 - **Output dock** — Studio/build log.
+- **Preview Console dock** — raw stdout/stderr of the running preview game
+  process (`[err]`-prefixed for stderr), so `cout`/`cerr` and engine logs
+  from the game appear in the IDE while it runs.
 - **Headless self-test** — `IncogineStudio --self-test <root>` with
   `QT_QPA_PLATFORM=offscreen` constructs the full window (scene discovery +
   XML loads) and exits; used to smoke-test the shell without a display.
@@ -281,7 +315,7 @@ one layout, in every configuration:
 ## Roadmap / open questions for the maintainer
 
 Per the Studio brief, major systems need discussion before implementation:
-prefab/template system, scene serialization format + C++ codegen, undo/redo,
+prefab/template system, scene serialization format + C++ codegen,
 hot reload, play mode, breakpoints, code completion, asset database + import
 pipeline, `.incoba` compression choice, resource IDs, build profiles,
 packaging, project templates, and plugin/shader/audio/input/localization
@@ -305,5 +339,7 @@ Phase 3 order, biggest unlocks first:
    an-object.
 5. **Physics/collision stubs** — Kodo notes physics as unimplemented;
    decide 2D-first (AABB) scope before any editor.
-6. **Prefab/templates, undo/redo, play mode, hot reload** — in that order;
+6. **Prefab/templates, play mode, hot reload** — in that order;
    each builds on the round-trip + preview channel already in place.
+   (Undo/redo already landed: per-tab document history in code tabs,
+   snapshot history in the Scene tab.)

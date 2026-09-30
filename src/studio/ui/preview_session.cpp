@@ -15,6 +15,23 @@ PreviewSession::PreviewSession(QObject* parent) : QObject(parent) {
     poll_->setInterval(33); // ~30 Hz display polling
     connect(poll_, &QTimer::timeout, this, &PreviewSession::onPoll);
     connect(proc_, &QProcess::finished, this, &PreviewSession::onProcessFinished);
+    connect(proc_, &QProcess::readyReadStandardOutput, this,
+            &PreviewSession::onProcessOutput);
+    connect(proc_, &QProcess::readyReadStandardError, this,
+            &PreviewSession::onProcessOutput);
+}
+
+void PreviewSession::onProcessOutput() {
+    const QString out =
+        QString::fromLocal8Bit(proc_->readAllStandardOutput());
+    const QString err =
+        QString::fromLocal8Bit(proc_->readAllStandardError());
+    if (!out.isEmpty()) {
+        emit consoleOutput(out);
+    }
+    if (!err.isEmpty()) {
+        emit consoleOutput(tr("[err] ") + err);
+    }
 }
 
 bool PreviewSession::isRunning() const {
