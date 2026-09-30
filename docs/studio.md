@@ -152,7 +152,9 @@ cmake --build . --target IncogineIncoba   # packer only
   pixels belong to the Preview tab; this canvas never switches to them).
   Offline it draws the layout itself: parser-known boxes (exact `Square`
   rects) and font labels (real TTFs) in the 1280×720 design space, framed
-  by a **1px border showing exactly what the game sees**. Sizes scale with
+  by a **1px border showing exactly what the game sees**. The border is
+  the game window rect in world space, so right-drag pans move it with
+  the content like Unity's canvas (UI View resets it). Sizes scale with
   the viewport from the 1280×720 base (like the game's `windowHeight/720`
   factor), so layout matches at any canvas size and on any renderer
   backend (SDL3/OpenGL today — DirectX/Metal/Vulkan must preserve the
@@ -167,7 +169,13 @@ cmake --build . --target IncogineIncoba   # packer only
   Toolbar: cursor tools **Select / Move /
   Rotate / Scale / Hand** (keys 1–5; rotate/scale drags arrive later,
   spins work now), 2D/3D toggle, Perspective/Orthographic/Isometric
-  camera selector, 10px snap, Save to source. Hierarchy tree (objects
+  camera selector, 10px snap, UI View (reset to the game view), Window
+  size simulator, Save to source. Right-drag pans in 2D (middle-drag too)
+  and looks around in 3D, where WASDQE flies while held (W forward, S
+  back, A/D strafe, Q descend, E ascend on fixed world Y). The mouse
+  wheel zooms under the cursor (scroll up = zoom in; `Edit → Settings`
+  inverts it), magnifying labels with everything else, with a live zoom
+  % readout under the viewport. Hierarchy tree (objects
   nest, font labels listed with dynamic ones tagged) with drag-reparent
   (rewrites `setParent`, cycle-guarded; texts can't parent), Inspector
   (Position/Rotation/Scale + RGBA for Squares, file id, Apply live,
@@ -233,9 +241,6 @@ cmake --build . --target IncogineIncoba   # packer only
   import by copying in) with a **Loading...** indicator while folders
   populate (dismissed when content lists). Import settings and dependency
   tracking come later.
-- **Inspector (placeholder)** — documents the real `Object` model
-  (`Position`/`Scale`/`Rotation`/`Color`, components `Transform`/`Sprite`/
-  `ScriptComponent`); live-object property binding lands with the scene format.
 - **Output dock** — Studio/build log.
 - **Preview Console dock** — raw stdout/stderr of the running preview game
   process (`[err]`-prefixed for stderr), so `cout`/`cerr` and engine logs

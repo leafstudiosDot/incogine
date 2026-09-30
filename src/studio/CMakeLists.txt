@@ -58,6 +58,10 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/studio_main.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/main_window.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/main_window.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/compile_runner.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/compile_runner.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/settings_dialog.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/settings_dialog.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/code_editor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/code_editor.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/search_panel.cpp

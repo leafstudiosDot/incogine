@@ -50,6 +50,17 @@ public:
     void SetTarget(const Vec3& target);
     void SetDistance(float distance);
     void SetYawPitch(float yawDegrees, float pitchDegrees);
+    Vec3 GetTarget() const { return target_; }
+    float GetDistance() const { return distance_; }
+    void GetYawPitch(float& yawDegrees, float& pitchDegrees) const {
+        yawDegrees = yawDegrees_;
+        pitchDegrees = pitchDegrees_;
+    }
+    // 2D design-window resize without touching any other view state.
+    void SetOrthoSize(float width, float height) {
+        orthoWidth_ = width;
+        orthoHeight_ = height;
+    }
     void SetFovY(float fovYDegrees);
     void SetNearFar(float nearPlane, float farPlane);
     void SetOrthoHeight(float height);

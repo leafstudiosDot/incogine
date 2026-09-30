@@ -5,13 +5,13 @@
 #include <QMainWindow>
 #include <QMap>
 #include <QModelIndex>
-#include <QProcess>
 
 #include <string>
 
 class QFileSystemModel;
 class QAction;
 class QCloseEvent;
+class CompileRunner;
 class QPlainTextEdit;
 class QTreeView;
 class QTreeWidget;
@@ -66,12 +66,11 @@ private slots:
     void onDeleteItems();
     void onFocusSearch();
     void onTabCloseRequested(int index);
+    void onOpenSettings();
     void onSceneDirtyChanged(bool dirty);
     void onPreviewConsole(const QString& text);
     void onCompileGame();
-    void onCompileOutput();
-    void onCompileError(QProcess::ProcessError error);
-    void onCompileFinished(int exitCode, QProcess::ExitStatus status);
+    void onCompileFinished(bool ok, int exitCode);
     void cycleTab(int direction);
     void log(const QString& msg);
     void logBuildLine(const QString& line);
@@ -104,9 +103,6 @@ private:
     bool saveCodePage(CodeEditor* editor, const QString& path);
     bool closePage(QWidget* page); // false = user cancelled
     void refreshEditActions(); // Undo/Redo target the current code page
-    // Manual game build: target name from the configured tree, Debug config.
-    QString gameTargetName() const;
-    void startGameBuild();
 
     std::string projectRoot_;
     QFileSystemModel* projectModel_ = nullptr;
@@ -122,9 +118,7 @@ private:
     QAction* undoAction_ = nullptr; // code pages (per-tab document history)
     QAction* redoAction_ = nullptr;
     QAction* compileAction_ = nullptr; // manual game build (never Studio)
-    QProcess* compileProcess_ = nullptr;
-    QString compileBuffer_; // partial build-output line across readyRead
-    bool compileConfiguring_ = false; // cmake configure phase before build
+    CompileRunner* compileRunner_ = nullptr;
     QWidget* sceneTab_ = nullptr;
     QString sceneTabBaseTitle_ = "Scene";
     QString selectedSceneClass_;

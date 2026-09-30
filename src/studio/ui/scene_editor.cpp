@@ -24,6 +24,7 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QSplitter>
+#include <QSettings>
 #include <QTabWidget>
 #include <QTextStream>
 #include <QUrl>
@@ -109,10 +110,18 @@ void SceneCanvas::mousePressEvent(QMouseEvent* event) {
     lastPos_ = event->pos();
     if (event->button() == Qt::MiddleButton) {
         panning_ = true;
+        panButton_ = Qt::MiddleButton;
         return;
     }
-    if (event->button() == Qt::RightButton && !mode2D_) {
-        orbiting_ = true;
+    if (event->button() == Qt::RightButton) {
+        // Unity-style: right-drag pans in 2D, looks around in 3D.
+        rmbDown_ = true;
+        if (mode2D_) {
+            panning_ = true;
+            panButton_ = Qt::RightButton;
+        } else {
+            orbiting_ = true;
+        }
         return;
     }
     if (event->button() == Qt::LeftButton) {
@@ -139,13 +148,51 @@ void SceneCanvas::mouseMoveEvent(QMouseEvent* event) {
 
 void SceneCanvas::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::MiddleButton) {
-        panning_ = false;
+        if (panButton_ == Qt::MiddleButton) {
+            panning_ = false;
+            panButton_ = Qt::NoButton;
+        }
     } else if (event->button() == Qt::RightButton) {
+        rmbDown_ = false;
         orbiting_ = false;
+        if (panButton_ == Qt::RightButton) {
+            panning_ = false;
+            panButton_ = Qt::NoButton;
+        }
     } else if (event->button() == Qt::LeftButton && dragging_) {
         dragging_ = false;
         emit dragFinished();
     }
+}
+
+void SceneCanvas::keyPressEvent(QKeyEvent* event) {
+    // 3D fly keys (WASD + QE); auto-repeat adds nothing (held state only).
+    if (!mode2D_ && !event->isAutoRepeat()) {
+        switch (event->key()) {
+            case Qt::Key_W:
+            case Qt::Key_A:
+            case Qt::Key_S:
+            case Qt::Key_D:
+            case Qt::Key_Q:
+            case Qt::Key_E:
+                flyKeys_.insert(event->key());
+                event->accept();
+                return;
+        }
+    }
+    PreviewCanvas::keyPressEvent(event);
+}
+
+void SceneCanvas::keyReleaseEvent(QKeyEvent* event) {
+    if (!event->isAutoRepeat()) {
+        flyKeys_.remove(event->key());
+    }
+    PreviewCanvas::keyReleaseEvent(event);
+}
+
+void SceneCanvas::focusOutEvent(QFocusEvent* event) {
+    flyKeys_.clear(); // never stick keys when focus leaves the canvas
+    PreviewCanvas::focusOutEvent(event);
 }
 
 void SceneCanvas::wheelEvent(QWheelEvent* event) {
@@ -153,10 +200,16 @@ void SceneCanvas::wheelEvent(QWheelEvent* event) {
     if (degrees == 0) {
         return;
     }
+    // Scroll up zooms in (Unity-style); the Studio Settings dialog offers
+    // an invert toggle for the opposite habit.
+    QSettings settings;
+    const bool invert =
+        settings.value(QStringLiteral("scene/zoomInvert"), false).toBool();
+    const double factor = std::pow(1.0015, invert ? -degrees : degrees);
     if (mode2D_) {
-        emit zoomBy(std::pow(1.0015, -degrees), event->position().toPoint());
+        emit zoomBy(factor, event->position().toPoint());
     } else {
-        emit zoom3DBy(std::pow(1.0015, -degrees));
+        emit zoom3DBy(factor);
     }
 }
 
@@ -227,6 +280,8 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     gizmoCombo_->setToolTip(tr("Drag moves in 2D; rotate/scale via the Inspector"));
     snapBox_ = new QCheckBox(tr("Snap 10px"));
     snapBox_->setToolTip(tr("Snap viewport drags to a 10px grid"));
+    uiViewButton_ = new QPushButton(tr("UI View"));
+    uiViewButton_->setToolTip(tr("Reset the camera to the game view (fills the viewport with the white-rect game area)"));
     undoButton_ = new QPushButton(tr("Undo"));
     undoButton_->setToolTip(tr("Undo the last scene source change (this tab only)"));
     undoButton_->setEnabled(false);
@@ -242,6 +297,7 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     toolbar->addWidget(cameraCombo_);
     toolbar->addWidget(gizmoCombo_);
     toolbar->addWidget(snapBox_);
+    toolbar->addWidget(uiViewButton_);
     // Simulated engine window: GetWindowSize() reports the chosen size and
     // window-relative formulas re-evaluate, so resize behavior can be
     // checked without running the game (engine forces 16:9 on resize).
@@ -370,6 +426,13 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     QVBoxLayout* layout = new QVBoxLayout(this);
     layout->addLayout(toolbar);
     layout->addWidget(splitter, 1);
+    // Zoom readout under the viewport (2D camera zoom, 3D dolly).
+    auto* statusRow = new QHBoxLayout();
+    statusRow->addStretch(1);
+    zoomLabel_ = new QLabel(tr("100%"));
+    zoomLabel_->setToolTip(tr("Viewport zoom (mouse wheel)"));
+    statusRow->addWidget(zoomLabel_);
+    layout->addLayout(statusRow);
 
     connect(modeCombo_, &QComboBox::currentIndexChanged, this, &SceneEditorTab::onModeChanged);
     connect(cameraCombo_, &QComboBox::currentIndexChanged, this,
@@ -383,6 +446,12 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     connect(saveButton_, &QPushButton::clicked, this, &SceneEditorTab::onSaveToSource);
     connect(undoButton_, &QPushButton::clicked, this, &SceneEditorTab::undoScene);
     connect(redoButton_, &QPushButton::clicked, this, &SceneEditorTab::redoScene);
+    connect(uiViewButton_, &QPushButton::clicked, this, &SceneEditorTab::onUiView);
+    // 3D fly movement (WASDQE while the right mouse button is held).
+    flyTimer_ = new QTimer(this);
+    connect(flyTimer_, &QTimer::timeout, this, &SceneEditorTab::onFlyTick);
+    flyTimer_->start(16);
+    flyClock_.start();
     // Tab-local history shortcuts: WidgetWithChildrenShortcut keeps them
     // inside this tab, so each Code tab keeps its own document history.
     auto* undoShortcut = new QShortcut(QKeySequence::Undo, this);
@@ -482,6 +551,7 @@ void SceneEditorTab::setScene(const QString& className, const QString& headerPat
     rebuildHierarchy();
     refreshInspector();
     refreshSourceView();
+    refreshZoomLabel();
 }
 
 SceneEditorTab::SceneHistoryEntry SceneEditorTab::currentSnapshot() const {
@@ -862,14 +932,24 @@ void SceneEditorTab::refreshSourceView() {
         QString::fromStdString(icg::studio::scenecpp::SerializeSource(sceneFile_)));
 }
 
+void SceneEditorTab::refreshZoomLabel() {
+    if (!zoomLabel_ || !camera_) {
+        return;
+    }
+    // 2D camera zoom, 3D dolly — both default to 1 (100%).
+    const float factor = isMode2D() ? camera_->GetZoom() : dolly_;
+    zoomLabel_->setText(tr("%1%").arg(qRound(factor * 100.0f)));
+}
+
 void SceneEditorTab::onModeChanged(int index) {
     const bool is2D = index == 0;
     camera_->Set2D(is2D);
     canvas_->setMode2D(is2D);
     if (!is2D) {
-        setNote(tr("3D orbit: right-drag orbits, wheel zooms. Picking and "
+        setNote(tr("3D: right-drag looks around, WASDQE flies while held. Picking and "
                    "drag-editing need engine Cube rendering — coming next."));
     }
+    refreshZoomLabel();
     canvas_->update();
 }
 
@@ -957,14 +1037,19 @@ bool SceneEditorTab::textBounds(const icg::studio::scenecpp::TextItem& text,
     if (!family.isEmpty()) {
         font.setFamily(family);
     }
-    // Match paintOffline: pixel size, so picking bounds equal drawn bounds.
+    // Match paintOffline: pixel size (with camera zoom), so picking
+    // bounds equal drawn bounds.
     const int px = std::max(1, qRound((text.pointSize > 0 ? text.pointSize : 16) *
-                                      (windowHeight_ / 720.0f) * viewScale));
+                                      (windowHeight_ / 720.0f) * viewScale *
+                                      camera_->GetZoom()));
     font.setPixelSize(px);
     const QFontMetricsF metrics(font);
-    // Bounds in design pixels so picking matches what is drawn.
-    const float scaleW = static_cast<float>(metrics.horizontalAdvance(content)) / viewScale;
-    const float scaleH = static_cast<float>(metrics.height()) / viewScale;
+    // Bounds in engine pixels so picking matches what is drawn: canvas
+    // advances carry the glyph scale and camera zoom, both divided out.
+    const float zoom = camera_->GetZoom();
+    const float toEngine = (viewScale * zoom > 1e-8f) ? 1.0f / (viewScale * zoom) : 1.0f;
+    const float scaleW = static_cast<float>(metrics.horizontalAdvance(content)) * toEngine;
+    const float scaleH = static_cast<float>(metrics.height()) * toEngine;
     x = static_cast<float>(text.xVal);
     y = static_cast<float>(text.yVal);
     w = scaleW;
@@ -1201,18 +1286,11 @@ void SceneEditorTab::onWindowSizeChanged(int index) {
     }
     windowWidth_ = kWidths[index];
     windowHeight_ = kHeights[index];
-    // Remap the 2D camera onto the simulated window, preserving view state.
+    // Remap the 2D camera onto the simulated window; all other view state
+    // (pan, zoom, 3D orbit) is untouched.
     if (camera_) {
-        const bool was2D = camera_->Is2D();
-        const icg::Camera::Projection proj = camera_->GetProjection();
-        const icg::Vec3 pan = camera_->GetPan();
-        const float zoom = camera_->GetZoom();
-        *camera_ = icg::Camera::Make2D(static_cast<float>(windowWidth_),
-                                       static_cast<float>(windowHeight_));
-        camera_->Set2D(was2D);
-        camera_->SetProjection(proj);
-        camera_->SetPan(pan.x, pan.y);
-        camera_->SetZoom(zoom);
+        camera_->SetOrthoSize(static_cast<float>(windowWidth_),
+                              static_cast<float>(windowHeight_));
     }
     if (!sceneOk_) {
         canvas_->update();
@@ -1233,6 +1311,7 @@ void SceneEditorTab::onWindowSizeChanged(int index) {
     rebuildHierarchy();
     refreshInspector();
     refreshSourceView();
+    refreshZoomLabel();
     canvas_->update();
     setNote(tr("Simulated window %1×%2 — window-relative layout re-evaluated.")
                 .arg(windowWidth_)
@@ -1356,6 +1435,70 @@ void SceneEditorTab::applyEdgePin(int edge, bool on) {
     canvas_->update();
     setNote(tr("Stuck to %1. Save to source to persist.")
                 .arg(edgeBtn_[edge]->text()));
+}
+
+void SceneEditorTab::onUiView() {
+    // Back to the game view: the simulated window fills the viewport
+    // inside the white rect. From 3D this also returns to 2D.
+    if (!isMode2D()) {
+        modeCombo_->setCurrentIndex(0);
+    }
+    camera_->SetPan(0.0f, 0.0f);
+    camera_->SetZoom(1.0f);
+    canvas_->update();
+    refreshZoomLabel();
+    setNote(tr("Game view reset."));
+}
+
+void SceneEditorTab::onFlyTick() {
+    if (isMode2D() || !canvas_ || !canvas_->isFlyHeld()) {
+        flyClock_.restart();
+        return;
+    }
+    const QSet<int> keys = canvas_->flyKeys();
+    if (keys.isEmpty()) {
+        flyClock_.restart();
+        return;
+    }
+    // Facing = eye -> target from the orbit angles; strafe is perpendicular
+    // on the ground plane; Q/E move along fixed world Y (down/up).
+    float yawDeg = 0.0f, pitchDeg = 0.0f;
+    camera_->GetYawPitch(yawDeg, pitchDeg);
+    constexpr float kDeg = 3.14159265f / 180.0f;
+    const float yaw = yawDeg * kDeg;
+    const float pitch = pitchDeg * kDeg;
+    icg::Vec3 forward = {-cosf(pitch) * cosf(yaw), -sinf(pitch),
+                         -cosf(pitch) * sinf(yaw)};
+    forward = icg::Normalized(forward);
+    icg::Vec3 right = {-forward.z, 0.0f, forward.x};
+    right = icg::Normalized(right);
+    icg::Vec3 move = {0.0f, 0.0f, 0.0f};
+    if (keys.contains(Qt::Key_W)) {
+        move = move + forward;
+    }
+    if (keys.contains(Qt::Key_S)) {
+        move = move - forward;
+    }
+    if (keys.contains(Qt::Key_D)) {
+        move = move + right;
+    }
+    if (keys.contains(Qt::Key_A)) {
+        move = move - right;
+    }
+    if (keys.contains(Qt::Key_E)) {
+        move.y += 1.0f;
+    }
+    if (keys.contains(Qt::Key_Q)) {
+        move.y -= 1.0f;
+    }
+    move = icg::Normalized(move);
+    // Frame-rate independent; speed follows the dolly distance so motion
+    // feels the same zoomed in or out.
+    const float dt = qMin(0.1f, flyClock_.restart() / 1000.0f);
+    const float speed = 15.0f * camera_->GetDistance();
+    const icg::Vec3 target = camera_->GetTarget();
+    camera_->SetTarget(target + move * (speed * dt));
+    canvas_->update();
 }
 
 void SceneEditorTab::onApplyLive() {
@@ -1763,6 +1906,7 @@ void SceneEditorTab::onZoom2D(double factor, const QPoint& widgetPos) {
         // Fall back to center zoom when off-canvas math fails.
         camera_->SetZoom(camera_->GetZoom() * static_cast<float>(factor));
         canvas_->update();
+        refreshZoomLabel();
         return;
     }
     const float oldZoom = camera_->GetZoom();
@@ -1773,6 +1917,7 @@ void SceneEditorTab::onZoom2D(double factor, const QPoint& widgetPos) {
     camera_->SetPan(pan.x + worldX * (newZoom - oldZoom),
                     pan.y + worldY * (newZoom - oldZoom));
     canvas_->update();
+    refreshZoomLabel();
 }
 
 void SceneEditorTab::onOrbit(const QPoint& deltaPixels) {
@@ -1786,11 +1931,13 @@ void SceneEditorTab::onOrbit(const QPoint& deltaPixels) {
 
 void SceneEditorTab::onZoom3D(double factor) {
     // Works for perspective (distance) and ortho/iso (height) alike via a
-    // shared dolly factor on the projection size.
-    dolly_ = qBound(0.1f, dolly_ * static_cast<float>(factor), 20.0f);
+    // shared dolly factor on the projection size. factor > 1 zooms in
+    // (matches 2D), so the dolly shrinks.
+    dolly_ = qBound(0.1f, dolly_ / static_cast<float>(factor), 20.0f);
     camera_->SetDistance(10.0f * dolly_);
     camera_->SetOrthoHeight(10.0f * dolly_);
     canvas_->update();
+    refreshZoomLabel();
 }
 
 QString SceneEditorTab::familyForFont(const QString& assetPath) {
@@ -1852,11 +1999,23 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
         const icg::Vec3 s = camera_->WorldToScreen({worldX, worldY, 0}, rw, rh);
         return QPointF(view.x() + s.x, view.y() + s.y);
     };
-    // 1px border: exactly what the game sees (16:9 design area).
+    // 1px border: the game window rect in world space, so it pans/zooms
+    // with the content like Unity's canvas (at defaults it exactly fills
+    // the fitted view). In 3D it stays on the fitted view — the orbit
+    // camera has no game-window frame.
     painter->setPen(QPen(Qt::white, 1));
     painter->setBrush(Qt::NoBrush);
-    painter->drawRect(QRectF(view.x() + 0.5, view.y() + 0.5, view.width() - 1,
-                             view.height() - 1));
+    if (isMode2D()) {
+        const QPointF origin = toWidget(0.0f, 0.0f);
+        const QPointF corner = toWidget(static_cast<float>(windowWidth_),
+                                        static_cast<float>(windowHeight_));
+        painter->drawRect(QRectF(origin.x() + 0.5f, origin.y() + 0.5f,
+                                 corner.x() - origin.x() - 1.0f,
+                                 corner.y() - origin.y() - 1.0f));
+    } else {
+        painter->drawRect(QRectF(view.x() + 0.5, view.y() + 0.5, view.width() - 1,
+                                 view.height() - 1));
+    }
     // Boxes: Squares filled, others outlined + labeled.
     for (size_t i = 0; i < sceneFile_.model.objects.size(); ++i) {
         const auto& obj = sceneFile_.model.objects[i];
@@ -1892,9 +2051,11 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
     // stays backend-agnostic (SDL3/OpenGL today, DirectX/Metal/Vulkan later
     // must preserve the same design-pixel mapping).
     // Canvas px per engine px, times the engine's own glyph scale
-    // (scenes scale fonts by windowHeight/720 via setFontScale).
+    // (scenes scale fonts by windowHeight/720 via setFontScale), times the
+    // camera zoom so wheel zooming magnifies labels like everything else.
     const float viewScale = rw / windowWidth_;
-    const float glyphScale = (windowHeight_ / 720.0f) * viewScale;
+    const float glyphScale =
+        (windowHeight_ / 720.0f) * viewScale * camera_->GetZoom();
     for (const auto& text : sceneFile_.model.texts) {
         if (text.dynamicPos || !text.xNum || !text.yNum) {
             continue;

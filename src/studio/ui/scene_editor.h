@@ -11,8 +11,11 @@
 #include <QTreeWidget>
 #include <QWidget>
 #include <QElapsedTimer>
+#include <QKeyEvent>
 #include <QMap>
 #include <QPointF>
+#include <QSet>
+#include <QTimer>
 
 #include <cstdint>
 #include <string>
@@ -25,6 +28,7 @@
 class QComboBox;
 class QCheckBox;
 class QDoubleSpinBox;
+class QFocusEvent;
 class QLabel;
 class QPainter;
 class QPlainTextEdit;
@@ -50,6 +54,10 @@ public:
     void setMode2D(bool enabled);
     // 16:9 design rect when offline (no frame); equals fittedRect live.
     QRectF viewRect() const;
+    // True while the right mouse button is held in 3D mode (fly-look).
+    bool isFlyHeld() const { return rmbDown_ && !mode2D_; }
+    // Held WASDQE keys (Qt::Key_*) for 3D fly movement.
+    QSet<int> flyKeys() const { return flyKeys_; }
 
 signals:
     void pickRequested(const QPoint& widgetPos);
@@ -66,6 +74,9 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void dragEnterEvent(QDragEnterEvent* event) override;
     void dropEvent(QDropEvent* event) override;
@@ -78,6 +89,9 @@ private:
     bool dragging_ = false;
     bool panning_ = false;
     bool orbiting_ = false;
+    bool rmbDown_ = false; // right button held (pan in 2D, look in 3D)
+    Qt::MouseButton panButton_ = Qt::NoButton; // which button started the pan
+    QSet<int> flyKeys_; // held WASDQE (Qt::Key_*) for 3D fly
     QPoint lastPos_;
 };
 
@@ -155,12 +169,15 @@ private slots:
     void onZoom2D(double factor, const QPoint& widgetPos);
     void onOrbit(const QPoint& deltaPixels);
     void onZoom3D(double factor);
+    void onFlyTick();
+    void onUiView();
 
 private:
     void rebuildHierarchy();
     void refreshInspector();
     void refreshTextInspector();
     void refreshSourceView();
+    void refreshZoomLabel(); // viewport zoom % under the canvas
     void setDirty(bool dirty);
     void setNote(const QString& text);
     void currentTransform(double pos[3], double rot[3], double scale[3],
@@ -205,6 +222,9 @@ private:
     QComboBox* windowCombo_ = nullptr; // simulated engine window size
     QPushButton* undoButton_ = nullptr; // scene source history (per tab)
     QPushButton* redoButton_ = nullptr;
+    QPushButton* uiViewButton_ = nullptr; // reset to the game view
+    QLabel* zoomLabel_ = nullptr; // viewport zoom readout under the canvas
+    QTimer* flyTimer_ = nullptr; // 3D WASDQE movement ticks
     QLabel* idLabel_ = nullptr;
     QPushButton* applyButton_ = nullptr;
     QPushButton* addButton_ = nullptr;
@@ -257,6 +277,7 @@ private:
     double dragStartY_ = 0.0;
     bool dragStartValid_ = false;
     QElapsedTimer liveClock_; // throttles live sends during drags/spins
+    QElapsedTimer flyClock_; // frame time for 3D fly movement
     float orbitYaw_ = -45.0f;
     float orbitPitch_ = 20.0f;
     float dolly_ = 1.0f;

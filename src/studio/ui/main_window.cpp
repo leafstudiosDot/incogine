@@ -15,7 +15,6 @@
 #include <QListWidget>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QProcess>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -34,6 +33,8 @@
 #include <QHBoxLayout>
 
 #include "code_editor.h"
+#include "compile_runner.h"
+#include "settings_dialog.h"
 #include "preview_session.h"
 #include "preview_viewport.h"
 #include "scene_editor.h"
@@ -103,6 +104,9 @@ void StudioMainWindow::buildMenus() {
     }, QKeySequence::Replace);
     edit->addAction(tr("Find in files..."), this, &StudioMainWindow::onFocusSearch,
                     QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F));
+    edit->addSeparator();
+    edit->addAction(tr("Settings..."), this, &StudioMainWindow::onOpenSettings,
+                    QKeySequence::Preferences);
 
     QMenu* view = menuBar()->addMenu(tr("&View"));
     view->addAction(tr("Refresh project"), this, &StudioMainWindow::onRefreshProject, QKeySequence::Refresh);
@@ -359,16 +363,6 @@ void StudioMainWindow::buildDocks() {
             this, &StudioMainWindow::onTreeContextMenu);
     showLoadingOverlay(assetsView_, assetsModel_, assetsRoot);
 
-    QDockWidget* inspDock = new QDockWidget(tr("Inspector"), this);
-    QLabel* insp = new QLabel(tr("Object model: Position / Scale / Rotation / Color\n"
-                                 "Components: Transform, Sprite, ScriptComponent\n\n"
-                                 "Live-object binding and property editing land after\n"
-                                 "the scene format work (see docs/studio.md)."));
-    insp->setWordWrap(true);
-    insp->setMargin(8);
-    inspDock->setWidget(insp);
-    addDockWidget(Qt::RightDockWidgetArea, inspDock);
-
     QDockWidget* outDock = new QDockWidget(tr("Output / Build"), this);
     output_ = new QPlainTextEdit();
     output_->setReadOnly(true);
@@ -488,8 +482,11 @@ CodeEditor* StudioMainWindow::currentCodeEditor() const {
     return qobject_cast<CodeEditor*>(central_->currentWidget());
 }
 
-void StudioMainWindow::refreshEditActions() {
-    // Each code page owns its QTextDocument, so Undo/Redo histories are
+void StudioMainWindow::onOpenSettings() {
+    StudioSettingsDialog::open(this);
+}
+
+void StudioMainWindow::refreshEditActions() {    // Each code page owns its QTextDocument, so Undo/Redo histories are
     // naturally per-tab; the actions just target whichever page is front.
     auto* editor = currentCodeEditor();
     QPlainTextEdit* text = editor ? editor->editor() : nullptr;
@@ -501,113 +498,24 @@ void StudioMainWindow::refreshEditActions() {
     }
 }
 
-QString StudioMainWindow::gameTargetName() const {
-    // Desktop game target == the CMake top-level project name. Read it from
-    // the configured build tree so a renamed project keeps working; the
-    // Studio target itself is never built from here.
-    QFile cache(QString::fromStdString(projectRoot_) + QStringLiteral("/build/CMakeCache.txt"));
-    if (cache.open(QIODevice::ReadOnly)) {
-        while (!cache.atEnd()) {
-            const QString line = QString::fromUtf8(cache.readLine());
-            if (line.startsWith(QStringLiteral("CMAKE_PROJECT_NAME:STATIC="))) {
-                const QString name =
-                    line.mid(int(QStringLiteral("CMAKE_PROJECT_NAME:STATIC=").size()))
-                        .trimmed();
-                if (!name.isEmpty()) {
-                    return name;
-                }
-            }
-        }
-    }
-    return QStringLiteral("Incogine");
-}
-
-void StudioMainWindow::startGameBuild() {
-    const QString buildPath = QString::fromStdString(projectRoot_) + QStringLiteral("/build");
-    logBuildLine(tr("Building target %1 (Debug) ...").arg(gameTargetName()));
-    compileProcess_->setProgram(QStringLiteral("cmake"));
-    compileProcess_->setArguments({QStringLiteral("--build"), buildPath,
-                                   QStringLiteral("--target"), gameTargetName(),
-                                   QStringLiteral("--config"), QStringLiteral("Debug")});
-}
-
 void StudioMainWindow::onCompileGame() {
-    if (compileProcess_ && compileProcess_->state() != QProcess::NotRunning) {
-        return; // already running; button is disabled anyway
-    }
-    if (!compileProcess_) {
-        compileProcess_ = new QProcess(this);
-        connect(compileProcess_, &QProcess::readyReadStandardOutput, this,
-                &StudioMainWindow::onCompileOutput);
-        connect(compileProcess_, &QProcess::readyReadStandardError, this,
-                &StudioMainWindow::onCompileOutput);
-        connect(compileProcess_, &QProcess::errorOccurred, this,
-                &StudioMainWindow::onCompileError);
-        connect(compileProcess_,
-                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+    if (!compileRunner_) {
+        compileRunner_ = new CompileRunner(this);
+        connect(compileRunner_, &CompileRunner::lineReceived, this,
+                &StudioMainWindow::logBuildLine);
+        connect(compileRunner_, &CompileRunner::finished, this,
                 &StudioMainWindow::onCompileFinished);
     }
-    compileBuffer_.clear();
+    if (compileRunner_->isRunning()) {
+        return; // already running; button is disabled anyway
+    }
     compileAction_->setEnabled(false);
-    const QString root = QString::fromStdString(projectRoot_);
-    const QString buildPath = root + QStringLiteral("/build");
-    if (!QFile::exists(buildPath + QStringLiteral("/CMakeCache.txt"))) {
-        // First run: configure with the default generator (newest VS on
-        // Windows), then chain into the build when it succeeds.
-        compileConfiguring_ = true;
-        logBuildLine(tr("Configuring %1 ...").arg(buildPath));
-        compileProcess_->setProgram(QStringLiteral("cmake"));
-        compileProcess_->setArguments(
-            {QStringLiteral("-S"), root, QStringLiteral("-B"), buildPath});
-    } else {
-        compileConfiguring_ = false;
-        startGameBuild();
-    }
-    compileProcess_->start();
+    compileRunner_->start(QString::fromStdString(projectRoot_));
 }
 
-void StudioMainWindow::onCompileOutput() {
-    if (!compileProcess_) {
-        return;
-    }
-    compileBuffer_ += QString::fromLocal8Bit(compileProcess_->readAllStandardOutput());
-    compileBuffer_ += QString::fromLocal8Bit(compileProcess_->readAllStandardError());
-    int nl = -1;
-    while ((nl = compileBuffer_.indexOf(QLatin1Char('\n'))) >= 0) {
-        QString line = compileBuffer_.left(nl);
-        compileBuffer_ = compileBuffer_.mid(nl + 1);
-        if (!line.isEmpty() && line.back() == QLatin1Char('\r')) {
-            line.chop(1);
-        }
-        logBuildLine(line);
-    }
-}
-
-void StudioMainWindow::onCompileError(QProcess::ProcessError error) {
-    if (compileProcess_ && compileProcess_->state() == QProcess::NotRunning) {
-        logBuildLine(tr("Could not start cmake (error %1). Is CMake on PATH?")
-                         .arg(static_cast<int>(error)));
-        compileConfiguring_ = false;
-        compileAction_->setEnabled(true);
-    }
-}
-
-void StudioMainWindow::onCompileFinished(int exitCode, QProcess::ExitStatus status) {
-    if (!compileBuffer_.isEmpty()) {
-        logBuildLine(compileBuffer_);
-        compileBuffer_.clear();
-    }
-    const bool ok = (status == QProcess::NormalExit && exitCode == 0);
-    if (compileConfiguring_) {
-        compileConfiguring_ = false;
-        if (ok) {
-            startGameBuild(); // chain configure -> build, stay disabled
-            compileProcess_->start();
-            return;
-        }
-        logBuildLine(tr("Configure failed (exit %1).").arg(exitCode));
-    } else if (ok) {
-        logBuildLine(tr("Build finished: %1 OK.").arg(gameTargetName()));
+void StudioMainWindow::onCompileFinished(bool ok, int exitCode) {
+    if (ok) {
+        logBuildLine(tr("Build finished: %1 OK.").arg(compileRunner_->gameTarget()));
     } else {
         logBuildLine(tr("Build finished with errors (exit %1).").arg(exitCode));
     }
