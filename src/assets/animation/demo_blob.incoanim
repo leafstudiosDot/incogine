@@ -1,0 +1,86 @@
+{
+  "formatVersion": 1,
+  "generator": "Incogine Animate 0.0.0.3",
+  "document": {
+    "stage": {
+      "width": 1280,
+      "height": 720,
+      "fps": 30,
+      "background": "#00000000",
+      "transparentBackground": true
+    },
+    "timeline": {
+      "lengthFrames": 36,
+      "loop": true
+    },
+    "bakeScale": 1
+  },
+  "layers": [
+    {
+      "id": 1,
+      "name": "Background",
+      "visible": true,
+      "locked": false,
+      "keyframes": [
+        {
+          "frame": 1,
+          "kind": "key",
+          "transform": {
+            "x": 0,
+            "y": 0,
+            "rotation": 0,
+            "scaleX": 1,
+            "scaleY": 1,
+            "skewX": 0,
+            "skewY": 0,
+            "alpha": 1,
+            "color": "#FFFFFFFF"
+          },
+          "tweenIn": {
+            "type": "none",
+            "easing": { "kind": 0, "p1x": 0, "p1y": 0, "p2x": 1, "p2y": 1 },
+            "motionFlags": ["position", "scale", "rotation", "alpha", "color"],
+            "shapeHints": true
+          },
+          "shapes": [
+            {
+              "id": 2,
+              "name": "blob",
+              "path": [
+                { "k": "M", "p": [200, 300] },
+                { "k": "C", "p": [260, 180, 400, 180, 460, 300] },
+                { "k": "C", "p": [400, 420, 260, 420, 200, 300] },
+                { "k": "Z" }
+              ],
+              "style": {
+                "fill": true,
+                "fillColor": "#FF8000C8",
+                "stroke": true,
+                "strokeColor": "#000000FF",
+                "strokeWidth": 4,
+                "cap": 1,
+                "join": 1
+              },
+              "transform": { "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1, "skewX": 0, "skewY": 0, "alpha": 1, "color": "#FFFFFFFF" }
+            }
+          ]
+        },
+        {
+          "frame": 20,
+          "kind": "blank",
+          "transform": {
+            "x": 0, "y": 0, "rotation": 0, "scaleX": 1, "scaleY": 1,
+            "skewX": 0, "skewY": 0, "alpha": 1, "color": "#FFFFFFFF"
+          },
+          "tweenIn": {
+            "type": "motion",
+            "easing": { "kind": 1, "p1x": 0.25, "p1y": 0.1, "p2x": 0.25, "p2y": 1 },
+            "motionFlags": ["position"],
+            "shapeHints": true
+          },
+          "shapes": []
+        }
+      ]
+    }
+  ]
+}

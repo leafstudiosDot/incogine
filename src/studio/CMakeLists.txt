@@ -6,6 +6,9 @@
 #   IncogineStudioCore — Qt-free models (project/credits XML, scene
 #                        discovery, .incoba). Always built when Studio is on.
 #   IncogineIncoba     — headless `incoba_packer` CLI. Always built with Core.
+#   IncogineAnimator   — Qt Widgets vector-animation editor. SEPARATE
+#                        top-level app, so closing Studio leaves an open
+#                        animation running.
 #   IncogineStudio     — Qt Widgets IDE shell. Only when Qt6 Widgets is found;
 #                        otherwise skipped with a status message (runtime never
 #                        links Qt).
@@ -64,6 +67,8 @@ set(ICG_STUDIO_CORE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/core/scene/scene_cpp_ops.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/preview/preview_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/preview/preview_exe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/anim_channel.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/core/anim_channel.h
     ${CMAKE_CURRENT_SOURCE_DIR}/core/crypto/sha256.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba/incoba.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/core/incoba/incoba_index.cpp
@@ -87,7 +92,10 @@ source_group("Studio\\Core" FILES ${ICG_STUDIO_CORE_SOURCES})
 source_group("Studio\\Tools" FILES ${CMAKE_CURRENT_SOURCE_DIR}/tools/incoba_packer.cpp)
 
 # Optional Qt IDE shell (desktop dev tool only; never linked into the game).
-find_package(Qt6 QUIET COMPONENTS Widgets Multimedia)
+# Network is required for the Animator's single-instance local socket
+# (QLocalServer/QLocalSocket); it comes in with Widgets' deps but is requested
+# explicitly so a minimal Qt install fails loudly instead of at link time.
+find_package(Qt6 QUIET COMPONENTS Widgets Multimedia Network)
 if(Qt6Widgets_FOUND)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTOUIC ON)
@@ -95,6 +103,8 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/studio_main.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/main_window.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/main_window.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/animator_launcher.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/ui/animator_launcher.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/compile_runner.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/compile_runner.h
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/settings_dialog.cpp
@@ -112,6 +122,46 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.h
     )
+    # Incogine Animator — vector animation editor, its own top-level app.
+    # Kept separate from IncogineStudio (rather than a child window) so closing
+    # Studio does not close an animation the user is editing. Shares the engine
+    # animation module, so the editor edits the same model the runtime bakes.
+    set(ICG_ANIMATOR_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_main.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.h
+    )
+    add_executable(IncogineAnimator ${ICG_ANIMATOR_SOURCES})
+    # IncogineStudioCore supplies the shared single-instance channel name, so
+    # Studio and the Animator always agree on the socket to talk over.
+    # Qt6::Network carries QLocalServer for that channel.
+    target_link_libraries(IncogineAnimator PRIVATE
+        IncogineStudioCore
+        IncogineAnim
+        Qt6::Widgets
+        Qt6::Network
+    )
+    target_include_directories(IncogineAnimator PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator
+    )
+    if(MSVC)
+        target_compile_options(IncogineAnimator PRIVATE /utf-8)
+    endif()
+    if(WIN32)
+        set_target_properties(IncogineAnimator PROPERTIES WIN32_EXECUTABLE TRUE)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/../../bundle/windows/icon.ico"
+                       "${CMAKE_CURRENT_BINARY_DIR}/animator_icon.ico" COPYONLY)
+        file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/studio.rc"
+             DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+        target_sources(IncogineAnimator PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/studio.rc")
+    endif()
+    source_group("Animator" FILES ${ICG_ANIMATOR_SOURCES})
+    message(STATUS "Incogine Studio: IncogineAnimator animation editor enabled")
+
     add_executable(IncogineStudio ${ICG_STUDIO_UI_SOURCES})
     target_link_libraries(IncogineStudio PRIVATE
         IncogineStudioCore

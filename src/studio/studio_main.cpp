@@ -1,6 +1,7 @@
 // Incogine Studio — Qt entry point.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include <QApplication>
+#include <QDir>
 #include <QLabel>
 #include <QMessageBox>
 #include <QStyleFactory>
@@ -16,6 +17,7 @@
 #include "core/preview/preview_exe.h"
 #include "core/project_paths.h"
 #include "core/xml/project_xml.h"
+#include "ui/animator_launcher.h"
 
 namespace {
 
@@ -107,6 +109,21 @@ int main(int argc, char** argv) {
         win.onOpenFile(QString::fromStdString(root + "/src/assets/fonts/main_font.ttf"));
         win.onOpenFile(QString::fromStdString(root + "/src/assets/audio/testbgm.ogg"));
         std::cout << "self-test: code/font/audio pages opened\n";
+
+        // Incogine Animator is a separate executable, so Studio can only open
+        // animations if it can locate that binary next to itself. Report it
+        // rather than assert: a shell-only build (Qt present, Animator target
+        // not built) is a legitimate configuration, and the self-test should
+        // say so instead of failing the whole IDE.
+        {
+            AnimatorLauncher launcher;
+            const QString animator = launcher.animatorPath();
+            std::cout << "self-test: IncogineAnimator "
+                      << (animator.isEmpty()
+                              ? "NOT FOUND (open-animation will report an error)"
+                              : ("-> " + QDir::toNativeSeparators(animator).toStdString()))
+                      << "\n";
+        }
         const int pagesBefore = win.filePageCount();
         if (auto* tree = win.findChild<QTreeWidget*>()) {
             if (QTreeWidgetItem* top = tree->topLevelItem(0)) {

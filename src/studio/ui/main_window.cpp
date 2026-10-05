@@ -1,4 +1,4 @@
-// Incogine Studio — main window implementation (Qt Widgets).
+﻿// Incogine Studio — main window implementation (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "main_window.h"
 
@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QCloseEvent>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QFileSystemModel>
 #include <QFormLayout>
@@ -40,6 +41,8 @@
 #include "scene_editor.h"
 #include "search_panel.h"
 #include "font_preview.h"
+#include "animator_launcher.h"
+#include "animation/anim_io.h"
 #include "preview_viewport.h"
 #ifdef ICG_STUDIO_HAS_MULTIMEDIA
 #include "audio_preview.h"
@@ -116,6 +119,10 @@ void StudioMainWindow::buildMenus() {
     project->addAction(tr("Open credits.xml editor tab"), this, [this] { central_->setCurrentIndex(1); });
     project->addAction(tr("Find in files..."), this, &StudioMainWindow::onFocusSearch);
     project->addAction(tr("Pack assets into .incoba bundles..."), this, &StudioMainWindow::onPackIncoba);
+
+    QMenu* animate = menuBar()->addMenu(tr("&Animate"));
+    animate->addAction(tr("New &Animation..."), this,
+                       &StudioMainWindow::onNewAnimation, QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
 
     QMenu* scene = menuBar()->addMenu(tr("&Scene"));
     scene->addAction(tr("Rescan scenes"), this, &StudioMainWindow::onDiscoverScenes);
@@ -727,6 +734,13 @@ void StudioMainWindow::onOpenFile(const QString& path, int line) {
         openFontPage(path);
         return;
     }
+    // .incoanim opens in Incogine Animator, which is a separate application
+    // rather than a tab: the animation editor is a full tool with its own
+    // window, and it must survive closing Studio.
+    if (suffix == QLatin1String("incoanim")) {
+        openAnimation(path);
+        return;
+    }
     if (!openCodePage(path, line)) {
         return;
     }
@@ -780,6 +794,85 @@ void StudioMainWindow::onOpenFile(const QString& path, int line) {
             log(tr("project.xml parse: %1").arg(QString::fromStdString(error)));
         }
     }
+}
+
+void StudioMainWindow::openAnimation(const QString& path) {
+    // Lazy: only pay for locating the executable when an animation is actually
+    // opened. The hand-off itself lives in the Animator process, which listens
+    // on a per-document socket — Studio never holds a reference to it, so an
+    // animation keeps running after Studio closes.
+    if (animatorLauncher_ == nullptr) {
+        animatorLauncher_ = new AnimatorLauncher(this);
+    }
+
+    QString error;
+    if (!animatorLauncher_->open(path, &error)) {
+        log(tr("Incogine Animator: %1").arg(error));
+        QMessageBox::warning(this, tr("Incogine Studio"), error);
+        return;
+    }
+    const bool reused = animatorLauncher_->isOpen(path);
+    log(reused
+            ? tr("Focused the Incogine Animator window already editing %1.")
+                  .arg(QDir::toNativeSeparators(QFileInfo(path).fileName()))
+            : tr("Opened %1 in Incogine Animator (it keeps running if you close Studio).")
+                  .arg(QDir::toNativeSeparators(QFileInfo(path).fileName())));
+}
+
+void StudioMainWindow::onNewAnimation() {
+    // "New Animation" creates the asset on disk first, then hands it to the
+    // Animator. Going through a real file keeps one code path (open, not
+    // new-then-save) and leaves the user with something already in the Asset
+    // Browser.
+    const QString suggested = QDir(projectRoot_.c_str() + QStringLiteral("/src/assets"))
+                                  .filePath(QStringLiteral("untitled.incoanim"));
+    QString path = QFileDialog::getSaveFileName(
+        this, tr("New Animation"), suggested,
+        tr("Incogine animations (*.incoanim)"));
+    if (path.isEmpty()) {
+        return;
+    }
+    if (QFileInfo(path).suffix().compare(QStringLiteral("incoanim"),
+                                        Qt::CaseInsensitive) != 0) {
+        path += QStringLiteral(".incoanim");
+    }
+
+    // Refuse to overwrite silently.
+    if (QFileInfo::exists(path)) {
+        const auto answer = QMessageBox::question(
+            this, tr("Incogine Studio"),
+            tr("%1 already exists.\n\nOpen it instead of replacing it?")
+                .arg(QDir::toNativeSeparators(QFileInfo(path).fileName())),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+        if (answer != QMessageBox::Yes) {
+            return;
+        }
+    }
+
+    if (!QFileInfo::exists(path)) {
+        // Write a minimal valid document so the file is immediately usable.
+        icg::anim::AnimDocument document =
+            icg::anim::AnimDocument::New(1920, 1080, 24);
+        document.lengthFrames = 24;
+        std::string error;
+        if (!icg::anim::SaveFile(path.toStdString(), document, error)) {
+            const QString message =
+                tr("Could not create the animation:\n%1")
+                    .arg(QString::fromStdString(error));
+            log(tr("New Animation: %1").arg(message));
+            QMessageBox::critical(this, tr("Incogine Studio"), message);
+            return;
+        }
+        // Keep the Asset Browser in sync with the new file. QFileSystemModel
+        // has no refresh(); re-setting the root index is the established way
+        // to force a rescan in this file.
+        if (assetsModel_ != nullptr && assetsView_ != nullptr) {
+            assetsView_->setRootIndex(assetsModel_->index(
+                QString::fromStdString(projectRoot_ + "/src/assets")));
+        }
+    }
+
+    openAnimation(path);
 }
 
 void StudioMainWindow::onSaveCurrentFile() {

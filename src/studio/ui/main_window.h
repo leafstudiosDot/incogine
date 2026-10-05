@@ -11,6 +11,7 @@
 class QFileSystemModel;
 class QAction;
 class QCloseEvent;
+class AnimatorLauncher;
 class CompileRunner;
 class QPlainTextEdit;
 class QTreeView;
@@ -72,6 +73,7 @@ private slots:
     void onCompileGame();
     void onCompileFinished(bool ok, int exitCode);
     void cycleTab(int direction);
+    void onNewAnimation();
     void log(const QString& msg);
     void logBuildLine(const QString& line);
 
@@ -100,11 +102,17 @@ private:
     CodeEditor* openCodePage(const QString& path, int line);
     QWidget* openAudioPage(const QString& path);
     QWidget* openFontPage(const QString& path);
+    // Launches Incogine Animator on `path` (a separate process, so an open
+    // animation survives closing Studio). Logs + reports when unavailable.
+    void openAnimation(const QString& path);
     bool saveCodePage(CodeEditor* editor, const QString& path);
     bool closePage(QWidget* page); // false = user cancelled
     void refreshEditActions(); // Undo/Redo target the current code page
 
     std::string projectRoot_;
+    // Launches Incogine Animator as a separate process (see
+    // animator_launcher.h). Owned here; outlives nothing we care about.
+    AnimatorLauncher* animatorLauncher_ = nullptr;
     QFileSystemModel* projectModel_ = nullptr;
     QFileSystemModel* assetsModel_ = nullptr;
     QTreeView* projectView_ = nullptr;

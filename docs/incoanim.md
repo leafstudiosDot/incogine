@@ -28,6 +28,71 @@ The model and all rasterization live in the **engine**, with no Qt dependency,
 so the SDL3 runtime can load `.incoanim` files itself. Studio's window is a thin
 editor on top of it.
 
+## Incogine Animator
+
+`Incogine Animator` is a **`QMainWindow` in its own executable**, not a tab or a
+child window of Incogine Studio. That is deliberate: closing Studio must not
+close an animation you are working on.
+
+```
+Animate → New Animation…      (Ctrl+Shift+N)   creates the asset, then opens it
+Asset Browser → double-click *.incoanim        opens it in the Animator
+IncogineAnimator <file.incoanim>              launch it directly
+IncogineAnimator --self-test [file]           headless smoke test
+```
+
+- **Separate process.** Studio spawns it with `QProcess::startDetached` and
+  passes the file path. Nothing in Studio holds a reference to the window, so
+  the animation outlives the IDE.
+- **Single instance per document.** The Animator listens on a local socket named
+  after the open file (`QLocalServer`); a second launch of the same file sends
+  the path to the running window, which raises itself and shows the document,
+  then the new process exits. Without this, two editors would race to save one
+  file. Studio performs the same check before spawning, and the Animator checks
+  at startup too, so a file-association double-click behaves the same way.
+  The socket name comes from `core/anim_channel.h` (a deterministic FNV-1a hash
+  of the canonical path), shared by both processes so they always agree.
+- **Geometry is remembered** via `QSettings` under `animator/geometry` and
+  `animator/windowState`, separate keys from Studio's.
+- **One window per document.** `File → Open` replaces the current document after
+  confirming any unsaved changes; a second `IncogineAnimator` process is what you
+  use to work on two animations at once.
+- **Save-changes prompt** on close, on New, and on Open — Save / Discard /
+  Cancel, where cancelling a Save As correctly aborts the whole operation.
+- **Autosave** writes `<name>.autosave.incoanim` beside the document every
+  60 seconds of inactivity. It is a recovery copy and deliberately does *not*
+  clear the dirty flag: closing the window still prompts.
+- **Document dock** (stage size, frame rate, length, loop, bake scale) drives
+  everything through the command stack, so undo/redo, dirty tracking, and
+  autosave apply without special cases.
+
+### Milestone 1 scope
+
+Implemented: the window, document lifecycle (new / open / save / save-as),
+geometry memory, dirty tracking with the close prompt, autosave, undo/redo over
+the command stack, and the document-properties dock. The stage is a **placeholder**
+that draws the outlined stage rectangle, a transparency checkerboard, and a zoom
+readout — the interactive canvas (pan, zoom, tools) is Milestone 2, and the
+timeline is Milestone 4.
+
+Headless verification:
+
+```
+QT_QPA_PLATFORM=offscreen IncogineAnimator --self-test
+```
+
+runs 30 checks over the real command stack: edit → dirty → undo → redo, refused
+no-op edits, layer add/undo, stage resize/undo, a save → reset → reload
+round-trip through the controller, and a pixel check that the stage canvas
+actually painted. It exits non-zero on any failure.
+
+:::note
+A self-test must never open a modal dialog — with `QT_QPA_PLATFORM=offscreen`
+nothing can dismiss it and the process hangs. The self-test therefore loads
+through `AnimatorDocument` rather than the window's `openPath()`, and a missing
+file argument is reported on stderr instead of in a message box.
+:::
+
 ### Phase 2 (future, not implemented)
 
 3D animation — importing FBX/OBJ/glTF/`.blend`, skeletal and mesh animation, and
@@ -260,3 +325,9 @@ stable and diff-friendly.
 - [Architecture](./architecture.md) — the `IncogineAssets` / `IncogineAnim` targets
 - [Incogine Studio](./studio.md) — the IDE
 - [Assets](./assets.md) — the AssetManager and `.incoba` bundles
+
+## Acknowledgements
+
+Incogine Animate stands on **SDL3** (the engine) and **Qt 6** (the editor), plus
+[glad](../THIRD_PARTY.md) for OpenGL loading. Full details in
+`THIRD_PARTY.md`.

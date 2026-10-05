@@ -53,9 +53,10 @@ CMake is the source of truth. Studio adds three targets alongside the existing
 
 | Target | What | Qt? |
 |---|---|---|
-| `IncogineStudioCore` | Qt-free models: `project.xml` / `credits.xml` parse+save, scene discovery, `.incoba` reader/writer | No |
+| `IncogineStudioCore` | Qt-free models: `project.xml` / `credits.xml` parse+save, scene discovery, `.incoba` reader/writer, animation channel naming | No |
 | `IncogineIncoba` | Headless `incoba_packer` CLI (pack/list) | No |
-| `IncogineAnim` | Engine 2D animation module (`src/core/animation/`); linked by both the game and Studio so the editor edits the same model the runtime bakes | No |
+| `IncogineAnim` | Engine 2D animation module (`src/core/animation/`); linked by the game, Studio, and the Animator | No |
+| `IncogineAnimator` | **Separate** vector-animation editor app (`src/studio/animator/`) | Yes |
 | `IncogineStudio` | Qt Widgets IDE shell (main window, docks, forms) | Yes — only if Qt6 Widgets is found |
 
 `IncogineAnim` (and its dependency `IncogineAssets`) are defined in the
@@ -251,16 +252,20 @@ cmake --build . --target IncogineIncoba   # packer only
 - **Asset Browser** — `QFileSystemModel` over `src/assets/` (browse, open,
   import by copying in) with a **Loading...** indicator while folders
   populate (dismissed when content lists). Import settings and dependency
-  tracking come later.
+  tracking come later. Double-clicking a **`.incoanim`** launches it in
+  [Incogine Animator](./incoanim.md) — a separate process, so an open
+  animation keeps running after Studio closes.
 - **Output dock** — Studio/build log.
 - **Preview Console dock** — raw stdout/stderr of the running preview game
   process (`[err]`-prefixed for stderr), so `cout`/`cerr` and engine logs
   from the game appear in the IDE while it runs.
 - **Headless self-test** — `IncogineStudio --self-test <root>` with
   `QT_QPA_PLATFORM=offscreen` constructs the full window (scene discovery +
-  XML loads) and exits; used to smoke-test the shell without a display.
-- On Windows the Studio executable carries the same `bundle/windows/icon.ico`
-  as the game (via `src/studio/studio.rc`).
+  XML loads) and exits; used to smoke-test the shell without a display. It also
+  reports whether `IncogineAnimator` was found next to the Studio binary, since
+  that lookup is what makes double-clicking an animation work.
+- On Windows the Studio and Animator executables carry the same
+  `bundle/windows/icon.ico` as the game (via `src/studio/studio.rc`).
 
 ## Scripts
 

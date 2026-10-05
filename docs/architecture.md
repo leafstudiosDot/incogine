@@ -73,6 +73,7 @@ PlayStation/Xbox/Switch/Mira are detected by macro but not actually supported in
 | Asset importer registry | `src/core/assets/assetimport.h` |
 | 2D vector animation (`.incoanim`) | `src/core/animation/` |
 | Studio | `src/studio/` (see [Incogine Studio](./studio.md)) |
+| Incogine Animator (animation editor) | `src/studio/animator/` (see [`.incoanim`](./incoanim.md)) |
 | Save data | `src/core/engine/savedata/` |
 | Platform layer | `src/core/platforms/` |
 | Web shell | `src/web/init.html` |
@@ -102,3 +103,22 @@ dragging in the 2D model. Register a new format in
 Both are `POSITION_INDEPENDENT_CODE ON` because static library code is linked
 into a shared library on Android. Neither needs the SDL platform blocks — they
 compile unchanged for every platform the engine targets.
+
+## Test suites
+
+`tests/` holds headless suites registered with CTest (`BUILD_TESTING`, on by
+default, skipped on Android/Web):
+
+| Test | Covers |
+|---|---|
+| `IncogineAnimTests` | 2D affine math, color/easing, geometry, keyframe and frame-span logic, `.incoanim` round-trip and file IO, the undo/redo command stack |
+| `IncogineAssetsTests` | Importer registry lookup rules and the `.incoanim` importer |
+
+```
+cmake --build . --target IncogineAnimTests IncogineAssetsTests
+ctest --output-on-failure
+```
+
+`tests/test_check.h` is a small stdlib harness rather than a framework
+dependency; each suite is its own executable with its own `main()`, so adding a
+module is a few lines of CMake.
