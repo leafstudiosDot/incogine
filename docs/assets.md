@@ -1,7 +1,7 @@
 ---
 title: Assets
 description: The AssetManager, asset subsystems, and code generation for embedded assets.
-sidebar_position: 11
+sidebar_position: 12
 tags: [assets, asset-manager, fonts, audio]
 ---
 

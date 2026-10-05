@@ -1,7 +1,7 @@
 ---
 title: C# Scripting
 description: How to write C# scripts for Incogine using the .NET 10 runtime.
-sidebar_position: 12
+sidebar_position: 13
 tags: [scripting, csharp, dotnet]
 ---
 
@@ -23,6 +23,71 @@ Incogine embeds the .NET 10 runtime (CoreCLR) to run C# scripts on game Objects.
   host compiles as a disabled stub so the engine still builds; C# scripts
   just won't run until the pack is installed.
 - CMake build configured with `-DICG_SCRIPTING_CSHARP=ON` (default)
+
+## Hosting Pack Lookup
+
+`CMakeLists.txt` locates the native hosting bits by probing, per platform RID
+(`win-x64`, `osx-arm64`, `linux-x64`), both the dotnet directory next to
+`dotnet.exe` and the well-known install locations:
+
+```
+packs/Microsoft.NETCore.App.Host.<rid>/<version>/runtimes/<rid>/native/
+```
+
+On macOS the RID defaults to **`osx-arm64`** — x64 macOS binaries are being
+discontinued, so desktop builds are arm64-only. Passing
+`-DCMAKE_OSX_ARCHITECTURES=x86_64` switches to the `osx-x64` pack for a local
+Intel cross-build; a universal `arm64;x86_64` still prefers arm64.
+
+That directory holds **both** the headers (`nethost.h`, `hostfxr.h`,
+`coreclr_delegates.h`) and the `nethost` import library. Several versions can
+be installed side by side; candidates are sorted newest-first with a natural
+compare (so `10.x` wins over `8.x`) to match the `net10.0` TFM in
+`Incogine.runtimeconfig.json`. A `<version>/include` + `<version>/lib` split
+layout is also probed as a fallback.
+
+The library file is spelled differently per platform, and all three names are
+recognised: `nethost.lib` (Windows), `libnethost.lib` (older Unix layouts) and
+`libnethost.a` (current Unix packs). On Linux/macOS the static
+`libnethost.a` is preferred over the shipped `libnethost.so`, so the game does
+not gain a runtime `.so` it would have to ship — the same reasoning that forces
+SDL3 and the addons to static. A successful configure reports:
+
+```
+-- C# scripting: nethost include dir: .../Microsoft.NETCore.App.Host.win-x64/10.0.12/runtimes/win-x64/native
+-- C# scripting: nethost library: .../10.0.12/runtimes/win-x64/native/nethost.lib
+-- C# scripting: staging nethost.dll: .../10.0.12/runtimes/win-x64/native/nethost.dll
+```
+
+On Windows, `nethost.lib` is an import library, so the executable gains a
+load-time dependency on `nethost.dll`. The .NET install directory is not on
+`PATH` by default, so CMake copies `nethost.dll` next to the game executable.
+
+## Wide vs. narrow strings
+
+`hostfxr` types every string parameter as `char_t`, which is `wchar_t` on Windows
+and plain `char` on Linux/macOS. `csharphost.h` cannot include `hostfxr.h` (it
+has to compile in stub mode), so it declares the platform choice itself as
+`icg_hostfxr_char`, and `cshandlerruntime.cpp` builds its
+assembly/type/method-name strings as `std::wstring` or `std::string` to match.
+Getting this wrong compiles fine on Windows and fails elsewhere with
+`cannot convert 'const char*' to 'const wchar_t*'`, which is why the desktop CI
+workflow builds this path on all three platforms.
+
+If the pack lives somewhere unusual, point CMake at it directly instead of
+relying on the probe:
+
+```bash
+cmake .. -DNETHOST_INCLUDE_DIR=/path/to/native -DNETHOST_LIBRARY=/path/to/nethost.lib
+```
+
+:::note
+Only object files that are actually reachable get linked in. If no
+`ScriptComponent` with `ScriptLanguage::CSharp` is attached anywhere, the C#
+host is dead-stripped from the executable and `nethost.dll` will not appear in
+its import table — that is normal and unrelated to whether the pack was found.
+:::
+
 
 ## Writing a Script (static — supported today)
 

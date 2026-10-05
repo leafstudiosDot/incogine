@@ -1,0 +1,234 @@
+# Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
+#
+# CMake build of the engine (Incogine) on Windows, macOS and Linux.
+#
+# Design notes:
+#  * Submodules are NOT checked out by actions/checkout. The SDL3 sources are
+#    declared in .gitmodules but not committed as gitlinks, so `submodules: true`
+#    would fetch nothing useful while pulling in the (large, unused) emsdk
+#    checkout. cmake/ci/fetch-sources.sh clones the SDL sources from .gitmodules
+#    instead, which keeps working before and after the gitlinks land.
+#  * Windows needs the prebuilt SDL3 import libraries (gitignored drops), so
+#    cmake/ci/fetch-prebuilts.ps1 unpacks the official *-devel-*-VC.zip release
+#    archives into reqs/. Both scripts derive their versions from .gitmodules,
+#    so CI always builds against the same SDL releases a local setup uses.
+#  * Every leg builds the real game target with the default options: Kodo and
+#    C# scripting on, .incoba asset bundling on (the headless packer needs no
+#    Qt), and the Studio sources compiled with only its Qt shell skipped.
+#  * macOS is built arm64-only (-DCMAKE_OSX_ARCHITECTURES=arm64, asserted with
+#    lipo after the build): x64 macOS binaries are being discontinued, and only
+#    an arm64 build keeps running on current and future macOS.
+#  * SDL3 and the addons are compiled from source on Linux/macOS, which is
+#    thousands of translation units on 3-4 CI cores. ccache is installed and
+#    its cache is persisted so incremental runs stay in the low minutes.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    # Generous ceiling: Linux/macOS compile SDL3 + the three addons (and their
+    # vendored codecs) from source on 3-4 cores, which is the long pole. ccache
+    # keeps every run after the first one much shorter.
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (Ubuntu 24.04)
+            os: ubuntu-24.04
+            artifact: linux
+          - name: macOS (Apple Silicon)
+            os: macos-14
+            artifact: macos
+          - name: Windows (MSVC)
+            os: windows-2022
+            artifact: windows
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # See the design note at the top of this file.
+          submodules: false
+
+      # ---------------------------------------------------------------
+      # Toolchain
+      # ---------------------------------------------------------------
+      # SDL3 hard-errors at configure time without X11 *or* Wayland development
+      # libraries ("SDL could not find X11 or Wayland development libraries"),
+      # and it links ALSA/PulseAudio/udev/dbus statically when they are present.
+      # The SDL3 addons need nothing extra: their codecs are vendored in the
+      # reqs/*_source trees. See https://wiki.libsdl.org/SDL3/README-linux.
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake git python3 ccache ca-certificates \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev libdrm-dev \
+            libgbm-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Install macOS build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install ccache
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+      - name: Report toolchain
+        shell: bash
+        run: |
+          cmake --version
+          echo "runner: $RUNNER_OS ($RUNNER_ARCH), cores: $(nproc 2>/dev/null || echo '?')"
+          # The top-level CMakeLists.txt requires CMake >= 3.26.3; fail with a
+          # clear message instead of relying on cmake_minimum_required alone.
+          required="3.26.3"
+          actual="$(cmake --version | head -1 | sed -E 's/cmake version ([0-9.]+).*/\1/')"
+          echo "CMake $actual (need >= $required)"
+          awk -v a="$actual" -v b="$required" 'BEGIN {
+            n = split(a, x, "."); m = split(b, y, ".");
+            for (i = 1; i <= 3; i++) {
+              xi = (i <= n ? x[i] + 0 : 0); yi = (i <= m ? y[i] + 0 : 0);
+              if (xi > yi) { exit 0 }
+              if (xi < yi) { exit 1 }
+            }
+            exit 0;
+          }' || { echo "::error::CMake $actual is older than the required $required"; exit 1; }
+
+      # ---------------------------------------------------------------
+      # Dependencies
+      # ---------------------------------------------------------------
+      - name: Fetch SDL3 sources (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash cmake/ci/fetch-sources.sh
+
+      - name: Fetch SDL3 prebuilt libraries (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./cmake/ci/fetch-prebuilts.ps1
+
+      # C# scripting (ICG_SCRIPTING_CSHARP, on by default) builds
+      # src/scripts/csharp/Incogine/Incogine.csproj, which targets net10.0.
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore ccache
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ matrix.artifact }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.artifact }}-
+
+      # ccache defaults to ~/Library/Caches/ccache on macOS and ~/.cache/ccache
+      # on Linux; pin it to the one directory the cache step above restores.
+      - name: Pin ccache directory
+        if: runner.os != 'Windows'
+        shell: bash
+        run: echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
+
+      # ---------------------------------------------------------------
+      # Build
+      # ---------------------------------------------------------------
+      - name: Configure
+        shell: bash
+        run: |
+          cmake_args=(
+            -DCMAKE_BUILD_TYPE=Release
+            -DICG_BUILD_STUDIO=ON
+            -DICG_USE_INCOBA=ON
+          )
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            cmake_args+=(
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            )
+          fi
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # Apple Silicon only: x64 macOS binaries are being discontinued, so
+            # an arm64-only build is the only one that will keep running. Stated
+            # explicitly (not inherited from the runner) so the target survives
+            # a future image bump; the arch is verified after the build.
+            cmake_args+=(-DCMAKE_OSX_ARCHITECTURES=arm64)
+          fi
+          cmake -S . -B build "${cmake_args[@]}"
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --parallel
+
+      # macOS is arm64-only by design (x64 macOS binaries are being
+      # discontinued). Assert it on the produced binary rather than trusting the
+      # CMake cache, so a silently-universal or x64 build fails the job.
+      - name: Verify macOS architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          binary="build/Incogine.app/Contents/MacOS/Incogine"
+          if [ ! -f "$binary" ]; then
+            echo "::error::$binary not found"
+            exit 1
+          fi
+          archs="$(lipo -archs "$binary")"
+          echo "file(1):   $(file -b "$binary")"
+          echo "lipo -archs: $archs"
+          if [ "$archs" != "arm64" ]; then
+            echo "::error::expected an arm64-only binary, got '$archs'"
+            exit 1
+          fi
+
+      # ---------------------------------------------------------------
+      # Sanity check + artifact
+      # ---------------------------------------------------------------
+      - name: Collect runtime output
+        shell: bash
+        run: |
+          set -e
+          cmake -E make_directory dist
+          case "$RUNNER_OS" in
+            Windows)
+              # Multi-config generator: binaries land in build/<Config>/.
+              cmake -E copy_directory build/Release dist
+              ;;
+            macOS)
+              cmake -E copy_directory build/Incogine.app dist/Incogine.app
+              ;;
+            *)
+              for item in Incogine Incogine.dll Incogine.runtimeconfig.json Incogine.sha256; do
+                if [ -e "build/$item" ]; then
+                  cmake -E copy "build/$item" dist/
+                fi
+              done
+              cmake -E copy_directory build/assets dist/assets
+              ;;
+          esac
+
+      - name: Upload runtime output
+        uses: actions/upload-artifact@v4
+        with:
+          name: incogine-${{ matrix.artifact }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

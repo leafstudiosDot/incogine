@@ -67,7 +67,7 @@ The MSVC build forces `/utf-8`; MinGW/Clang add `-fexec-charset=UTF-8`. The Wind
 ```
 mkdir build && cd build && cmake .. && make
 ```
-SDL3 and the addons compile from the `reqs/` submodules as static libraries; vendored freetype/harfbuzz/plutosvg (SDL3_ttf), libpng/jpeg/webp/tiff/jxl (SDL3_image) and ogg/vorbis/flac/opus/etc. (SDL3_mixer) are compiled in, so no system dev packages are required. `SDLIMAGE_AVIF` is disabled (the dav1d dependency needs nasm).
+SDL3 and the addons compile from the `reqs/` submodules as static libraries; vendored freetype/harfbuzz/plutosvg (SDL3_ttf), libpng/jpeg/webp/tiff/jxl (SDL3_image) and ogg/vorbis/flac/opus/etc. (SDL3_mixer) are compiled in, so the **addons** require no system dev packages. The SDL3 **core** does require X11-or-Wayland dev libraries on Linux or it hard-errors at configure time ("SDL could not find X11 or Wayland development libraries") — see the apt list in the CI section above or https://wiki.libsdl.org/SDL3/README-linux. `SDLIMAGE_AVIF` is disabled (the dav1d dependency needs nasm).
 
 ### iOS (Xcode)
 ```
@@ -90,6 +90,20 @@ emcmake cmake ..
 emmake make
 ```
 Web builds use `src/web/init.html` as the shell file and compile SDL3 + the addons from the same `reqs/` submodules as the desktop builds (Emscripten ships no SDL3 ports, so no `-sUSE_SDL` flags are used).
+
+### Continuous Integration (GitHub Actions)
+`.github/workflows/ci.yml` configures and builds the engine on **Windows (MSVC)**, **macOS (arm64-only)** and **Linux (Ubuntu 24.04)** on every push/PR, then uploads the runtime output as a workflow artifact. It runs the same top-level `CMakeLists.txt` as a local build with default options (Kodo + C# scripting on, `ICG_USE_INCOBA=ON`, Studio sources compiled with only its optional Qt shell skipped). macOS passes `-DCMAKE_OSX_ARCHITECTURES=arm64` explicitly and a `Verify macOS architecture` step asserts `lipo -archs` is exactly `arm64` — x64 macOS binaries are being discontinued, so arm64 is the only architecture that keeps running. Full description: `docs/build-ci.md`.
+
+Two dependency scripts live in `cmake/ci/` and both derive their versions from `.gitmodules`, so bumping a branch there is the only place a version is written:
+
+- `cmake/ci/fetch-sources.sh` (Linux/macOS) clones every `reqs/SDL3*_source` entry listed in `.gitmodules` at its recorded branch and runs `git submodule update --init --recursive` inside each — that recursive step is what provides the vendored freetype/harfbuzz/libpng/ogg/etc. sources. `emsdk` is skipped unless `ICG_CI_FETCH_EMSDK=1`.
+- `cmake/ci/fetch-prebuilts.ps1` (Windows) downloads the upstream `<lib>-devel-<version>-VC.zip` release archives and unpacks them into `reqs/SDL3`, `reqs/SDL3_ttf`, `reqs/SDL3_image`, `reqs/SDL3_mixer` (the gitignored prebuilt drops Windows links against).
+
+Notes:
+- `actions/checkout` runs with `submodules: false` on purpose: the SDL3 trees are declared in `.gitmodules` but not committed as gitlinks, so `submodules: true` would fetch nothing useful while also pulling the large unused `emsdk` checkout.
+- Linux deps are `build-essential cmake git python3 ccache ca-certificates` plus the SDL3 X11/GL/audio dev packages (`libx11-dev`, `libxext-dev`, `libxrandr-dev`, `libxcursor-dev`, `libxi-dev`, `libxfixes-dev`, `libxss-dev`, `libxtst-dev`, `libxkbcommon-dev`, `libxkbcommon-x11-dev`, `libgl1-mesa-dev`, `libegl1-mesa-dev`, `libdrm-dev`, `libgbm-dev`, `libasound2-dev`, `libpulse-dev`, `libudev-dev`, `libdbus-1-dev`). SDL3 treats every one of these as required and reports each missing piece as its own `FATAL_ERROR` (`SDL could not find X11 or Wayland development libraries`, `Couldn't find dependency package for XTEST ...`) — the list has to stay complete. `ca-certificates` is needed for the HTTPS clones in fetch-sources.sh. The SDL3 *addons* need nothing extra: their codecs are vendored in the fetched sources.
+- .NET 10 is installed via `actions/setup-dotnet` because `ICG_SCRIPTING_CSHARP` (default `ON`) builds `Incogine.csproj` (`net10.0`).
+- `ccache` is installed and its cache persisted — SDL3 + addons compile from source on Linux/macOS and that dominates the runtime.
 
 ### Android (Gradle)
 Packaging is driven by the vendored SDL3 `android-project/` gradle template. Requirements: Android SDK + NDK 28.2.13676358 (as pinned in `android-project/app/build.gradle`).
@@ -149,7 +163,7 @@ Singleton access pattern: `Engine::Instance(argc, argv)` (caches and returns the
 - `CSriptHandler` (in `src/core/scripting/csharp/`) wraps the .NET 10 CoreCLR runtime via `nethost`/`hostfxr`. The C# managed assembly (`Incogine.dll`) is built by `dotnet build` from `src/scripts/csharp/Incogine/`.
 - `KodoScriptHandler` (in `src/core/scripting/kodo/`) is a placeholder — logs a warning, no-op.
 - Script files: C# in `src/scripts/csharp/`, Kodo in `src/scripts/kodo/`.
-- CMake options: `ICG_SCRIPTING_CSHARP` (ON by default, requires .NET 10 SDK), `ICG_SCRIPTING_KODO` (ON by default, stub).
+- CMake options: `ICG_SCRIPTING_CSHARP` (ON by default, requires .NET 10 SDK), `ICG_SCRIPTING_KODO` (ON by default, stub). The nethost probe accepts `nethost.lib`, `libnethost.lib` and `libnethost.a`, and prefers the static `libnethost.a` on non-Windows so there is no runtime `.so` to ship. Its RID defaults to `osx-arm64` on macOS (arm64-only desktop builds; `-DCMAKE_OSX_ARCHITECTURES=x86_64` selects `osx-x64`). `hostfxr` uses `wchar_t` strings on Windows and `char` elsewhere — see `icg_hostfxr_char` in `src/core/scripting/csharp/csharphost.h`.
 - The Kodo language syntax is being designed in `src/scripts/kodo/syntax-reference.md`.
 
 ### Assets / subsystems — `src/core/assets/`, `src/core/fonts/`
@@ -190,6 +204,7 @@ Sets up the Emscripten `Module` shim and appends a `<canvas>`. The final Emscrip
 | C# scripts | `src/scripts/csharp/`, base class in `src/scripts/csharp/Incogine/ScriptBehaviour.cs` |
 | Kodo scripts | `src/scripts/kodo/`, syntax reference in `src/scripts/kodo/syntax-reference.md` |
 | Scripting engine core | `src/core/components/script/` (ScriptComponent) and `src/core/scripting/` (handlers) |
+| CI workflow / its dependency scripts | `.github/workflows/ci.yml`, `cmake/ci/fetch-sources.sh`, `cmake/ci/fetch-prebuilts.ps1` |
 | Save file location | `src/core/engine/savedata/savedata.cpp` (`SDL_GetPrefPath` based) |
 | Platform-specific code | `src/core/platforms/platforms.h` and the per-`PLATFORM STREQUAL` blocks in `CMakeLists.txt` |
 | Licensing questions / project direction | The "Licensing & Project Direction" section above |

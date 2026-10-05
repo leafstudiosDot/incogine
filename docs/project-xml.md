@@ -1,7 +1,7 @@
 ---
 title: Project XML
 description: The project identity fields in src/project.xml and how CMake consumes them.
-sidebar_position: 13
+sidebar_position: 14
 tags: [project.xml, configuration]
 ---
 

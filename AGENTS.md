@@ -40,3 +40,4 @@ A 2D/3D-capable C++ game engine (and reference game) by **leafstudiosDot**, lice
 - Engine version lives in `src/core/engine/version.h`, mirrored to `src/project.xml` (`<incogine_version>`).
 - Project identity (name, window title, bundle ID, copyright) is regex-extracted from `src/project.xml` by `CMakeLists.txt`.
 - Generated files: font/audio C arrays (from `ttfparse*.py`/`audioparse.py`, only with `ICG_EMBED_ASSETS=ON`) and `_svgdata.h` (from `svgparse.py`) all land in the build dir — gitignored, don't edit by hand.
+- CI: `.github/workflows/ci.yml` builds Windows/macOS/Linux; macOS is arm64-only (verified with `lipo` after the build). Dependency fetching lives in `cmake/ci/fetch-sources.sh` (bash, SDL sources) and `cmake/ci/fetch-prebuilts.ps1` (PowerShell, Windows prebuilts). Both read versions from `.gitmodules`. Details in `docs/build-ci.md`.

@@ -1,6 +1,8 @@
 # Incogine
 A leafstudiosDot engine. Now open source! Licensed under **MPL-2.0**.
 
+[![CI](https://github.com/leafstudiosDot/incogine/actions/workflows/ci.yml/badge.svg)](https://github.com/leafstudiosDot/incogine/actions/workflows/ci.yml)
+
 ## Dependencies
 - CMake
 - Python3 (Python 3.11+)
@@ -14,6 +16,11 @@ Soon
 
 ## Build
 > Recommended using Visual Studio Code with CMake Tools extension.
+>
+> Every push and pull request is built on Linux, macOS and Windows by GitHub
+> Actions (`.github/workflows/ci.yml`); the workflow downloads the same SDL3
+> dependencies a local setup uses, so `cmake/ci/fetch-sources.sh` on Linux/macOS
+> and `cmake/ci/fetch-prebuilts.ps1` on Windows are all you need locally too.
 
 ### Windows (Visual Studio IDE)
 1. Run the following commands in the project root directory:

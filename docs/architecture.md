@@ -1,7 +1,7 @@
 ---
 title: Architecture
 description: High-level architecture of Incogine, including the main loop and the Engine singleton.
-sidebar_position: 8
+sidebar_position: 9
 tags: [architecture, engine]
 ---
 

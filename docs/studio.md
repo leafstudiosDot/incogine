@@ -1,7 +1,7 @@
 ---
 title: Incogine Studio
 description: The developer IDE for an Incogine project.
-sidebar_position: 16
+sidebar_position: 17
 tags: [studio, ide, incoba, tooling]
 ---
 

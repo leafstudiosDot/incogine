@@ -34,10 +34,33 @@ SDL3, SDL3_ttf, SDL3_image, and SDL3_mixer are vendored as git submodules under 
 git submodule update --init --recursive
 ```
 
-This downloads SDL3 and the addons' vendored third-party sources (~100 MB). SDL3 and the addons compile from these submodules as static libraries on macOS/Linux; the vendored freetype/harfbuzz/plutosvg (SDL3_ttf), libpng/jpeg/webp/tiff/jxl (SDL3_image), and ogg/vorbis/flac/opus/etc. (SDL3_mixer) are all compiled in, so no system dev packages are required.
+This downloads SDL3 and the addons' vendored third-party sources (~100 MB). SDL3 and the addons compile from these submodules as static libraries on macOS/Linux; the vendored freetype/harfbuzz/plutosvg (SDL3_ttf), libpng/jpeg/webp/tiff/jxl (SDL3_image), and ogg/vorbis/flac/opus/etc. (SDL3_mixer) are all compiled in, so the addons need no system dev packages.
+
+The SDL3 **core** still does: on Linux it refuses to configure without X11 or Wayland development libraries ("SDL could not find X11 or Wayland development libraries on your system"). Install the set from the [SDL3 README for Linux](https://wiki.libsdl.org/SDL3/README-linux) — on Debian/Ubuntu:
+
+```bash
+sudo apt-get install -y ca-certificates libx11-dev libxext-dev libxrandr-dev \
+    libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev \
+    libxkbcommon-dev libxkbcommon-x11-dev libgl1-mesa-dev libegl1-mesa-dev \
+    libdrm-dev libgbm-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+```
+
+:::caution
+SDL3 reports each missing piece as its own `FATAL_ERROR` (for example
+`Couldn't find dependency package for XTEST ...`), so the list has to be complete
+— installing only `libx11-dev` is not enough.
+:::
 
 :::note
 `SDLIMAGE_AVIF` is disabled because the `dav1d` dependency requires `nasm`.
+:::
+
+:::tip
+If `git submodule update --init --recursive` leaves `reqs/SDL3_source` and friends
+empty (the SDL3 entries are declared in `.gitmodules` but not yet committed as
+gitlinks), use `bash cmake/ci/fetch-sources.sh` instead — it clones the same
+repositories at the branches recorded in `.gitmodules`. See
+[Continuous Integration](./build-ci.md).
 :::
 
 ## Project identity

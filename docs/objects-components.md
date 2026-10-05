@@ -1,7 +1,7 @@
 ---
 title: Objects and Components
 description: The Object / Component model in Incogine.
-sidebar_position: 10
+sidebar_position: 11
 tags: [objects, components]
 ---
 

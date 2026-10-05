@@ -1,7 +1,7 @@
 ---
 title: Scenes
 description: The scene system and the game scenes that ship with Incogine.
-sidebar_position: 9
+sidebar_position: 10
 tags: [scenes, scene-manager]
 ---
 

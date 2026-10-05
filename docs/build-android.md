@@ -1,7 +1,7 @@
 ---
 title: Build for Android
 description: Building Incogine for Android with Gradle and the NDK.
-sidebar_position: 7
+sidebar_position: 8
 tags: [build, android, gradle]
 ---
 

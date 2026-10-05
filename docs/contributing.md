@@ -1,7 +1,7 @@
 ---
 title: Contributing
 description: Guidelines for contributing to Incogine.
-sidebar_position: 14
+sidebar_position: 15
 tags: [contributing, community]
 ---
 

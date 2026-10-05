@@ -1,7 +1,7 @@
 ---
 title: Scripting
 description: How to use C# and Kodo scripts with Incogine's ScriptComponent system.
-sidebar_position: 11
+sidebar_position: 12
 tags: [scripting, csharp, kodo, scriptcomponent]
 ---
 

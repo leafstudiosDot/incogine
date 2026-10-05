@@ -1,7 +1,7 @@
 ---
 title: License
 description: The MPL-2.0 licensing model and project direction decisions for Incogine.
-sidebar_position: 15
+sidebar_position: 16
 tags: [license, mpl-2.0, legal]
 ---
 

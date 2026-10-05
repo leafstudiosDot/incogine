@@ -20,9 +20,13 @@
 
 #if defined(_WIN32)
     #include <windows.h>
-    #define LOAD_LIBRARY(path) LoadLibraryA(path)
-    #define GET_PROC_ADDRESS(lib, name) GetProcAddress(lib, name)
-    #define FREE_LIBRARY(lib) FreeLibrary(lib)
+    // char_t is wchar_t on Windows (that is what get_hostfxr_path fills), so
+    // the loader must be the wide variant. The library handle members are
+    // kept as void* so csharphost.h stays free of windows.h, hence the casts
+    // at the Win32 boundary.
+    #define LOAD_LIBRARY(path) LoadLibraryW(path)
+    #define GET_PROC_ADDRESS(lib, name) GetProcAddress(reinterpret_cast<HMODULE>(lib), name)
+    #define FREE_LIBRARY(lib) FreeLibrary(reinterpret_cast<HMODULE>(lib))
     #define STR(x) L##x
     using char_t = wchar_t;
 #else
@@ -102,16 +106,16 @@ bool CSriptHost::Initialize() {
         return false;
     }
 
-    hostfxr_handle = cxt;
+    hostfxr_ctx = cxt;
     initialized = true;
     std::cout << "[Incogine] C# scripting initialized (.NET runtime loaded)" << std::endl;
     return true;
 }
 
 void CSriptHost::Shutdown() {
-    if (hostfxr_handle && close_fptr) {
-        close_fptr(hostfxr_handle);
-        hostfxr_handle = nullptr;
+    if (hostfxr_ctx && close_fptr) {
+        close_fptr(hostfxr_ctx);
+        hostfxr_ctx = nullptr;
     }
     if (hostfxrLib) {
         FREE_LIBRARY(hostfxrLib);

@@ -28,16 +28,22 @@ bool CSriptHandler::ResolveManagedFunctions() {
     auto loadFn = host->GetLoadAssemblyFunction();
     if (!loadFn) return false;
 
-    // Convert paths to wide strings for the .NET hosting API
-    auto toWide = [](const std::string& s) -> std::wstring {
-        return std::wstring(s.begin(), s.end());
-    };
+    // hostfxr takes char_t strings: wchar_t on Windows, plain char elsewhere
+    // (see icg_hostfxr_char in csharphost.h). Narrow platforms therefore need
+    // no conversion at all.
+#if defined(_WIN32)
+    using hostfxr_string = std::wstring;
+    #define ICG_HOSTFXR_LIT(x) L##x
+#else
+    using hostfxr_string = std::string;
+    #define ICG_HOSTFXR_LIT(x) x
+#endif
 
-    std::wstring wAssembly = toWide(assemblyPath);
-    std::wstring wType = toWide(typeName);
-    std::wstring wStart = L"Start";
-    std::wstring wUpdate = L"Update";
-    std::wstring wDestroy = L"OnDestroy";
+    hostfxr_string wAssembly(assemblyPath.begin(), assemblyPath.end());
+    hostfxr_string wType(typeName.begin(), typeName.end());
+    hostfxr_string wStart = ICG_HOSTFXR_LIT("Start");
+    hostfxr_string wUpdate = ICG_HOSTFXR_LIT("Update");
+    hostfxr_string wDestroy = ICG_HOSTFXR_LIT("OnDestroy");
 
     // Load Start callback
     int rc = loadFn(
