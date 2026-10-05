@@ -1,4 +1,5 @@
 #include "fonts.h"
+#include "../assets/assetmanager.h"
 using namespace std;
 
 Font::Font() : font(nullptr), fontLoaded(false), textTexture(0) {}
@@ -11,6 +12,34 @@ Font::~Font() {
     if (fontLoaded && font) {
         TTF_CloseFont(font);
     }
+}
+
+bool Font::setFontFile(const char* path, double pointSize) {
+    SDL_IOStream* io = AssetManager::Instance().Open(path);
+    if (!io) {
+        std::cerr << "setFontFile: asset not found: " << path << std::endl;
+        return false;
+    }
+
+    if (fontLoaded && font) {
+        TTF_CloseFont(font);
+        fontLoaded = false;
+    }
+
+    font = TTF_OpenFontIO(io, 1, pointSize);
+    if (!font) {
+        SDL_CloseIO(io);
+        std::cerr << "TTF_OpenFontIO Error: " << SDL_GetError() << std::endl;
+        return false;
+    }
+
+    fontData = nullptr;
+    fontDataSize = 0;
+    basePointSize = pointSize;
+    currentPointSize = pointSize;
+
+    fontLoaded = true;
+    return true;
 }
 
 bool Font::setFont(const unsigned char* data, unsigned int dataSize, double pointSize) {
@@ -45,42 +74,14 @@ void Font::renderUI(float x, float y) {
         return;
     };
 
-    // Save matrices
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    GLint vp[4]; glGetIntegerv(GL_VIEWPORT, vp);
-    glOrtho(0, vp[2], vp[3], 0, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
-
-    // Draw quad
-    glDisable(GL_DEPTH_TEST);
-    glEnable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, textTexture);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glColor4ub(color.r, color.g, color.b, color.a);
-    float x2 = x + fontWidth;
-    float y2 = y + fontHeight;
-    glBegin(GL_QUADS);
-      glTexCoord2f(0,0); glVertex2f(x, y);
-      glTexCoord2f(1,0); glVertex2f(x2, y);
-      glTexCoord2f(1,1); glVertex2f(x2, y2);
-      glTexCoord2f(0,1); glVertex2f(x, y2);
-    glEnd();
+
+    QuadRenderer::DrawQuad(x, y, fontWidth, fontHeight,
+                           color.r / 255.0f, color.g / 255.0f, color.b / 255.0f, color.a / 255.0f,
+                           textTexture);
 
     glDisable(GL_BLEND);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glDisable(GL_TEXTURE_2D);
-    glEnable(GL_DEPTH_TEST);
-
-    // Restore matrices
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-    glMatrixMode(GL_MODELVIEW);
 }
 
 void Font::setColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a) {

@@ -6,14 +6,14 @@ SettingsScene::SettingsScene() : Scene("Settings") {
     // Scene constructor
     menuFonts.resize(SettingsMenu.size());
 
-    if (!headerFont.setFont(_jpsup_font_data, _jpsup_font_size, 48)) {
+    if (!headerFont.setFontFile("fonts/jpsup_font.ttf", 48)) {
         if (Engine::Instance(0, nullptr)->inDevMode()) {
             std::cerr << "Failed to load \"Settings\" font in SettingsScene::SettingsScene" << std::endl;
         }
     }
 
     for (int i = 0; i < SettingsMenu.size(); ++i) {
-        if (!menuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+        if (!menuFonts[i].setFontFile("fonts/jpsup_font.ttf", 30)) {
             if (Engine::Instance(0, nullptr)->inDevMode()) {
                 std::cerr << "Failed to load menu index: " << SettingsMenu[i].name << " font in SettingsScene::SettingsScene" << std::endl;
             }
@@ -77,7 +77,7 @@ void SettingsScene::Render() {
             subMenuFonts.resize(subItems.size());
 
             for (std::size_t i = oldSize; i < subMenuFonts.size(); ++i) {
-                if (!subMenuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+                if (!subMenuFonts[i].setFontFile("fonts/jpsup_font.ttf", 30)) {
                     if (Engine::Instance(0, nullptr)->inDevMode()) {
                         std::cerr << "Failed to load submenu index: " << i << " font in SettingsScene::Render" << std::endl;
                     }

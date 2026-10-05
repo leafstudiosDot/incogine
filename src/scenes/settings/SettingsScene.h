@@ -5,7 +5,6 @@
 #include <functional>
 #include "../../core/scenes/scenes.h"
 #include "../../core/fonts/fonts.h"
-#include <jpsup_font.h>
 
 #ifndef SETTINGS_SCENE_H
 #define SETTINGS_SCENE_H

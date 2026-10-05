@@ -3,7 +3,6 @@
 #include "../core/engine/version.h"
 
 #include "../core/fonts/fonts.h"
-#include <jpsup_font.h>
 
 #ifndef MAINSCENE_H
 #define MAINSCENE_H

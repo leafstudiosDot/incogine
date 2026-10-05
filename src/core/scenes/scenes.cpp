@@ -43,7 +43,7 @@ void SceneManager::EventScene(const SDL_Event& event) {
 	}
 }
 
-Scene::Scene(const string& name = "Scene") : sceneName(name), renderer(nullptr) {
+Scene::Scene(const string& name) : sceneName(name), renderer(nullptr) {
     event = Engine::Instance(0, nullptr)->GetEventProvider();
 }
 

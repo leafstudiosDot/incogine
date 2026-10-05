@@ -1,7 +1,6 @@
 #include "image.h"
 
 Image::Image(SDL_Renderer* renderer) : renderer(renderer), texture(nullptr) {
-    //loadFromMemory(image_data, image_size);
 }
 
 Image::~Image() {
@@ -10,32 +9,41 @@ Image::~Image() {
     }
 }
 
-void Image::render(float x, float y) {
-    if (!texture) return;
-
-    SDL_FRect dstRect = {x, y, width, height};
-    SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
-}
-
-void Image::loadFromMemory(const unsigned char* data, unsigned int size) {
-    SDL_IOStream* rw = SDL_IOFromConstMem(data, size);
-    if (!rw) {
-        throw std::runtime_error("Failed to create SDL_IOStream");
+bool Image::load(const char* path) {
+    SDL_IOStream* io = AssetManager::Instance().Open(path);
+    if (!io) {
+        std::cerr << "Image::load: asset not found: " << path << std::endl;
+        return false;
     }
 
-    SDL_Surface* surface = IMG_Load_IO(rw, 1);
+    if (texture) {
+        SDL_DestroyTexture(texture);
+        texture = nullptr;
+    }
+
+    SDL_Surface* surface = IMG_Load_IO(io, 1);
     if (!surface) {
-        SDL_CloseIO(rw);
-        throw std::runtime_error("Failed to load image from memory: " + std::string(SDL_GetError()));
+        SDL_CloseIO(io);
+        std::cerr << "IMG_Load_IO failed for " << path << ": " << SDL_GetError() << std::endl;
+        return false;
     }
 
     texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (!texture) {
         SDL_DestroySurface(surface);
-        throw std::runtime_error("Failed to create texture from surface: " + std::string(SDL_GetError()));
+        std::cerr << "SDL_CreateTextureFromSurface failed: " << SDL_GetError() << std::endl;
+        return false;
     }
 
     width = surface->w;
     height = surface->h;
     SDL_DestroySurface(surface);
+    return true;
+}
+
+void Image::render(float x, float y) {
+    if (!texture) return;
+
+    SDL_FRect dstRect = {x, y, width, height};
+    SDL_RenderTexture(renderer, texture, nullptr, &dstRect);
 }

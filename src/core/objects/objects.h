@@ -1,5 +1,6 @@
 #include <string>
 #include <vector>
+#include <memory>
 #include <stdexcept>
 #include <cmath>
 #include "../components/components.h"
@@ -9,6 +10,7 @@
 #define OBJECTS_H
 
 class Component;
+class ScriptComponent;
 
 struct Position {
     double x{0.0};
@@ -18,12 +20,10 @@ struct Position {
     Position() : x(0.0), y(0.0), z(0.0) {}
     Position(double x, double y, double z) : x(x), y(y), z(z) {}
 
-	// Calculates distance to another position
     double distanceTo(const Position& other) const {
         return sqrt((x - other.x) * (x - other.x) + (y - other.y) * (y - other.y) + (z - other.z) * (z - other.z));
     }
 
-    // Equality operators
     bool operator==(const Position& other) const {
         return x == other.x && y == other.y && z == other.z;
     }
@@ -40,14 +40,12 @@ struct Scale {
 
     Scale(double x, double y, double z) : x(x), y(y), z(z) {}
 
-    // Scale by?
     void scaleBy(double factor) {
         x *= factor;
         y *= factor;
         z *= factor;
     }
 
-    // Equality operators
     bool operator==(const Scale& other) const {
         return x == other.x && y == other.y && z == other.z;
     }
@@ -64,14 +62,12 @@ struct Rotation {
 
     Rotation(double x, double y, double z) : x(x), y(y), z(z) {}
 
-    // Reset rotation
     void reset() {
         x = 0.0;
         y = 0.0;
         z = 0.0;
     }
 
-    // Equality operators
     bool operator==(const Rotation& other) const {
         return x == other.x && y == other.y && z == other.z;
     }
@@ -89,7 +85,6 @@ struct Color {
 
     Color(int r, int g, int b, int a) : r(r), g(g), b(b), a(a) {}
 
-    // Equality operators
     bool operator==(const Color& other) const {
         return r == other.r && g == other.g && b == other.b && a == other.a;
     }
@@ -102,22 +97,34 @@ struct Color {
 class Object {
     private:
         string name;
-        std::vector<Component> components;
+        std::vector<std::unique_ptr<Component>> components;
         Position pos;
         Scale scale;
         Rotation rotation;
+        static std::vector<Object*> liveObjects;
 
     public:
         Object(const std::string& name, Position pos, Scale scale, Rotation rotation);
-        ~Object();
+        virtual ~Object();
 
         // Name
         void setName(const std::string& newName);
         std::string getName() const;
 
+        // Live-object registry (used by C#/Kodo Object.find).
+        static Object* FindByName(const std::string& name);
+        static std::vector<Object*> FindAllByName(const std::string& name);
+
         // Component
-        Component& getComponent(int index);
-        void addComponent(const Component& component);
+        Component* getComponent(int index);
+        int getComponentCount() const;
+        void addComponent(std::unique_ptr<Component> component);
+        Component* getComponentByName(const std::string& name);
+
+        // Script helpers
+        void startScripts();
+        void updateScripts();
+        void destroyScripts();
 
         // Transform Manipulation
         void setPosition(const Position& newPos);

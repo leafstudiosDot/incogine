@@ -6,14 +6,14 @@ PauseMenu::PauseMenu() {
 	square->setName("PauseMenuContainer");
 
 	for (int i = 0; i < PauseMenuItemCount; ++i) {
-		if (!pauseMenuFonts[i].setFont(_jpsup_font_data, _jpsup_font_size, 30)) {
+		if (!pauseMenuFonts[i].setFontFile("fonts/jpsup_font.ttf", 30)) {
 			if (Engine::Instance(0, nullptr)->inDevMode()) {
 				std::cerr << "Failed to load menu index: " << PauseMenuItemNames[i] << " font in PauseMenu::PauseMenu" << std::endl;
 			}
 		}
 	}
 
-	if (!pausedFont.setFont(_jpsup_font_data, _jpsup_font_size, 48)) {
+	if (!pausedFont.setFontFile("fonts/jpsup_font.ttf", 48)) {
 		if (Engine::Instance(0, nullptr)->inDevMode()) {
 			std::cerr << "Failed to load \"Paused\" font in PauseMenu::PauseMenu" << std::endl;
 		}
