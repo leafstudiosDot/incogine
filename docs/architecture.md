@@ -70,6 +70,35 @@ PlayStation/Xbox/Switch/Mira are detected by macro but not actually supported in
 | Script files (C#) | `src/scripts/csharp/` |
 | Script files (Kodo) | `src/scripts/kodo/` |
 | Assets / fonts / audio | `src/core/assets/`, `src/core/fonts/` |
+| Asset importer registry | `src/core/assets/assetimport.h` |
+| 2D vector animation (`.incoanim`) | `src/core/animation/` |
+| Studio | `src/studio/` (see [Incogine Studio](./studio.md)) |
 | Save data | `src/core/engine/savedata/` |
 | Platform layer | `src/core/platforms/` |
 | Web shell | `src/web/init.html` |
+
+## Engine modules — `IncogineAssets`, `IncogineAnim`
+
+Two static libraries sit between `src/core/` and the game executable. Both are
+plain **C++17 with no SDL and no Qt**, so the SDL3 runtime, the Qt-free test
+harness, and Incogine Studio can all link the exact same code.
+
+| Target | Sources | What |
+|---|---|---|
+| `IncogineAssets` | `src/core/assets/assetimport.*` | `IAssetImporter` + `AssetImporterRegistry`: the generic extension → importer seam. Knows no specific format. |
+| `IncogineAnim` | `src/core/animation/*` | 2D vector animation data model, geometry, `.incoanim` IO, and the `.incoanim` importer. Links `IncogineAssets`. |
+
+Their sources are removed from the executable globs (`list(REMOVE_ITEM ...)`,
+next to the Studio and Puroko exclusions), so they are **linked once**, not
+compiled twice.
+
+:::tip
+Splitting the importer seam from the animation model is what lets a future 3D
+importer (FBX, OBJ, glTF, `.blend`) link `IncogineAssets` on its own instead of
+dragging in the 2D model. Register a new format in
+`AssetImporterRegistry::RegisterBuiltins()`.
+:::
+
+Both are `POSITION_INDEPENDENT_CODE ON` because static library code is linked
+into a shared library on Android. Neither needs the SDL platform blocks — they
+compile unchanged for every platform the engine targets.

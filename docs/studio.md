@@ -55,7 +55,13 @@ CMake is the source of truth. Studio adds three targets alongside the existing
 |---|---|---|
 | `IncogineStudioCore` | Qt-free models: `project.xml` / `credits.xml` parse+save, scene discovery, `.incoba` reader/writer | No |
 | `IncogineIncoba` | Headless `incoba_packer` CLI (pack/list) | No |
+| `IncogineAnim` | Engine 2D animation module (`src/core/animation/`); linked by both the game and Studio so the editor edits the same model the runtime bakes | No |
 | `IncogineStudio` | Qt Widgets IDE shell (main window, docks, forms) | Yes — only if Qt6 Widgets is found |
+
+`IncogineAnim` (and its dependency `IncogineAssets`) are defined in the
+top-level `CMakeLists.txt`, not in `src/studio/CMakeLists.txt` — they are
+engine modules that happen to be shared with the editor, which is why Studio
+links them rather than owning them. See [Architecture](./architecture.md#engine-modules--incogineassets-incogineanim).
 
 Rules that keep the runtime clean (§17):
 

@@ -370,6 +370,102 @@ if(ICG_SCRIPTING_KODO)
     endif()
 endif()
 
+# Engine modules — static libraries shared by the runtime and by Studio.
+#
+# IncogineAssets: the generic asset-importer seam (extension -> importer). It
+# knows nothing about any specific format, so a future 3D importer (FBX, OBJ,
+# glTF, .blend) registers the same way .incoanim does.
+# IncogineAnim: the 2D vector animation model, geometry, .incoanim IO, and the
+# .incoanim importer that plugs into IncogineAssets.
+#
+# Both are plain C++17 with no SDL and no Qt, which is deliberate: the SDL3
+# runtime and the Qt-free test harness can both link them, and keeping the
+# importer seam in its own target means a 3D importer never has to drag in the
+# 2D model. Sources are excluded from the executable glob further down, so
+# they are linked once rather than compiled twice.
+set(ICG_ASSETS_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/assets/assetimport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/assets/assetimport.h
+)
+
+set(ICG_ANIM_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_types.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_types.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_document.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_document.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_geometry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_geometry.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_io.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_io.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim2d_importer.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim2d_importer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_commands.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_commands.h
+)
+
+add_library(IncogineAssets STATIC ${ICG_ASSETS_SOURCES})
+target_include_directories(IncogineAssets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+
+add_library(IncogineAnim STATIC ${ICG_ANIM_SOURCES})
+target_include_directories(IncogineAnim PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
+target_link_libraries(IncogineAnim PUBLIC IncogineAssets)
+
+set_target_properties(IncogineAssets IncogineAnim PROPERTIES
+    POSITION_INDEPENDENT_CODE ON
+    LINKER_LANGUAGE CXX
+)
+if(MSVC)
+    target_compile_options(IncogineAssets PRIVATE /utf-8)
+    target_compile_options(IncogineAnim PRIVATE /utf-8)
+endif()
+icg_group_sources(ICG_ASSETS_SOURCES)
+icg_group_sources(ICG_ANIM_SOURCES)
+
+# ---- Headless test suites ----
+# The repo had no test infrastructure, so this adds a deliberately tiny
+# stdlib harness (tests/test_check.h) rather than a framework dependency. Each
+# suite is its own executable with its own main(), so adding a module is a few
+# lines of CMake instead of a central registration list.
+#
+# Enabled by BUILD_TESTING (the CTest convention, ON by default). Skipped on
+# Android and Web, which cannot build host executables.
+option(BUILD_TESTING "Build headless test suites" ON)
+if(BUILD_TESTING AND NOT PLATFORM STREQUAL "Android" AND NOT PLATFORM STREQUAL "Web")
+    enable_testing()
+
+    add_executable(IncogineAnimTests ${CMAKE_CURRENT_SOURCE_DIR}/tests/anim_tests.cpp)
+    target_include_directories(IncogineAnimTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    )
+    target_link_libraries(IncogineAnimTests PRIVATE IncogineAnim)
+    if(MSVC)
+        target_compile_options(IncogineAnimTests PRIVATE /utf-8)
+    endif()
+
+    add_executable(IncogineAssetsTests ${CMAKE_CURRENT_SOURCE_DIR}/tests/asset_tests.cpp)
+    target_include_directories(IncogineAssetsTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/core
+    )
+    target_link_libraries(IncogineAssetsTests PRIVATE IncogineAnim)
+    if(MSVC)
+        target_compile_options(IncogineAssetsTests PRIVATE /utf-8)
+    endif()
+
+    # Run from the build dir so a suite that writes a temp file (the file-io
+    # round-trip) has a writable cwd.
+    add_test(NAME anim COMMAND IncogineAnimTests)
+    add_test(NAME assets COMMAND IncogineAssetsTests)
+    source_group("Tests" FILES
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/anim_tests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/asset_tests.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_check.h
+    )
+endif()
+
 # Executable sources
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -383,6 +479,12 @@ file(GLOB_RECURSE FILE_ASSETS ${CMAKE_CURRENT_SOURCE_DIR}/src/assets/*)
 # Sources owned by the Puroko library stay out of the executable
 list(REMOVE_ITEM CPP_SOURCES ${PROJ_LIB_SOURCES})
 list(REMOVE_ITEM H_SOURCES   ${PROJ_LIB_SOURCES})
+
+# Same for the engine modules: they are linked as libraries, not recompiled.
+list(REMOVE_ITEM CPP_SOURCES ${ICG_ASSETS_SOURCES})
+list(REMOVE_ITEM H_SOURCES   ${ICG_ASSETS_SOURCES})
+list(REMOVE_ITEM CPP_SOURCES ${ICG_ANIM_SOURCES})
+list(REMOVE_ITEM H_SOURCES   ${ICG_ANIM_SOURCES})
 
 # Studio is a developer-only tool: its sources must never link into the game
 # executable / runtime (Staging+Release ship no Studio, no Qt).
@@ -445,6 +547,10 @@ endif()
 target_compile_definitions(${ICG_GAME_TARGET} PRIVATE ${PROJECT_DEFINES})
 target_link_libraries(${ICG_GAME_TARGET} PRIVATE ${PROJ_LIB})
 add_dependencies(${ICG_GAME_TARGET} ${PROJ_LIB})
+
+# Engine modules: .incoanim loading, baking, and playback live here so the
+# SDL3 runtime can read animation files with no Qt anywhere in the path.
+target_link_libraries(${ICG_GAME_TARGET} PRIVATE IncogineAnim)
 # Scripting P/Invoke resolves "Incogine" to the host executable
 # (InteropLib.cs -> NativeLibrary.GetMainProgramHandle), so the game
 # target must export its symbols (needed on Linux/macOS; harmless elsewhere).

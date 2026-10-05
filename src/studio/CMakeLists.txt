@@ -113,7 +113,15 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/font_preview.h
     )
     add_executable(IncogineStudio ${ICG_STUDIO_UI_SOURCES})
-    target_link_libraries(IncogineStudio PRIVATE IncogineStudioCore Qt6::Widgets)
+    target_link_libraries(IncogineStudio PRIVATE
+        IncogineStudioCore
+        # Engine-side animation module: the Animator window edits this same
+        # model and rasterizer the runtime bakes with, so the editor preview
+        # and the baked sprite sheet cannot drift apart. Qt-free and
+        # SDL-free, so it links into either side of the build.
+        IncogineAnim
+        Qt6::Widgets
+    )
     # Engine camera math is dependency-free; the editor links it directly
     # (the runtime must never depend on Studio, not the reverse).
     target_sources(IncogineStudio PRIVATE
