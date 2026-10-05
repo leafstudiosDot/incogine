@@ -66,8 +66,13 @@ Rules that keep the runtime clean (§17):
 - Studio targets are excluded from Android/Web game packaging.
 - `ICG_BUILD_STUDIO=OFF` disables all Studio targets:
   `cmake -DICG_BUILD_STUDIO=OFF ..`
-- On Windows, `src/studio/CMakeLists.txt` hints
-  `C:/Qt/6.10.2/msvc2022_64` automatically when present.
+- On Windows, `src/studio/CMakeLists.txt` auto-detects Qt. It scans the
+  standard install roots (`C:/Qt`, `%QTDIR%`) for the **newest** Qt 6 kit
+  matching the compiler (`msvc*` for MSVC, `*mingw*` for MinGW) in the default
+  `<root>/<version>/<kit>` layout, and prints the choice as
+  `Incogine Studio: Qt hint -> <path>`. The version is never pinned in the
+  CMake files, so upgrading Qt needs no edit. Pass `-DQt6_DIR=<path>` to
+  override, which also skips the hint entirely.
 
 Build:
 

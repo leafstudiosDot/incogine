@@ -10,9 +10,46 @@
 #                        otherwise skipped with a status message (runtime never
 #                        links Qt).
 
-# Windows Qt hint (harmless when absent or already configured).
-if(WIN32 AND EXISTS "C:/Qt/6.10.2/msvc2022_64")
-    list(APPEND CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64")
+# Windows Qt hint. Qt is optional and its default install root is not on
+# CMake's search path, so probe the usual locations and use the newest Qt 6
+# kit that matches our compiler. An explicit -DQt6_DIR=... or a user-set
+# CMAKE_PREFIX_PATH already on the command line always wins (we skip the hint
+# when Qt6_DIR is cached). Default layout is <root>/<version>/<kit>, e.g.
+# C:/Qt/6.12.0/msvc2022_64. Version-agnostic on purpose: do not pin a version.
+if(WIN32 AND NOT Qt6_DIR)
+    if(MSVC)
+        set(_icg_qt_kit_glob "*/*msvc*")
+    else()
+        set(_icg_qt_kit_glob "*/*mingw*")
+    endif()
+    set(_icg_qt_hint "")
+    set(_icg_qt_best "")
+    foreach(_icg_qt_root "C:/Qt" "$ENV{QTDIR}")
+        if(NOT _icg_qt_root OR NOT EXISTS "${_icg_qt_root}")
+            continue()
+        endif()
+        file(GLOB _icg_qt_kits "${_icg_qt_root}/${_icg_qt_kit_glob}")
+        foreach(_icg_qt_kit ${_icg_qt_kits})
+            if(NOT IS_DIRECTORY "${_icg_qt_kit}")
+                continue()
+            endif()
+            # <version> = parent dir name; skip non-versioned layouts.
+            get_filename_component(_icg_qt_ver "${_icg_qt_kit}" DIRECTORY)
+            get_filename_component(_icg_qt_ver "${_icg_qt_ver}" NAME)
+            if(NOT _icg_qt_ver MATCHES "^6\\.[0-9]+\\.[0-9]+$")
+                continue()
+            endif()
+            # Highest version wins, so an old cache entry can't pin us to 6.10.
+            if(NOT _icg_qt_best OR _icg_qt_ver VERSION_GREATER _icg_qt_best)
+                set(_icg_qt_best "${_icg_qt_ver}")
+                set(_icg_qt_hint "${_icg_qt_kit}")
+            endif()
+        endforeach()
+    endforeach()
+    if(_icg_qt_hint)
+        list(APPEND CMAKE_PREFIX_PATH "${_icg_qt_hint}")
+        message(STATUS "Incogine Studio: Qt hint -> ${_icg_qt_hint}")
+    endif()
 endif()
 
 set(ICG_STUDIO_CORE_SOURCES
