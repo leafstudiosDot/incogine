@@ -249,6 +249,23 @@ AnimColor ResolveFillColor(const AnimShape& shape, const AnimKeyframe& key);
 // Stroke color, same composition as the fill.
 AnimColor ResolveStrokeColor(const AnimShape& shape, const AnimKeyframe& key);
 
+// Resolved style without geometry: everything in ResolvedShape except the
+// flattened path. Lets callers with a cached FlatPath (the editor canvas)
+// skip the expensive subdivision on every repaint, while the rasterizer keeps
+// calling ResolveShape for the one-shot path.
+struct ResolvedStyle {
+    Mat2x3 matrix;
+    bool hasFill = false;
+    AnimColor fill;
+    bool hasStroke = false;
+    AnimColor stroke;
+    float strokeWidth = 0.0f;
+    LineCap cap = LineCap::Round;
+    LineJoin join = LineJoin::Round;
+};
+
+ResolvedStyle ResolveShapeStyle(const AnimShape& shape, const AnimKeyframe& key);
+
 // Full resolved drawing state, ready for the canvas or the rasterizer.
 // `tolerance` is the Bezier flattening tolerance in shape-local units.
 ResolvedShape ResolveShape(const AnimShape& shape, const AnimKeyframe& key,

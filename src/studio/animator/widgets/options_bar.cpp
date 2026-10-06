@@ -50,7 +50,7 @@ OptionsBar::OptionsBar(AnimatorCanvas* canvas, QWidget* parent)
     const double savedWidth =
         settings.value(QStringLiteral("animator/brush/size"), 4.0).toDouble();
     const double savedSmooth =
-        settings.value(QStringLiteral("animator/brush/smoothing"), 1.5).toDouble();
+        settings.value(QStringLiteral("animator/brush/smoothing"), 1.0).toDouble();
     const int savedOpacity =
         settings.value(QStringLiteral("animator/brush/opacity"), 100).toInt();
     const QColor savedStroke = QColor(
@@ -77,7 +77,7 @@ OptionsBar::OptionsBar(AnimatorCanvas* canvas, QWidget* parent)
     smoothingSlider_->setValue(static_cast<int>(savedSmooth * 10.0));
     smoothingSlider_->setFixedWidth(110);
     smoothingSlider_->setToolTip(
-        tr("Brush smoothing: RDP tolerance in stage units"));
+        tr("Brush smoothing: max curve deviation in stage units"));
     connect(smoothingSlider_, &QSlider::valueChanged, this,
             &OptionsBar::onSmoothingChanged);
 

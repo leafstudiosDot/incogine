@@ -6,6 +6,7 @@
 
 #include "test_check.h"
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -164,21 +165,79 @@ static void TestGeometry() {
     CHECK_EQ(simplified.front().x, 0.0f);
     CHECK_EQ(simplified.back().x, 100.0f);
 
-    // Bezier fitting emits one segment per interior point and starts at the
-    // polyline's first point.
+    // Error-bounded fitting: far fewer segments than points, each within
+    // tolerance of the input, starting at the polyline's first point.
     Vec2 fitStart;
     std::vector<AnimSegment> fit;
-    FitBeziersToPolyline(noisy, 0.5f, fitStart, fit);
+    FitBeziersToPolyline(noisy, 1.0f, fitStart, fit);
     CHECK_EQ(fitStart.x, 0.0f);
-    CHECK_EQ(fit.size(), noisy.size() - 1);
-    bool sawCubic = false;
-    for (const AnimSegment& segment : fit) {
-        if (segment.kind == AnimSegment::Kind::Cubic) {
-            sawCubic = true;
-            break;
+    // A near-straight noisy run collapses to a handful of segments, not ~100.
+    CHECK(fit.size() < 15);
+    CHECK(!fit.empty());
+    // The fitted path tracks the input: flatten both and compare point-wise.
+    AnimPath fitted;
+    {
+        AnimSegment move(AnimSegment::Kind::Move);
+        move.p[0] = fitStart;
+        fitted.segments.push_back(move);
+        for (const AnimSegment& segment : fit) {
+            fitted.segments.push_back(segment);
         }
     }
-    CHECK(sawCubic);
+    const FlatPath flatFitted = Flatten(fitted);
+    const FlatPath flatNoisy = Flatten([&] {
+        AnimPath raw;
+        bool first = true;
+        for (const Vec2& p : noisy) {
+            AnimSegment segment(first ? AnimSegment::Kind::Move
+                                      : AnimSegment::Kind::Line);
+            segment.p[0] = p;
+            raw.segments.push_back(segment);
+            first = false;
+        }
+        return raw;
+    }());
+    REQUIRE(!flatFitted.polylines.empty() && !flatNoisy.polylines.empty());
+    // Same x-range covered end to end.
+    Vec2 fittedLo, fittedHi, noisyLo, noisyHi;
+    FlatBounds(flatFitted, fittedLo, fittedHi);
+    FlatBounds(flatNoisy, noisyLo, noisyHi);
+    CHECK_NEAR(fittedLo.x, noisyLo.x, 2.0f);
+    CHECK_NEAR(fittedHi.x, noisyHi.x, 2.0f);
+
+    // A straight run becomes exactly one Line, not a chain of cubics.
+    std::vector<Vec2> straight = {Vec2(0.0f, 0.0f), Vec2(30.0f, 0.0f),
+                                  Vec2(60.0f, 0.0f), Vec2(100.0f, 0.0f)};
+    Vec2 straightStart;
+    std::vector<AnimSegment> straightFit;
+    FitBeziersToPolyline(straight, 0.5f, straightStart, straightFit);
+    REQUIRE_EQ(straightFit.size(), static_cast<size_t>(1));
+    CHECK(straightFit[0].kind == AnimSegment::Kind::Line);
+    CHECK_NEAR(straightFit[0].p[0].x, 100.0f, 1e-3f);
+
+    // A circle survives as a few cubics whose flattened loop still contains
+    // the center and keeps its winding (shape-tween pairing depends on it).
+    std::vector<Vec2> circlePts;
+    for (int i = 0; i <= 64; ++i) {
+        const float a = i * 6.2831853f / 64.0f;
+        circlePts.push_back(Vec2(50.0f * std::cos(a), 50.0f * std::sin(a)));
+    }
+    Vec2 circleStart;
+    std::vector<AnimSegment> circleFit;
+    FitBeziersToPolyline(circlePts, 1.0f, circleStart, circleFit);
+    CHECK(circleFit.size() < 20);
+    AnimPath circlePath;
+    {
+        AnimSegment move(AnimSegment::Kind::Move);
+        move.p[0] = circleStart;
+        circlePath.segments.push_back(move);
+        for (const AnimSegment& segment : circleFit) {
+            circlePath.segments.push_back(segment);
+        }
+    }
+    const FlatPath flatCircle = Flatten(circlePath);
+    REQUIRE(!flatCircle.polylines.empty());
+    CHECK(PointInFlatPath(Vec2(0.0f, 0.0f), flatCircle, 2.0f));
 }
 
 // --------------------------------------------------------------- layers --

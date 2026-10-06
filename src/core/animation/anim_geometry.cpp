@@ -1,6 +1,7 @@
 #include "anim_geometry.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "anim_path.h"
 
@@ -329,6 +330,207 @@ std::vector<Vec2> SimplifyPolyline(const std::vector<Vec2>& points,
 
 // ------------------------------------------------------------- bezier fit --
 
+namespace {
+
+// Evaluates a cubic Bezier at t with double precision (fitting stability).
+Vec2 CubicAt(const Vec2& p0, const Vec2& c1, const Vec2& c2, const Vec2& p1,
+             double t) {
+    const double u = 1.0 - t;
+    const double w0 = u * u * u;
+    const double w1 = 3.0 * u * u * t;
+    const double w2 = 3.0 * u * t * t;
+    const double w3 = t * t * t;
+    return Vec2(static_cast<float>(p0.x * w0 + c1.x * w1 + c2.x * w2 + p1.x * w3),
+                static_cast<float>(p0.y * w0 + c1.y * w1 + c2.y * w2 + p1.y * w3));
+}
+
+// Chord-length parameters for points[first..last]. Degenerate runs (all points
+// coincident) yield uniform spacing so the solver never divides by zero.
+void ChordParams(const std::vector<Vec2>& points, size_t first, size_t last,
+                 std::vector<double>& out) {
+    out.clear();
+    out.reserve(last - first + 1);
+    out.push_back(0.0);
+    double total = 0.0;
+    for (size_t i = first + 1; i <= last; ++i) {
+        total += Distance(points[i - 1], points[i]);
+        out.push_back(total);
+    }
+    if (total < 1e-9) {
+        for (size_t i = 0; i < out.size(); ++i) {
+            out[i] = static_cast<double>(i) / (out.size() - 1);
+        }
+        return;
+    }
+    for (double& u : out) {
+        u /= total;
+    }
+}
+
+Vec2 NormalizedOr(const Vec2& v, const Vec2& fallback) {
+    const float len = Length(v);
+    return len > 1e-6f ? v * (1.0f / len) : fallback;
+}
+
+// Least-squares cubic fit through points[first..last] (Schneider's FitCubic):
+// endpoints fixed, control distances along the end tangents solved 2x2.
+// Returns the max deviation and its index. Controls are meaningless when the
+// run is degenerate (caller checks the point count first).
+double FitCubicRun(const std::vector<Vec2>& points, size_t first, size_t last,
+                   Vec2& c1Out, Vec2& c2Out, size_t& splitOut) {
+    const Vec2& p0 = points[first];
+    const Vec2& p3 = points[last];
+    Vec2 t0 = NormalizedOr(points[first + 1] - p0,
+                           NormalizedOr(p3 - p0, Vec2(1.0f, 0.0f)));
+    Vec2 t1 = NormalizedOr(points[last - 1] - p3,
+                           NormalizedOr(p0 - p3, Vec2(-1.0f, 0.0f)));
+
+    std::vector<double> u;
+    ChordParams(points, first, last, u);
+
+    // Normal equations for the two control distances. Q(u) = P0*B0 + C1*B1 +
+    // C2*B2 + P3*B3 with C1 = P0 + alpha*t0 and C2 = P3 + beta*t1, so the
+    // residual against Pi is Pi - P0*(b0+b1) - P3*(b2+b3); projecting it onto
+    // the two tangent directions gives the 2x2 system. (Using only b0/b3 here
+    // is a classic transcription slip - it biases every fit and the error
+    // check then rejects all cubics, degrading everything to lines.)
+    double c00 = 0.0, c01 = 0.0, c11 = 0.0, x0 = 0.0, x1 = 0.0;
+    for (size_t k = 1; k + 1 < u.size(); ++k) {
+        const double t = u[k];
+        const double b0 = (1 - t) * (1 - t) * (1 - t);
+        const double b1 = 3 * t * (1 - t) * (1 - t);
+        const double b2 = 3 * t * t * (1 - t);
+        const double b3 = t * t * t;
+        const double a1x = t0.x * b1, a1y = t0.y * b1;
+        const double a2x = t1.x * b2, a2y = t1.y * b2;
+        c00 += a1x * a1x + a1y * a1y;
+        c01 += a1x * a2x + a1y * a2y;
+        c11 += a2x * a2x + a2y * a2y;
+        const double q0x = p0.x * (b0 + b1) + p3.x * (b2 + b3);
+        const double q0y = p0.y * (b0 + b1) + p3.y * (b2 + b3);
+        const double px = points[first + k].x - q0x;
+        const double py = points[first + k].y - q0y;
+        x0 += px * a1x + py * a1y;
+        x1 += px * a2x + py * a2y;
+    }
+
+    double alpha = 0.0, beta = 0.0;
+    const double det = c00 * c11 - c01 * c01;
+    if (std::fabs(det) > 1e-9) {
+        alpha = (x0 * c11 - x1 * c01) / det;
+        beta = (c00 * x1 - c01 * x0) / det;
+    }
+    // Negative or degenerate distances mean the tangents fight the data (a cusp
+    // or a near-straight run): fall back to the 1/3 heuristic instead of
+    // emitting a looped or collapsed cubic.
+    const double segLen = Distance(p0, p3);
+    if (!(alpha > 1e-6) || !(beta > 1e-6)) {
+        const double fallback = segLen / 3.0;
+        c1Out = p0 + t0 * static_cast<float>(fallback);
+        c2Out = p3 + t1 * static_cast<float>(fallback);
+    } else {
+        c1Out = p0 + t0 * static_cast<float>(alpha);
+        c2Out = p3 + t1 * static_cast<float>(beta);
+    }
+
+    double worst = 0.0;
+    splitOut = first + 1;
+    for (size_t k = 1; k + 1 < u.size(); ++k) {
+        const Vec2 onCurve = CubicAt(p0, c1Out, c2Out, p3, u[k]);
+        const double d = Distance(points[first + k], onCurve);
+        if (d > worst) {
+            worst = d;
+            splitOut = first + k;
+        }
+    }
+    return worst;
+}
+
+// Max distance of points[first..last] from the straight chord. Used to emit a
+// single Line for straight runs instead of a wasteful cubic.
+double ChordDeviation(const std::vector<Vec2>& points, size_t first,
+                      size_t last) {
+    const Vec2& a = points[first];
+    const Vec2& b = points[last];
+    double worst = 0.0;
+    for (size_t i = first + 1; i < last; ++i) {
+        worst = std::max(worst, static_cast<double>(
+                                     PointSegmentDistanceSq(points[i], a, b)));
+    }
+    return std::sqrt(worst);
+}
+
+// Greedy error-bounded fit of points[first..last]: a straight run becomes one
+// Line, otherwise the longest cubic within tolerance wins, splitting at the
+// worst point when nothing fits (Schneider's FitCurve strategy). Caps the
+// window so a pathological run cannot turn quadratic.
+void FitRange(const std::vector<Vec2>& points, size_t first, size_t last,
+              float tolerance, std::vector<AnimSegment>& out) {
+    static constexpr size_t kMaxWindow = 128;
+    if (last <= first) {
+        return;
+    }
+    if (last == first + 1) {
+        AnimSegment line(AnimSegment::Kind::Line);
+        line.p[0] = points[last];
+        out.push_back(line);
+        return;
+    }
+    // Straight runs stay lines: exact, compact, and axis-aligned crisp.
+    if (ChordDeviation(points, first, std::min(last, first + kMaxWindow)) <=
+        tolerance) {
+        size_t end = first + 1;
+        while (end < last && end - first < kMaxWindow &&
+               ChordDeviation(points, first, end + 1) <= tolerance) {
+            ++end;
+        }
+        AnimSegment line(AnimSegment::Kind::Line);
+        line.p[0] = points[end];
+        out.push_back(line);
+        FitRange(points, end, last, tolerance, out);
+        return;
+    }
+    // Longest cubic within tolerance.
+    size_t best = first + 1;
+    Vec2 bestC1, bestC2;
+    size_t end = std::min(last, first + kMaxWindow);
+    size_t split = first + 1;
+    for (size_t j = first + 2; j <= end; ++j) {
+        Vec2 c1, c2;
+        size_t candidate = first + 1;
+        const double err = FitCubicRun(points, first, j, c1, c2, candidate);
+        if (err <= tolerance) {
+            best = j;
+            bestC1 = c1;
+            bestC2 = c2;
+        } else {
+            split = candidate;
+            break;
+        }
+        if (j == end) {
+            split = candidate;
+        }
+    }
+    if (best == first + 1) {
+        // Even a 2-point cubic is over tolerance (a kink): emit a line to the
+        // split point and continue from there so progress is guaranteed.
+        AnimSegment line(AnimSegment::Kind::Line);
+        line.p[0] = points[split > first ? split : first + 1];
+        out.push_back(line);
+        FitRange(points, split > first ? split : first + 1, last, tolerance,
+                 out);
+        return;
+    }
+    AnimSegment cubic(AnimSegment::Kind::Cubic);
+    cubic.p[0] = bestC1;
+    cubic.p[1] = bestC2;
+    cubic.p[2] = points[best];
+    out.push_back(cubic);
+    FitRange(points, best, last, tolerance, out);
+}
+
+} // namespace
+
 void FitBeziersToPolyline(const std::vector<Vec2>& points, float tolerance,
                           Vec2& startOut,
                           std::vector<AnimSegment>& segmentsOut) {
@@ -339,37 +541,11 @@ void FitBeziersToPolyline(const std::vector<Vec2>& points, float tolerance,
     if (points.size() == 1) {
         return;
     }
-
-    // Walk the polyline and emit one segment per interior point: a line when
-    // the point is collinear with its neighbours (cheap, and keeps axis-
-    // aligned strokes crisp), a cubic otherwise.
-    const size_t n = points.size();
-    for (size_t i = 1; i < n; ++i) {
-        const Vec2& prev = points[i - 1];
-        const Vec2& cur = points[i];
-        const Vec2& next = (i + 1 < n) ? points[i + 1] : cur;
-        const Vec2 inDir = cur - prev;
-        const Vec2 outDir = next - cur;
-
-        const float cross = Cross(inDir, outDir);
-        const float scale = std::max(Length(inDir), Length(outDir));
-        const float collinear = scale > 1e-6f ? std::fabs(cross) / scale : 0.0f;
-
-        if (collinear <= tolerance || i + 1 == n) {
-            AnimSegment line(AnimSegment::Kind::Line);
-            line.p[0] = cur;
-            segmentsOut.push_back(line);
-            continue;
-        }
-
-        // Control points at 1/3 of each adjacent run, so the curve leaves and
-        // arrives along the local direction (a Catmull-Rom-to-Bezier conversion).
-        AnimSegment cubic(AnimSegment::Kind::Cubic);
-        cubic.p[0] = prev + inDir * (1.0f / 3.0f);
-        cubic.p[1] = cur - outDir * (1.0f / 3.0f);
-        cubic.p[2] = cur;
-        segmentsOut.push_back(cubic);
-    }
+    // `tolerance` is the max deviation in path units: fitted curves stay within
+    // it of the input polyline. Corners sharper than tolerance split naturally
+    // (the error check fails across them), rounding them by at most tolerance.
+    FitRange(points, 0, points.size() - 1, std::max(0.05f, tolerance),
+             segmentsOut);
 }
 
 } // namespace anim

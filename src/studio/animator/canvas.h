@@ -42,7 +42,7 @@ struct DrawingOptions {
     icg::anim::AnimColor strokeColor = icg::anim::AnimColor(0, 0, 0, 255);
     float strokeWidth = 4.0f; // stage units, zoom-independent
     float opacity = 1.0f;     // 0..1, multiplies the stroke alpha
-    float smoothing = 1.5f;   // RDP tolerance in stage units
+    float smoothing = 1.0f;   // fit tolerance in stage units (honest: curves stay within it)
     icg::anim::AnimColor fillColor = icg::anim::AnimColor(255, 255, 255, 255);
 };
 
@@ -205,10 +205,11 @@ private:
     static QColor toQColor(const icg::anim::AnimColor& color);
 
     // --- flattening cache ---
-    // Keyed by shape id. A move drag changes transforms only, never path
-    // geometry, so this stays valid through a drag and is cleared whenever a
-    // command edits the document.
-    const icg::anim::FlatPath& flattenedPath(const icg::anim::AnimShape& shape);
+    // Keyed by shape id. Path geometry only changes through commands (which
+    // clear the cache), so repaints - including live move drags, which only
+    // touch transforms - reuse the subdivision. Mutable so const paint and
+    // hit-test paths can populate it.
+    const icg::anim::FlatPath& flattenedPath(const icg::anim::AnimShape& shape) const;
 
     // --- drag state ---
     struct DragState {
@@ -228,7 +229,7 @@ private:
     int currentFrame_ = 1;
     DragState drag_;
     bool needsFitOnFirstSize_ = true;
-    QHash<uint64_t, icg::anim::FlatPath> pathCache_;
+    mutable QHash<uint64_t, icg::anim::FlatPath> pathCache_;
     DrawingOptions drawOptions_;
 
     // Tool dispatch. The canvas owns the tools and forwards input; Space

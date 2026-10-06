@@ -401,28 +401,41 @@ AnimColor ResolveStrokeColor(const AnimShape& shape, const AnimKeyframe& key) {
     return ComposeColor(shape.style.stroke, shape, key);
 }
 
-ResolvedShape ResolveShape(const AnimShape& shape, const AnimKeyframe& key,
-                           float tolerance) {
-    ResolvedShape resolved;
-    resolved.shapeId = shape.id;
-    resolved.name = shape.name;
-    resolved.matrix = ResolveShapeMatrix(shape, key);
-    resolved.hasFill = shape.style.hasFill;
-    resolved.hasStroke = shape.style.hasStroke && shape.style.strokeWidth > 0.0f;
-    resolved.cap = shape.style.cap;
-    resolved.join = shape.style.join;
+ResolvedStyle ResolveShapeStyle(const AnimShape& shape, const AnimKeyframe& key) {
+    ResolvedStyle style;
+    style.matrix = ResolveShapeMatrix(shape, key);
+    style.hasFill = shape.style.hasFill;
+    style.hasStroke = shape.style.hasStroke && shape.style.strokeWidth > 0.0f;
+    style.cap = shape.style.cap;
+    style.join = shape.style.join;
 
     // Stroke width is authored in shape-local units, so it has to follow the
     // transform's scale to stay visually consistent under scale/skew.
-    resolved.strokeWidth =
-        shape.style.strokeWidth * Mat2x3MeanScale(resolved.matrix);
+    style.strokeWidth = shape.style.strokeWidth * Mat2x3MeanScale(style.matrix);
 
     // Fill/stroke colors are resolved even when the corresponding style is off
     // so callers can inspect the composition without special-casing.
     const AnimColor fillColor = ResolveFillColor(shape, key);
     const AnimColor strokeColor = ResolveStrokeColor(shape, key);
-    resolved.fill = resolved.hasFill ? fillColor : AnimColor();
-    resolved.stroke = resolved.hasStroke ? strokeColor : AnimColor();
+    style.fill = style.hasFill ? fillColor : AnimColor();
+    style.stroke = style.hasStroke ? strokeColor : AnimColor();
+    return style;
+}
+
+ResolvedShape ResolveShape(const AnimShape& shape, const AnimKeyframe& key,
+                           float tolerance) {
+    ResolvedShape resolved;
+    resolved.shapeId = shape.id;
+    resolved.name = shape.name;
+    const ResolvedStyle style = ResolveShapeStyle(shape, key);
+    resolved.matrix = style.matrix;
+    resolved.hasFill = style.hasFill;
+    resolved.fill = style.fill;
+    resolved.hasStroke = style.hasStroke;
+    resolved.stroke = style.stroke;
+    resolved.strokeWidth = style.strokeWidth;
+    resolved.cap = style.cap;
+    resolved.join = style.join;
 
     resolved.path = Flatten(shape.path, tolerance);
     resolved.drawable = !resolved.path.polylines.empty();

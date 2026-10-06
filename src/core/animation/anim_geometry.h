@@ -70,17 +70,19 @@ float DistanceToPolyline(const Vec2& point, const std::vector<Vec2>& polyline,
                          Vec2& nearest);
 
 // Ramer-Douglas-Peucker simplification of a polyline, keeping endpoints.
-// The brush tool runs this on raw input points before fitting Beziers, so a
-// shaky hand produces a clean path.
+// General-purpose decimation for dense polylines; the brush fits raw input
+// directly (least-squares cubics smooth jitter on their own, and RDP output
+// provably fragments the fit), so this stays as a standalone utility.
 std::vector<Vec2> SimplifyPolyline(const std::vector<Vec2>& points,
                                    float tolerance);
 
-// Approximates a polyline with cubic Bezier segments. Each run of interior
-// points becomes one cubic whose control points are parallel and scaled by
-// 1/3 of the run length (Schneider's method, kappa-elbow simplified), which
-// matches how the canvas displays it. Returns segments with the first point in
-// `startOut` and appends Cubic segments to `segmentsOut`; a Straight run
-// produces a Line segment instead.
+// Error-bounded piecewise fit of a polyline (Schneider's FitCurve strategy):
+// straight runs become one Line, otherwise the longest cubic within `tolerance`
+// wins, splitting at the worst point when nothing fits. `tolerance` is the max
+// deviation in path units, so fitted curves stay within it of the input.
+// Returns the first point in `startOut` and appends segments to `segmentsOut`.
+// A 3000-point scribble typically collapses to dozens of segments instead of
+// one per point, which is what keeps .incoanim files small.
 void FitBeziersToPolyline(const std::vector<Vec2>& points, float tolerance,
                           Vec2& startOut,
                           std::vector<AnimSegment>& segmentsOut);

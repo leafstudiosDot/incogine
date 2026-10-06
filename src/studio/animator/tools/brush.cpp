@@ -136,15 +136,15 @@ bool BrushTool::finishStroke(AnimatorCanvas& canvas) {
         return canvas.addDrawnShape(std::move(dot), style, "Brush Dot") != 0;
     }
 
-    const std::vector<Vec2> simplified =
-        icg::anim::SimplifyPolyline(raw_, options.smoothing);
-    if (simplified.size() < 2) {
-        canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
-        return false;
-    }
+    // Fit the raw input directly: least-squares cubics smooth through hand
+    // jitter on their own, and a separate RDP pass only replaces smooth dense
+    // points with angular zigzag that fragments the fit (measured 2.5x more
+    // segments for the same error). The smoothing slider IS the fit tolerance,
+    // so the knob is honest: curves stay within it of the drawn input.
     Vec2 start;
     std::vector<AnimSegment> segments;
-    icg::anim::FitBeziersToPolyline(simplified, 0.5f, start, segments);
+    icg::anim::FitBeziersToPolyline(
+        raw_, std::max(0.25f, options.smoothing), start, segments);
     if (segments.empty()) {
         canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
         return false;

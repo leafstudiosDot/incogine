@@ -126,11 +126,19 @@ command stack, and the document-properties dock.
 - **A drag is one undo step.** The shape transforms are mutated live for
   immediate feedback and the pre-drag transforms are captured, so release pushes a
   single `MoveShapesCommand`; a click that never moved pushes nothing.
+- **Repaints never re-subdivide.** Flattened paths are cached per shape id
+  (cleared on any command); a repaint only re-resolves matrices and colors,
+  so paint cost is O(shapes), not O(segments). Live move drags only touch
+  transforms, so the cache stays valid through them.
 - **Brush (`B`)**: drag to paint a stroked path. Input is throttled to ~2 screen
-  px, then RDP-simplified and fitted to Beziers on release, so a shaky hand
-  produces a clean selectable stroke. A bare click makes a filled dot in the
-  stroke color. Size (stage units), smoothing, color, and opacity come from the
-  tool options strip; `Esc` cancels a stroke.
+  px, then fitted to error-bounded Beziers on release (least-squares cubics,
+  longest-within-tolerance wins), so a shaky hand produces a clean selectable
+  stroke. The smoothing slider IS the fit tolerance, so the knob is honest:
+  curves stay within it of the drawn input (a 3000-point torture scribble
+  lands ~215 segments / ~13kB at the 1.0 default, vs ~980 segments before).
+  A bare click makes a filled dot in the stroke color. Size (stage units),
+  smoothing, color, and opacity come from the tool options strip; `Esc`
+  cancels a stroke.
 - **Pen (`P`)**: Flash-style — click places corner points, click-drag pulls
   symmetric Bezier handles for smooth points, clicking the start point closes,
   double-click or `Enter` finishes an open path, `Esc` cancels, `Backspace`

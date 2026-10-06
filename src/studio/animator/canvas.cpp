@@ -288,7 +288,8 @@ void AnimatorCanvas::setCurrentFrame(int frame) {
 
 // ----------------------------------------------------------- draw / pick --
 
-const icg::anim::FlatPath& AnimatorCanvas::flattenedPath(const AnimShape& shape) {
+const icg::anim::FlatPath& AnimatorCanvas::flattenedPath(
+    const AnimShape& shape) const {
     auto cached = pathCache_.find(shape.id);
     if (cached != pathCache_.end()) {
         return *cached;
@@ -311,10 +312,27 @@ std::vector<ResolvedShape> AnimatorCanvas::drawList() const {
             continue;
         }
         for (const AnimShape& shape : key->shapes) {
-            ResolvedShape resolved = icg::anim::ResolveShape(shape, *key, kFlattenTol);
-            if (!resolved.drawable) {
+            // Style is cheap (matrix + color mults); the subdivision reuses the
+            // cache, so a repaint costs O(shapes), not O(segments).
+            const icg::anim::ResolvedStyle style =
+                icg::anim::ResolveShapeStyle(shape, *key);
+            const icg::anim::FlatPath& flat = flattenedPath(shape);
+            if (flat.polylines.empty()) {
                 continue;
             }
+            ResolvedShape resolved;
+            resolved.shapeId = shape.id;
+            resolved.name = shape.name;
+            resolved.path = flat;
+            resolved.matrix = style.matrix;
+            resolved.hasFill = style.hasFill;
+            resolved.fill = style.fill;
+            resolved.hasStroke = style.hasStroke;
+            resolved.stroke = style.stroke;
+            resolved.strokeWidth = style.strokeWidth;
+            resolved.cap = style.cap;
+            resolved.join = style.join;
+            resolved.drawable = true;
             out.push_back(std::move(resolved));
         }
     }
