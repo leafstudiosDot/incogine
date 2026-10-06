@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene round-trip parser core (Qt-free, stdlib).
+// Incogine Studio - C++ scene round-trip parser core (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Constructor scan + statement matching. Text/bracket utilities live in
@@ -617,3 +617,4 @@ bool ParseSceneFiles(const std::string& headerPath, const std::string& sourcePat
 } // namespace scenecpp
 } // namespace studio
 } // namespace icg
+

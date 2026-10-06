@@ -1,4 +1,4 @@
-﻿// Incogine Animator — Qt entry point.
+// Incogine Animator - Qt entry point.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // A separate top-level application, NOT a Studio child window: Incogine Studio
@@ -11,7 +11,7 @@
 //
 // --self-test builds the full window offscreen (QT_QPA_PLATFORM=offscreen),
 // exercises open/edit/save/undo through the real command stack, and exits
-// non-zero if anything is off — the same smoke-test shape Studio uses.
+// non-zero if anything is off - the same smoke-test shape Studio uses.
 #include <QApplication>
 #include <QDir>
 #include <QFile>
@@ -21,9 +21,12 @@
 #include <QStyleFactory>
 #include <QTimer>
 
+#include <cmath>
+
 #include <iostream>
 
 #include "animator_channel.h"
+#include "animator_canvas.h"
 #include "animator_document.h"
 #include "animator_window.h"
 
@@ -62,7 +65,7 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
     }
 
     // An edit through the command stack must mark dirty and create undo
-    // history — this is the path the properties dock uses.
+    // history - this is the path the properties dock uses.
     const int fpsBefore = doc->document().fps;
     check(doc->setFps(fpsBefore == 12 ? 24 : 12), "edit applied");
     check(doc->isDirty(), "edit marks dirty");
@@ -116,23 +119,157 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
     check(doc->document().stageWidth == 1280, "reloaded stage width");
     check(doc->document().layers.size() == 1, "reloaded layer survived");
 
-    // The stage must actually paint more than background, proving the canvas
-    // follows the model (same check shape Studio's self-test uses).
-    QCoreApplication::processEvents();
-    if (auto* stage = window.findChild<AnimatorStageView*>()) {
-        const QImage shot = stage->grab().toImage();
-        int bright = 0;
-        for (int y = 0; y < shot.height(); y += 4) {
-            const QRgb* line =
-                reinterpret_cast<const QRgb*>(shot.constScanLine(y));
-            for (int x = 0; x < shot.width(); x += 4) {
-                if (qRed(line[x]) + qGreen(line[x]) + qBlue(line[x]) > 200) {
-                    ++bright;
+    // ---- canvas: view transform, hit testing, selection, editing -------
+    // The canvas checks need artwork. When launched with no file (a bare
+    // "Untitled" document) there is nothing to draw, so plant a fixture shape
+    // directly in the model. Deliberately NOT a command: this is setup, and
+    // pushing history here would skew the undo-depth checks below.
+    AnimatorCanvas* canvas = window.findChild<AnimatorCanvas*>();
+    if (canvas == nullptr) {
+        check(false, "canvas widget found");
+    } else {
+        check(true, "canvas widget found");
+
+        // A brand-new or just-reloaded document has a layer but no keyframe, so
+        // there is nothing for the canvas to resolve or hit-test against. Plant
+        // a keyframe holding one filled+stroked ellipse. Deliberately NOT done
+        // through commands: this is fixture setup, and pushing history here would
+        // skew the undo-depth checks below.
+        if (canvas->activeKeyframe() == nullptr ||
+            canvas->activeKeyframe()->shapes.empty()) {
+            icg::anim::AnimDocument& model = doc->document();
+            icg::anim::AnimLayer* layer =
+                model.FindLayerById(canvas->activeLayerId());
+            if (layer != nullptr) {
+                icg::anim::AnimKeyframe seed;
+                seed.frame = canvas->currentFrame();
+                seed.kind = icg::anim::KeyframeKind::Key;
+                layer->SetKeyframe(seed);
+
+                icg::anim::AnimShape fixture;
+                fixture.id = 4242;
+                fixture.name = "fixture";
+                fixture.path =
+                    icg::anim::AnimPath::FromEllipse(0.0f, 0.0f, 200.0f, 150.0f);
+                fixture.style.hasFill = true;
+                fixture.style.fill = icg::anim::AnimColor(255, 128, 0, 200);
+                fixture.style.hasStroke = true;
+                fixture.style.stroke = icg::anim::AnimColor(0, 0, 0, 255);
+                fixture.style.strokeWidth = 4.0f;
+                if (icg::anim::AnimKeyframe* key = canvas->activeKeyframeMutable()) {
+                    key->shapes.push_back(fixture);
                 }
             }
         }
-        check(bright > 0, "stage canvas painted the stage outline");
+        check(canvas->activeKeyframe() != nullptr,
+              "an active keyframe exists for the canvas checks");
+        check(!canvas->drawList().empty(), "the canvas has drawable shapes");
+
+        canvas->resize(1200, 800);
+        QCoreApplication::processEvents();
+        canvas->fitToStage();
+
+        // The stage must actually paint: more than the flat backdrop, and with
+        // the shape's orange fill on it.
+        const QImage shot = canvas->grab().toImage();
+        int bright = 0;
+        int orange = 0;
+        for (int y = 0; y < shot.height(); y += 2) {
+            const QRgb* line =
+                reinterpret_cast<const QRgb*>(shot.constScanLine(y));
+            for (int x = 0; x < shot.width(); x += 2) {
+                const QRgb p = line[x];
+                if (qRed(p) + qGreen(p) + qBlue(p) > 200) {
+                    ++bright;
+                }
+                if (qRed(p) > 180 && qGreen(p) > 80 && qGreen(p) < 180 &&
+                    qBlue(p) < 90) {
+                    ++orange;
+                }
+            }
+        }
+        check(bright > 0, "canvas painted the stage outline");
+        check(orange > 0, "canvas painted the shape's fill color");
+
+        // View transform round-trips stage <-> widget.
+        const QPointF stagePoint(100.0, 50.0);
+        const QPointF back = canvas->view().toStage(canvas->view().toWidget(stagePoint));
+        check(std::fabs(back.x() - stagePoint.x()) < 1e-3 &&
+                  std::fabs(back.y() - stagePoint.y()) < 1e-3,
+              "view transform round-trips");
+        check(canvas->view().zoom > 0.0f, "fit produced a positive zoom");
+
+        // Hit testing: inside the demo blob, and well outside it.
+        check(canvas->hitTest(QPointF(0.0, 0.0)) != 0,
+              "hit test finds the shape at the stage origin");
+        check(canvas->hitTest(QPointF(1279.0, 719.0)) == 0,
+              "hit test misses at the far stage corner");
+
+        // Selection.
+        canvas->clearSelection();
+        check(canvas->selectionCount() == 0, "selection starts empty");
+        const uint64_t shapeId = canvas->drawList().empty() ? 0u : canvas->drawList().front().shapeId;
+        canvas->setSelection(QSet<uint64_t>{shapeId});
+        check(canvas->selectionCount() == 1, "selection takes a shape");
+        canvas->toggleInSelection(shapeId);
+        check(canvas->selectionCount() == 0, "ctrl-click toggles off");
+        canvas->setSelection(QSet<uint64_t>{shapeId});
+
+        // A drag moves every selected shape, and undo puts it back exactly.
+        const float startX =
+            doc->document().layers[0].FindMutable(1)->shapes[0]
+                .transform.position.x;
+        check(canvas->beginDrag(QPointF(100.0, 100.0)), "drag begins");
+        canvas->updateDrag(QPointF(160.0, 130.0));
+        const float movedX =
+            doc->document().layers[0].FindMutable(1)->shapes[0]
+                .transform.position.x;
+        check(std::fabs(movedX - (startX + 60.0f)) < 0.01f,
+              "drag applied a +60 stage-unit offset");
+        check(canvas->commitDrag(), "drag committed");
+        check(canvas->isDragging() == false, "drag state cleared");
+        check(doc->undo(), "drag undo available");
+        check(std::fabs(doc->document().layers[0].FindMutable(1)->shapes[0]
+                            .transform.position.x -
+                        startX) < 1e-3f,
+              "undo restored the exact start position");
+        check(doc->redo(), "drag redo available");
+
+        // Marquee selects only FULLY enclosed shapes. The fixture is centred on the
+        // stage origin, so it extends into negative coordinates - the enclosing
+        // rect has to cover that, not just the stage.
+        const auto enclosed = canvas->shapesInRect(QRectF(-400, -400, 800, 800));
+        check(enclosed.size() == 1, "full-enclosure marquee takes the shape");
+        check(canvas->shapesInRect(QRectF(400, 300, 50, 50)).empty(),
+              "marquee away from the shape encloses nothing");
+
+        // Delete, then undo restores it at its original index.
+        const size_t shapesBefore = doc->document().layers[0].FindMutable(1)->shapes.size();
+        canvas->setSelection(QSet<uint64_t>{shapeId});
+        canvas->deleteSelection();
+        check(doc->document().layers[0].FindMutable(1)->shapes.size() ==
+                  shapesBefore - 1,
+              "delete removed the shape");
+        check(canvas->selectionCount() == 0, "delete cleared the selection");
+        check(doc->undo(), "delete undo available");
+        check(doc->document().layers[0].FindMutable(1)->shapes.size() ==
+                  shapesBefore,
+              "undo restored the shape");
+
+        // A locked layer must refuse editing while staying inspectable.
+        doc->document().layers[0].locked = true;
+        check(canvas->isEditable() == false, "locked layer is not editable");
+        doc->document().layers[0].locked = false;
+        check(canvas->isEditable(), "unlocked layer is editable");
+
+        // Tool dispatch.
+        check(canvas->activeTool() != nullptr, "a tool is active by default");
+        check(canvas->toolSet() != nullptr &&
+                  canvas->toolSet()->all().size() == 2,
+              "tool set holds Cursor and Hand");
+        check(canvas->handTool() != nullptr, "hand tool available for Space");
     }
+
     QFile::remove(tempPath);
 
     std::cout << "self-test: finished (" << failures << " failure(s))" << std::endl;
@@ -188,7 +325,6 @@ int main(int argc, char** argv) {
                   << QFileInfo(path).fileName().toStdString() << "\n";
         return 0;
     }
-
     AnimatorWindow window;
     if (!path.isEmpty() && !selfTest) {
         window.openPath(path);
@@ -203,7 +339,7 @@ int main(int argc, char** argv) {
     // --self-test: the work runs in one timer and the quit comes from a
     // SEPARATE later timer. Calling quit() from inside the working callback
     // leaves the application torn down without the loop having run to
-    // completion, which crashes during static destruction — the same reason
+    // completion, which crashes during static destruction - the same reason
     // Studio schedules its quit separately.
     std::cout << "self-test: entering self-test mode" << std::endl;
     // Dark palette exercises the themed-paint path with a non-default style,
@@ -225,3 +361,4 @@ int main(int argc, char** argv) {
     const int loopCode = app.exec();
     return exitCode != 0 ? exitCode : loopCode;
 }
+

@@ -1,4 +1,4 @@
-// Incogine Studio — `incoba_packer` CLI (Qt-free, headless).
+// Incogine Studio - `incoba_packer` CLI (Qt-free, headless).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Usage:
@@ -102,3 +102,4 @@ int main(int argc, char** argv) {
     std::cout << "Packed " << argv[1] << " -> " << argv[2] << "\n";
     return 0;
 }
+

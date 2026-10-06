@@ -1,4 +1,4 @@
-// Incogine Studio — code editor implementation (Qt Widgets).
+// Incogine Studio - code editor implementation (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "code_editor.h"
 
@@ -423,3 +423,4 @@ void CodeEditor::replaceAll() {
     }
     edit.endEditBlock();
 }
+

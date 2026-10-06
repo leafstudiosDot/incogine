@@ -1,4 +1,4 @@
-// Incogine Studio — shared single-instance channel naming for .incoanim files.
+// Incogine Studio - shared single-instance channel naming for .incoanim files.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Incogine Animator is a separate process, so opening an animation is a process
@@ -18,7 +18,7 @@ namespace icg {
 namespace studio {
 
 // Deterministic per-path channel name for the local socket. Platform socket
-// names are length-limited, so the path is hashed rather than embedded — which
+// names are length-limited, so the path is hashed rather than embedded - which
 // also keeps paths with separators or spaces out of the name entirely.
 std::string AnimChannelNameForPath(const std::string& path);
 

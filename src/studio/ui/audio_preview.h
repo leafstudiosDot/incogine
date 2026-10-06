@@ -1,8 +1,8 @@
-// Incogine Studio — audio preview tab (Qt Widgets + Qt Multimedia).
+// Incogine Studio - audio preview tab (Qt Widgets + Qt Multimedia).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Adobe Audition-style layout: stereo waveform lanes on top (decoded in the
-// background, drawn progressively), transport controls underneath —
+// background, drawn progressively), transport controls underneath -
 // play/pause, duration readout, volume/mute, zoom, loop toggle. Clicking or
 // dragging on the waveform seeks immediately; the wheel zooms. Only built
 // when Qt6 Multimedia was found (ICG_STUDIO_HAS_MULTIMEDIA).
@@ -118,3 +118,4 @@ private:
     // Raw per-buffer peaks per channel (owns the data; the view borrows it).
     QVector<QVector<QPair<float, float>>> peaks_;
 };
+

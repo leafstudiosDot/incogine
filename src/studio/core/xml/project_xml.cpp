@@ -1,4 +1,4 @@
-// Incogine Studio — ProjectXml implementation (Qt-free, stdlib only).
+// Incogine Studio - ProjectXml implementation (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "project_xml.h"
 
@@ -86,3 +86,4 @@ bool ProjectXml::SaveFile(const std::string& path, std::string& error) const {
 
 } // namespace studio
 } // namespace icg
+

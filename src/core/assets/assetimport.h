@@ -1,4 +1,4 @@
-// Incogine — asset importer interface + registry.
+// Incogine - asset importer interface + registry.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // One place that answers "what kind of asset is this file, and how do I turn
@@ -90,7 +90,7 @@ public:
     // importer-owned state.
     IAssetImporter* FindByExtension(const char* extension) const;
 
-    // Lookups by asset path — extension of the path, normalized the same way.
+    // Lookups by asset path - extension of the path, normalized the same way.
     // Paths without an extension return nullptr.
     IAssetImporter* Find(const char* path) const;
 

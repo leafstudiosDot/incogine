@@ -395,6 +395,8 @@ set(ICG_ANIM_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_document.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_geometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_geometry.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_path.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_path.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_io.cpp

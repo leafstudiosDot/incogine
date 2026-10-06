@@ -1,4 +1,4 @@
-// Incogine Studio — Qt entry point.
+// Incogine Studio - Qt entry point.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include <QApplication>
 #include <QDir>
@@ -189,3 +189,4 @@ int main(int argc, char** argv) {
     }
     return code;
 }
+

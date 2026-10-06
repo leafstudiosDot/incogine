@@ -1,4 +1,4 @@
-// Incogine Studio — `.incoba` split/index packing (Qt-free, stdlib).
+// Incogine Studio - `.incoba` split/index packing (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Payload-capped split bundles, the searchable `index.incobai`, and
@@ -326,3 +326,4 @@ bool IndexedReader::ReadEntry(const std::string& path, std::vector<char>& out, s
 } // namespace incoba
 } // namespace studio
 } // namespace icg
+

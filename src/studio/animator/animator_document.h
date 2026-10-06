@@ -1,9 +1,9 @@
-// Incogine Animator — document controller (Qt side, thin).
+// Incogine Animator - document controller (Qt side, thin).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Owns the engine-side AnimDocument plus its AnimCommandStack and wraps them in
 // the editor concerns the model does not know about: a file path, dirty state,
-// autosave, and change notifications. Deliberately thin — every mutation goes
+// autosave, and change notifications. Deliberately thin - every mutation goes
 // through a command on the stack, so undo/redo, dirty tracking, and the
 // save-changes prompt all key off the same signal and cannot drift apart.
 #pragma once
@@ -13,6 +13,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <vector>
 
 #include "animation/anim_commands.h"
 #include "animation/anim_document.h"
@@ -65,6 +66,17 @@ public:
     bool setLayerVisible(uint64_t layerId, bool visible);
     bool setLayerLocked(uint64_t layerId, bool locked);
     bool moveLayer(size_t from, size_t to);
+
+    // --- shape edits (Cursor tool) ---
+    // Commits a drag as ONE undo step. `start`/`end` are the per-shape transform
+    // pairs the drag produced; an empty list or one where nothing actually moved
+    // pushes nothing, so a click that does not drag leaves no history entry.
+    bool commitShapeMove(uint64_t layerId, int frame,
+                         const std::vector<icg::anim::ShapeTransformSnapshot>& moves);
+
+    // Deletes shapes from a keyframe as one undo step.
+    bool deleteShapes(uint64_t layerId, int frame,
+                      const std::vector<uint64_t>& shapeIds);
 
     // --- autosave ---
     // Arms a timer that saves after `intervalMs` of inactivity. Editing while

@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene round-trip parser (Qt-free, stdlib only).
+// Incogine Studio - C++ scene round-trip parser (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Scenes stay imperative C++; there is no separate scene format. This
@@ -130,7 +130,7 @@ using FontMeasureFn = std::function<bool(
 // their file/size (setFontFile), literal content (setTextContent), color,
 // and renderUI call sites. Positions from constant numeric call args are
 // placed and draggable; anything computed per-frame (loop indices, window
-// math) is dynamicPos and shown, not placed — Studio never guesses layout.
+// math) is dynamicPos and shown, not placed - Studio never guesses layout.
 struct TextItem {
     std::string varName;
     int index = -1; // array element, -1 for scalars
@@ -151,7 +151,7 @@ struct TextItem {
     bool sharedSite = false;
     // True when the winning renderUI args are window-relative
     // (GetWindowSize()/getSize()): placed and drawn via measurement, but
-    // rewrites refuse — baking constants would destroy the constraint.
+    // rewrites refuse - baking constants would destroy the constraint.
     bool hasConstraint = false;
     // Edge pins for the constraint toggles: x in {"", left, right, center},
     // y in {"", top, bottom, center}. Plain constants pin left/top; ""
@@ -278,3 +278,4 @@ std::string SerializeHeader(const SceneFile& file);
 } // namespace scenecpp
 } // namespace studio
 } // namespace icg
+

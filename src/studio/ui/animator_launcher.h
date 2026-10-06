@@ -1,4 +1,4 @@
-// Incogine Studio — launch the Incogine Animator on a .incoanim file.
+// Incogine Studio - launch the Incogine Animator on a .incoanim file.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Incogine Animator is a separate executable, so opening one is a process launch,
@@ -33,7 +33,7 @@ public:
     // two levels up for multi-config layouts like Debug/Release).
     void locate();
 
-    // True when an Animator is already listening for `path` — used by the
+    // True when an Animator is already listening for `path` - used by the
     // self-test and to report "opened in the existing window" in the log.
     bool isOpen(const QString& path);
 

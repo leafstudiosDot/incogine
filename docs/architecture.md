@@ -93,6 +93,21 @@ Their sources are removed from the executable globs (`list(REMOVE_ITEM ...)`,
 next to the Studio and Puroko exclusions), so they are **linked once**, not
 compiled twice.
 
+Inside `IncogineAnim` the headers form a one-directional chain — a cycle here
+does not fail at the first include, it silently leaves types incomplete:
+
+```
+anim_types.h    scalars, color, 2D affine, easing, tween spans
+anim_path.h     the segments a path is made of
+anim_geometry.h flattening, bounds, hit tests        (needs anim_path.h)
+anim_document.h layers, keyframes, shapes, drawing  (needs anim_geometry.h)
+anim_commands.h undo/redo commands                  (needs anim_document.h)
+anim_io.h       .incoanim save/load + migration
+```
+
+The editor's stage canvas and the future runtime rasterizer both consume
+`ResolveShape()`, so a preview cannot drift from the baked sprite sheet.
+
 :::tip
 Splitting the importer seam from the animation model is what lets a future 3D
 importer (FBX, OBJ, glTF, `.blend`) link `IncogineAssets` on its own instead of
@@ -103,6 +118,22 @@ dragging in the 2D model. Register a new format in
 Both are `POSITION_INDEPENDENT_CODE ON` because static library code is linked
 into a shared library on Android. Neither needs the SDL platform blocks — they
 compile unchanged for every platform the engine targets.
+
+## Staged runtimes
+
+Three targets stage their native runtime next to the executable so they run
+from the build directory without any `PATH` setup:
+
+| Target | Mechanism | What |
+|---|---|---|
+| `Incogine` (game) | `POST_BUILD` copy, top-level `CMakeLists.txt` | SDL3, SDL3_ttf, SDL3_image, SDL3_mixer DLLs |
+| `IncogineStudio` | `POST_BUILD` **windeployqt**, `src/studio/CMakeLists.txt` | Qt6 DLLs **and** required plugins |
+| `IncogineAnimator` | same `icg_deploy_qt_runtime()` helper | same |
+
+Qt needs its `platforms/qwindows.dll` plugin to start at all, so a manual DLL
+copy would still fail; `windeployqt` resolves the whole dependency set and picks
+the debug or release flavor per configuration. Linux and macOS stage nothing —
+Qt resolves through the normal loader paths there.
 
 ## Test suites
 

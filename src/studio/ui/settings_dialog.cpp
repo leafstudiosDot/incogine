@@ -1,4 +1,4 @@
-// Incogine Studio — Studio-wide preferences dialog implementation.
+// Incogine Studio - Studio-wide preferences dialog implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "settings_dialog.h"
 
@@ -35,3 +35,4 @@ void StudioSettingsDialog::open(QWidget* parent) {
                           zoomInvert->isChecked());
     }
 }
+

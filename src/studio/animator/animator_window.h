@@ -1,4 +1,4 @@
-﻿// Incogine Animator — the animation editor window (Qt Widgets).
+// Incogine Animator - the animation editor window (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Incogine Animator is a QMainWindow that edits `.incoanim` vector animations:
@@ -18,32 +18,17 @@
 
 #include <memory>
 
+class AnimatorCanvas;
 class AnimatorChannel;
 class AnimatorDocument;
 class QAction;
+class QActionGroup;
 class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QSpinBox;
 class QWidget;
-
-// Stage placeholder (Milestone 2 replaces this with the real pan/zoom canvas).
-class AnimatorStageView : public QWidget {
-    Q_OBJECT
-
-public:
-    explicit AnimatorStageView(AnimatorDocument* document,
-                               QWidget* parent = nullptr);
-
-    QSize sizeHint() const override;
-
-protected:
-    void paintEvent(QPaintEvent* event) override;
-
-private:
-    AnimatorDocument* document_;
-};
 
 // The editor window.
 class AnimatorWindow : public QMainWindow {
@@ -78,9 +63,17 @@ private slots:
     void onPathChanged(const QString& path);
     void onAutosaved(const QString& path);
     void onChannelOpenRequested(const QString& path);
+    void onZoomChanged(double percent);
+    void onCanvasStatus(const QString& text);
+    void onToolTriggered();
+    void onFitStage();
+    void onZoomIn();
+    void onZoomOut();
+    void onDeleteSelection();
 
 private:
     void buildMenus();
+    void buildToolBar();
     void buildDocks();
     void buildCentral();
     // Restores geometry/window state from QSettings; false on first run.
@@ -97,7 +90,9 @@ private:
     // Single-instance channel: another launch of this same file is routed here
     // instead of starting a second editor on the same document.
     AnimatorChannel* channel_ = nullptr;
-    AnimatorStageView* stage_ = nullptr;
+    AnimatorCanvas* canvas_ = nullptr;
+    QActionGroup* toolGroup_ = nullptr;
+    QLabel* zoomLabel_ = nullptr;
 
     QWidget* propertiesDock_ = nullptr;
     QSpinBox* widthSpin_ = nullptr;
@@ -120,3 +115,4 @@ private:
     // while that same function is writing the control's value.
     bool updatingControls_ = false;
 };
+

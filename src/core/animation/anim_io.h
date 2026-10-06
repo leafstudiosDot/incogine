@@ -1,9 +1,9 @@
-// Incogine — `.incoanim` (2D vector animation) save/load.
+// Incogine - `.incoanim` (2D vector animation) save/load.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // v1 is a single UTF-8 JSON document with a `formatVersion` field, chosen so
 // animation files are reviewable in a pull request and diffable in version
-// control (the alternative — a zip container — is deliberately deferred; the
+// control (the alternative - a zip container - is deliberately deferred; the
 // existing `.incoba` packer already handles shipping). Schema documentation
 // lives in `docs/incoanim.md`.
 //

@@ -1,4 +1,4 @@
-// Incogine Studio — CreditsXml implementation (Qt-free, stdlib only).
+// Incogine Studio - CreditsXml implementation (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "credits_xml.h"
 
@@ -226,3 +226,4 @@ void CreditsXml::AddContributor(const std::string& name, const std::string& role
 
 } // namespace studio
 } // namespace icg
+

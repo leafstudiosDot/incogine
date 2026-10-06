@@ -1,4 +1,4 @@
-// Incogine Studio — main window (Qt Widgets).
+// Incogine Studio - main window (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #pragma once
 
@@ -158,3 +158,4 @@ private:
     QPlainTextEdit* settingsXmlView_ = nullptr;
     icg::studio::ProjectXml* project_ = nullptr;
 };
+

@@ -1,4 +1,4 @@
-// Incogine Studio — src/project.xml model (Qt-free).
+// Incogine Studio - src/project.xml model (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Models the known project-identity fields and preserves the unknown
@@ -32,3 +32,4 @@ struct ProjectXml {
 
 } // namespace studio
 } // namespace icg
+

@@ -23,10 +23,22 @@ animation editor can sit beside it rather than inside it.
 | Data model, geometry, `.incoanim` IO, importer | `src/core/animation/` (`IncogineAnim`, Qt-free) |
 | Importer registry seam | `src/core/assets/assetimport.h` (`IncogineAssets`, Qt-free) |
 | Editor window, canvas, tools, timeline | `src/studio/animator/` (Qt) |
+| Editor window | `src/studio/animator/animator_window.*` |
+| Document controller (document + stack + dirty + autosave) | `src/studio/animator/animator_document.*` |
+| Stage canvas and view transform | `src/studio/animator/animator_canvas.*` |
+| Tool interface (`ITool`), Hand, Cursor | `src/studio/animator/animator_tools.*` |
+| Single-instance channel (server side) | `src/studio/animator/animator_channel.*` |
 
 The model and all rasterization live in the **engine**, with no Qt dependency,
 so the SDL3 runtime can load `.incoanim` files itself. Studio's window is a thin
 editor on top of it.
+
+The shared drawing state is resolved **once, in the engine**, by
+`ResolveShape()` (`anim_document.h`): it composes the keyframe and shape
+transforms, multiplies the color transforms and alphas, scales the stroke width,
+and flattens the path. Both the editor canvas and the runtime rasterizer call
+that one function, which is what makes "what you see is what bakes" true rather
+than aspirational.
 
 ## Incogine Animator
 
@@ -40,6 +52,9 @@ Asset Browser → double-click *.incoanim        opens it in the Animator
 IncogineAnimator <file.incoanim>              launch it directly
 IncogineAnimator --self-test [file]           headless smoke test
 ```
+
+On Windows the Animator runs straight from `build/` — CMake stages the Qt
+runtime next to it (see [Incogine Studio](./studio.md#windows-the-qt-runtime-is-staged-next-to-the-tools)).
 
 - **Separate process.** Studio spawns it with `QProcess::startDetached` and
   passes the file path. Nothing in Studio holds a reference to the window, so
@@ -66,14 +81,48 @@ IncogineAnimator --self-test [file]           headless smoke test
   everything through the command stack, so undo/redo, dirty tracking, and
   autosave apply without special cases.
 
-### Milestone 1 scope
+### Milestone 1–2 scope
 
-Implemented: the window, document lifecycle (new / open / save / save-as),
-geometry memory, dirty tracking with the close prompt, autosave, undo/redo over
-the command stack, and the document-properties dock. The stage is a **placeholder**
-that draws the outlined stage rectangle, a transparency checkerboard, and a zoom
-readout — the interactive canvas (pan, zoom, tools) is Milestone 2, and the
-timeline is Milestone 4.
+**M1:** the window, document lifecycle (new / open / save / save-as), geometry
+memory, dirty tracking with the close prompt, autosave, undo/redo over the
+command stack, and the document-properties dock.
+
+**M2:** the real canvas replaces the placeholder.
+
+- **Coordinates: y-down, origin at the stage's top-left corner.** `(0, 0)` is
+  the stage's top-left pixel. That matches the engine's world space
+  (`camera_math.h`, `QuadRenderer`), Qt's `QPainter` orientation, and the
+  animated-sprite draw path, so nothing needs a Y flip anywhere. The only cost is
+  that y increases downward, which is normal for a game engine.
+- **Rendering: shapes are drawn from `anim_geometry::Flatten()`** — the same
+  flattening the runtime rasterizer will use, so the preview and the baked
+  sprite sheet come from identical geometry. Qt's own `QPainterPath` bezier
+  flattening is deliberately avoided: it is a different algorithm, so the preview
+  could then differ subtly from the bake. Qt still antialiases the resulting
+  polygons, so the canvas stays smooth.
+- **Stage rectangle** with a dashed outline, a transparency checkerboard, and
+  off-stage content dimmed but still **visible** while editing (it is clipped
+  only on export and in-game).
+- **Pan / zoom**: wheel zooms *at the cursor*, `Ctrl+0` fits the stage,
+  `Ctrl+=` / `Ctrl+-` step, a live zoom readout sits in the status bar, and
+  `Space`+drag pans temporarily with *any* tool. Middle-drag always pans.
+- **Tools** go through an `ITool` interface (`animator_tools.h`). The canvas owns
+  painting and the view transform and forwards input to the active tool, so
+  adding Pen, Line, Rect, Ellipse, Paint Bucket, Eraser, or Transform later means
+  writing one subclass and adding one line to `ToolSet`'s constructor — no change
+  to the canvas or the window. Milestone 2 ships **Hand** (pan) and **Cursor**
+  (select / move / delete / marquee).
+- **Selection** is a set of shape ids on the active layer's active keyframe,
+  pruned automatically when the document changes so ids cannot outlive their
+  shapes. Click selects, `Shift`+click adds, `Ctrl`+click toggles, dragging empty
+  space marquees, and marquee selects only **fully enclosed** shapes (Flash
+  behaviour). `Delete` removes the selection as one undo step.
+- **Hidden layers are not drawn; locked layers are not editable** but stay
+  selectable for inspection, and deleting there reports "Layer is locked"
+  instead of silently doing nothing.
+- **A drag is one undo step.** The shape transforms are mutated live for
+  immediate feedback and the pre-drag transforms are captured, so release pushes a
+  single `MoveShapesCommand`; a click that never moved pushes nothing.
 
 Headless verification:
 
@@ -81,10 +130,13 @@ Headless verification:
 QT_QPA_PLATFORM=offscreen IncogineAnimator --self-test
 ```
 
-runs 30 checks over the real command stack: edit → dirty → undo → redo, refused
-no-op edits, layer add/undo, stage resize/undo, a save → reset → reload
-round-trip through the controller, and a pixel check that the stage canvas
-actually painted. It exits non-zero on any failure.
+runs 56 checks: the command stack (edit/dirty/undo/redo, refused no-ops, layer
+add+undo, stage resize+undo), a save → reset → reload round trip, then the
+canvas — stage outline and fill pixels actually painted, view-transform
+round-trip, hit testing, selection, a drag with exact undo restoration, marquee
+enclosure, delete with undo, locked-layer refusal, and tool dispatch. It plants a
+fixture keyframe and shape when the document has none, so it works both bare and
+with a file argument. It exits non-zero on any failure.
 
 :::note
 A self-test must never open a modal dialog — with `QT_QPA_PLATFORM=offscreen`

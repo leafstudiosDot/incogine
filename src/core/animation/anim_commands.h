@@ -1,4 +1,4 @@
-// Incogine — undo/redo command pattern for the 2D animation model.
+// Incogine - undo/redo command pattern for the 2D animation model.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Qt-free on purpose: the command objects must be creatable and testable
@@ -22,6 +22,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "anim_document.h"
@@ -243,6 +244,62 @@ private:
     // A move is its own inverse when the stack swaps the two indices.
     size_t fromIndexBefore_ = 0;
     size_t toIndexBefore_ = 0;
+};
+
+// ---- shapes (Cursor tool edits) ----
+
+// Where one shape was before and after a drag. Storing the resolved transforms
+// rather than a delta is deliberate: a delta is only correct while nothing else
+// has touched the shape, and a redo after an unrelated edit would drift.
+struct ShapeTransformSnapshot {
+    uint64_t shapeId = 0;
+    AnimTransform start;
+    AnimTransform end;
+};
+
+// Translates shapes on one keyframe. Undo restores the recorded start
+// transforms exactly.
+class MoveShapesCommand : public IAnimCommand {
+public:
+    MoveShapesCommand(uint64_t layerId, int frame,
+                      std::vector<ShapeTransformSnapshot> moves)
+        : layerId_(layerId), frame_(frame), moves_(std::move(moves)) {}
+    const char* name() const override { return "Move"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+private:
+    // Finds the keyframe, or nullptr when the layer/frame is gone.
+    static AnimKeyframe* FindKeyframe(AnimDocument& document, uint64_t layerId,
+                                      int frame);
+    bool Apply(AnimDocument& document, bool useEnd);
+
+    uint64_t layerId_;
+    int frame_;
+    std::vector<ShapeTransformSnapshot> moves_;
+};
+
+// Removes shapes from one keyframe. The removed shapes are captured on each Do()
+// (with their indices) so undo restores them at their original positions, not
+// appended at the end of the list.
+class DeleteShapesCommand : public IAnimCommand {
+public:
+    DeleteShapesCommand(uint64_t layerId, int frame,
+                        std::vector<uint64_t> shapeIds)
+        : layerId_(layerId), frame_(frame), shapeIds_(std::move(shapeIds)) {}
+    const char* name() const override { return "Delete"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+private:
+    static AnimKeyframe* FindKeyframe(AnimDocument& document, uint64_t layerId,
+                                      int frame);
+    uint64_t layerId_;
+    int frame_;
+    std::vector<uint64_t> shapeIds_;
+    // (original index, shape) captured during Do(), highest index first so
+    // erases do not invalidate the remaining ones.
+    std::vector<std::pair<size_t, AnimShape>> removed_;
 };
 
 } // namespace anim

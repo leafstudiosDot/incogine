@@ -86,7 +86,36 @@ Build:
 ```text
 mkdir build && cd build && cmake .. && cmake --build . --target IncogineStudio
 cmake --build . --target IncogineIncoba   # packer only
+cmake --build . --target IncogineAnimator # animation editor
 ```
+
+### Windows: the Qt runtime is staged next to the tools
+
+The game target copies SDL3's DLLs next to the executable so it runs from the
+build directory with no `PATH` setup. `IncogineStudio` and `IncogineAnimator`
+get the equivalent treatment: on Windows a `POST_BUILD` step runs
+**windeployqt** into the target's own directory, so both tools start by
+double-clicking them straight from `build/`.
+
+This covers more than the DLLs. Qt also requires its **`platforms/qwindows.dll`**
+plugin to start at all, so copying `Qt6Widgets*.dll` by hand would still fail —
+`windeployqt` resolves the full set. The deployment is per-configuration, so
+`Debug/` receives the `Qt6*`d.dll` debug builds and `Release/` the release ones.
+
+The **offscreen** platform is deployed as well (`--include-plugins qoffscreen`).
+Both `--self-test` modes run headless with `QT_QPA_PLATFORM=offscreen`, and
+`QApplication` aborts inside its constructor when that plugin is absent — which
+looks like a mysterious crash before any output, because the process dies before
+the first `std::cout` is flushed.
+
+:::tip
+On Linux and macOS nothing is staged: those platforms resolve Qt through the
+usual loader paths / RPATH. If you built Studio and it cannot find Qt there, set
+`LD_LIBRARY_PATH` or install Qt system-wide.
+:::
+
+If `windeployqt` is missing, configure prints a warning and the tools may fail
+to start until Qt's `bin` directory is on `PATH`.
 
 ## What the IDE shell does (Phases 1–3)
 

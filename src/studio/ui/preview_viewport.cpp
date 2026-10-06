@@ -1,4 +1,4 @@
-// Incogine Studio — live preview monitor implementation.
+// Incogine Studio - live preview monitor implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "preview_viewport.h"
 
@@ -60,7 +60,7 @@ void PreviewCanvas::paintEvent(QPaintEvent* /*event*/) {
     painter.fillRect(rect(), Qt::black);
     if (frame_.isNull()) {
         painter.setPen(Qt::gray);
-        painter.drawText(rect(), Qt::AlignCenter, tr("No signal — launch Incogine preview"));
+        painter.drawText(rect(), Qt::AlignCenter, tr("No signal - launch Incogine preview"));
         return;
     }
     // Fit keeping aspect; flip vertically (frames arrive bottom-up).
@@ -116,7 +116,7 @@ PreviewViewport::PreviewViewport(const std::string& projectRoot, PreviewSession*
 
 QString PreviewViewport::exeBaseName() {
     // Executable stem from the project identity (<name> in src/project.xml
-    // becomes the binary name — single token, no spaces).
+    // becomes the binary name - single token, no spaces).
     icg::studio::ProjectXml project;
     std::string error;
     if (icg::studio::ProjectXml::ParseFile(
@@ -209,3 +209,5 @@ void PreviewViewport::onRunningChanged(bool running) {
         canvas_->clear();
     }
 }
+
+

@@ -1,4 +1,4 @@
-// Incogine Studio — Studio-wide preferences dialog.
+// Incogine Studio - Studio-wide preferences dialog.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Modal QSettings-backed editor preferences (viewport zoom invert today,
@@ -20,3 +20,4 @@ public:
 private:
     explicit StudioSettingsDialog(QWidget* parent);
 };
+

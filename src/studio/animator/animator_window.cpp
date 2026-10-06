@@ -1,6 +1,7 @@
-﻿#include "animator_window.h"
+#include "animator_window.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -13,13 +14,14 @@
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPainter>
 #include <QSettings>
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QStatusBar>
+#include <QToolBar>
 #include <QVBoxLayout>
 
+#include "animator_canvas.h"
 #include "animator_channel.h"
 #include "animator_document.h"
 
@@ -33,93 +35,23 @@ constexpr int kDefaultWindowHeight = 900;
 // enough that a crash loses little work.
 constexpr int kAutosaveIntervalMs = 60000;
 
+// Free function in an anonymous namespace, so there is no QObject to translate
+// through --use literal strings here.
 QString stageSummary(const AnimDocument& document) {
-    const icg::anim::AnimLayer* top = document.layers.empty()
-                                          ? nullptr
-                                          : &document.layers.front();
-    return QStringLiteral("%1 x %2  ·  %3 fps  ·  %4 frames  ·  %5 layer(s)%6")
+    const icg::anim::AnimLayer* top =
+        document.layers.empty() ? nullptr : &document.layers.front();
+    return QStringLiteral("%1 x %2  -  %3 fps  -  %4 frames  -  %5 layer(s)%6")
         .arg(document.stageWidth)
         .arg(document.stageHeight)
         .arg(document.fps)
         .arg(document.lengthFrames)
         .arg(document.layers.size())
         .arg(top != nullptr && !top->name.empty()
-                 ? QStringLiteral("  ·  top: %1")
+                 ? QStringLiteral("  -  top: %1")
                        .arg(QString::fromStdString(top->name))
                  : QString());
 }
 } // namespace
-
-// ------------------------------------------------------------ stage view --
-
-AnimatorStageView::AnimatorStageView(AnimatorDocument* document, QWidget* parent)
-    : QWidget(parent), document_(document) {
-    setMinimumSize(320, 240);
-    // The placeholder centers a stage rect and reports nothing interactive, but
-    // it should still repaint when the document changes so Milestone 1 shows
-    // the stage size reacting.
-    if (document_ != nullptr) {
-        connect(document_, &AnimatorDocument::documentChanged, this,
-                QOverload<>::of(&QWidget::update));
-    }
-}
-
-QSize AnimatorStageView::sizeHint() const {
-    return QSize(960, 540);
-}
-
-void AnimatorStageView::paintEvent(QPaintEvent*) {
-    QPainter painter(this);
-    painter.fillRect(rect(), palette().window().color().darker(115));
-
-    if (document_ == nullptr) {
-        return;
-    }
-    const AnimDocument& model = document_->document();
-
-    // Draw the stage rect at 1:1-ish scale, centered, with a checkerboard
-    // behind it so transparency is visible (Milestone 2 replaces this with the
-    // real zoom/pan canvas, but the checkerboard is reused there).
-    const int side = std::min(width(), height()) - 80;
-    if (side <= 0) {
-        return;
-    }
-    const double scale = static_cast<double>(side) /
-                         static_cast<double>(std::max(1, model.stageHeight));
-    const QSizeF stageSize(model.stageWidth * scale, model.stageHeight * scale);
-    const QRectF stageRect((width() - stageSize.width()) * 0.5,
-                           (height() - stageSize.height()) * 0.5, stageSize.width(),
-                           stageSize.height());
-
-    // Transparency checkerboard.
-    const int cell = 8;
-    for (int y = static_cast<int>(stageRect.top());
-         y < static_cast<int>(stageRect.bottom()); y += cell) {
-        for (int x = static_cast<int>(stageRect.left());
-             x < static_cast<int>(stageRect.right()); x += cell) {
-            const bool light = (((x / cell) + (y / cell)) % 2) == 0;
-            painter.fillRect(QRect(x, y, cell, cell),
-                             light ? QColor(220, 220, 220) : QColor(170, 170, 170));
-        }
-    }
-
-    if (!model.transparentBackground && model.background.a > 0) {
-        const icg::anim::AnimColor& bg = model.background;
-        painter.fillRect(stageRect,
-                         QColor(bg.r, bg.g, bg.b, model.transparentBackground ? 0 : bg.a));
-    }
-
-    // Outlined stage rectangle, like Flash's Stage.
-    painter.setPen(QPen(QColor(90, 90, 90), 1, Qt::DashLine));
-    painter.setBrush(Qt::NoBrush);
-    painter.drawRect(stageRect);
-
-    painter.setPen(palette().color(QPalette::WindowText));
-    painter.drawText(QRectF(0, stageRect.bottom() + 8, width(), 20), Qt::AlignCenter,
-                     tr("Stage  %1 x %2  (%3% zoom)").arg(model.stageWidth)
-                         .arg(model.stageHeight)
-                         .arg(scale * 100.0, 0, 'f', 0));
-}
 
 // ------------------------------------------------------------- the window --
 
@@ -131,9 +63,9 @@ AnimatorWindow::AnimatorWindow(QWidget* parent) : QMainWindow(parent) {
     if (!restoreGeometryFromSettings()) {
         resize(kDefaultWindowWidth, kDefaultWindowHeight);
     }
-
     buildCentral();
     buildDocks();
+    buildToolBar();
     buildMenus();
 
     connect(document_.get(), &AnimatorDocument::documentChanged, this,
@@ -164,8 +96,89 @@ AnimatorWindow::AnimatorWindow(QWidget* parent) : QMainWindow(parent) {
 AnimatorWindow::~AnimatorWindow() = default;
 
 void AnimatorWindow::buildCentral() {
-    stage_ = new AnimatorStageView(document_.get(), this);
-    setCentralWidget(stage_);
+    // Real pan/zoom canvas (Milestone 2). Paints the stage outline and the
+    // artwork, and routes input through the active ITool.
+    canvas_ = new AnimatorCanvas(document_.get(), this);
+    setCentralWidget(canvas_);
+    connect(canvas_, &AnimatorCanvas::zoomChanged, this,
+            &AnimatorWindow::onZoomChanged);
+    connect(canvas_, &AnimatorCanvas::statusMessage, this,
+            &AnimatorWindow::onCanvasStatus);
+}
+
+void AnimatorWindow::buildToolBar() {
+    QToolBar* tools = addToolBar(tr("Tools"));
+    tools->setObjectName(QStringLiteral("animatorToolBar"));
+    // Reclaim the space the toolbar would otherwise steal from the canvas.
+    tools->setMovable(false);
+
+    // One checkable action per ITool, driven straight from the tool set. Adding
+    // a tool later (Pen, Rect, ...) only adds a line in ToolSet's constructor.
+    toolGroup_ = new QActionGroup(this);
+    toolGroup_->setExclusive(true);
+
+    QSettings settings;
+    const QString savedTool =
+        settings.value(QStringLiteral("animator/tool")).toString();
+
+    const AnimatorCanvas* canvas = canvas_;
+    QHash<QString, QAction*> byId;
+    if (canvas != nullptr && canvas->toolSet() != nullptr) {
+        for (const auto& tool : canvas->toolSet()->all()) {
+            const QString id = QString::fromStdString(tool->id());
+            auto* action = new QAction(tool->label(), this);
+            action->setCheckable(true);
+            const QString hint = tool->shortcutHint();
+            action->setToolTip(hint.isEmpty() ? tool->label()
+                                              : tr("%1  (%2)").arg(tool->label(), hint));
+            action->setData(id);
+            // First-letter shortcuts: V for Selection, H for Hand. Assigned from
+            // the tool's own id so a new tool gets one without extra wiring.
+            if (!id.isEmpty()) {
+                action->setShortcut(QKeySequence(id.at(0).toUpper()));
+            }
+            connect(action, &QAction::triggered, this,
+                    &AnimatorWindow::onToolTriggered);
+            toolGroup_->addAction(action);
+            tools->addAction(action);
+            byId.insert(id, action);
+        }
+    }
+
+    // Restore the previously active tool, falling back to the first one.
+    QAction* restore =
+        byId.value(savedTool, toolGroup_->actions().isEmpty()
+                                  ? nullptr
+                                  : toolGroup_->actions().first());
+    if (restore != nullptr) {
+        restore->setChecked(true);
+        onToolTriggered();
+    }
+
+    tools->addSeparator();
+
+    auto addButton = [this, tools](const QString& text, const QString& tip,
+                                   void (AnimatorWindow::*slot)()) {
+        auto* action = new QAction(text, this);
+        action->setToolTip(tip);
+        connect(action, &QAction::triggered, this, slot);
+        tools->addAction(action);
+        return action;
+    };
+    addButton(tr("Fit"), tr("Fit the stage in the view  (Ctrl+0)"),
+              &AnimatorWindow::onFitStage);
+    addButton(tr("Zoom +"), tr("Zoom in  (Ctrl+=)"), &AnimatorWindow::onZoomIn);
+    addButton(tr("Zoom -"), tr("Zoom out  (Ctrl+-)"), &AnimatorWindow::onZoomOut);
+    tools->addSeparator();
+    addButton(tr("Delete"), tr("Delete the selection  (Del)"),
+              &AnimatorWindow::onDeleteSelection);
+
+    // Live zoom readout, always visible like Studio's scene canvas does.
+    zoomLabel_ = new QLabel(this);
+    zoomLabel_->setMinimumWidth(64);
+    zoomLabel_->setAlignment(Qt::AlignCenter);
+    statusBar()->addPermanentWidget(zoomLabel_);
+    onZoomChanged(100.0);
 }
 
 void AnimatorWindow::buildDocks() {
@@ -216,35 +229,35 @@ void AnimatorWindow::buildDocks() {
 
     // Every property control routes through the command stack, so undo/redo,
     // dirty tracking, and autosave all apply without special cases. Spin boxes
-    // emit valueChanged while the user types, which would push a command per
-    // keystroke, so edits commit on editingFinished instead.
+    // commit on editingFinished rather than valueChanged, so typing does not
+    // push a command per keystroke.
     connect(widthSpin_, &QSpinBox::editingFinished, this, [this] {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setStageSize(widthSpin_->value(), heightSpin_->value());
         }
     });
     connect(heightSpin_, &QSpinBox::editingFinished, this, [this] {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setStageSize(widthSpin_->value(), heightSpin_->value());
         }
     });
     connect(fpsSpin_, &QSpinBox::editingFinished, this, [this] {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setFps(fpsSpin_->value());
         }
     });
     connect(lengthSpin_, &QSpinBox::editingFinished, this, [this] {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setLengthFrames(lengthSpin_->value());
         }
     });
     connect(loopBox_, &QCheckBox::toggled, this, [this](bool on) {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setLoop(on);
         }
     });
     connect(bakeScaleSpin_, &QDoubleSpinBox::editingFinished, this, [this] {
-        if (!updatingControls()) {
+        if (!updatingControls_) {
             document_->setBakeScale(static_cast<float>(bakeScaleSpin_->value()));
         }
     });
@@ -287,6 +300,23 @@ void AnimatorWindow::buildMenus() {
     redoAction_->setShortcut(QKeySequence::Redo);
     connect(redoAction_, &QAction::triggered, this, &AnimatorWindow::onRedo);
 
+    auto* fitAction = new QAction(tr("&Fit Stage in View"), this);
+    fitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    connect(fitAction, &QAction::triggered, this, &AnimatorWindow::onFitStage);
+
+    auto* zoomInAction = new QAction(tr("Zoom &In"), this);
+    zoomInAction->setShortcut(QKeySequence::ZoomIn);
+    connect(zoomInAction, &QAction::triggered, this, &AnimatorWindow::onZoomIn);
+
+    auto* zoomOutAction = new QAction(tr("Zoom &Out"), this);
+    zoomOutAction->setShortcut(QKeySequence::ZoomOut);
+    connect(zoomOutAction, &QAction::triggered, this, &AnimatorWindow::onZoomOut);
+
+    auto* deleteAction = new QAction(tr("De&lete Selection"), this);
+    deleteAction->setShortcut(QKeySequence::Delete);
+    connect(deleteAction, &QAction::triggered, this,
+            &AnimatorWindow::onDeleteSelection);
+
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(newAction_);
     fileMenu->addAction(openAction_);
@@ -299,10 +329,22 @@ void AnimatorWindow::buildMenus() {
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(undoAction_);
     editMenu->addAction(redoAction_);
+    editMenu->addSeparator();
+    editMenu->addAction(deleteAction);
 
-    // Geometry/state memory, matching Studio's QSettings keys so the two apps
-    // feel like one IDE suite.
-    restoreGeometryFromSettings();
+    QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(fitAction);
+    viewMenu->addAction(zoomInAction);
+    viewMenu->addAction(zoomOutAction);
+    viewMenu->addSeparator();
+    // Tool shortcuts are already on the toolbar actions, but repeating them here
+    // keeps them discoverable before the toolbar is noticed.
+    if (toolGroup_ != nullptr) {
+        for (QAction* action : toolGroup_->actions()) {
+            viewMenu->addAction(action);
+        }
+    }
+
     saveAction_->setEnabled(document_->hasPath());
 }
 
@@ -311,10 +353,10 @@ bool AnimatorWindow::restoreGeometryFromSettings() {
     if (!settings.contains(QStringLiteral("animator/geometry"))) {
         return false;
     }
-    restoreGeometry(settings.value(QStringLiteral("animator/geometry"))
-                        .toByteArray());
-    const QByteArray state = settings.value(QStringLiteral("animator/windowState"))
-                                 .toByteArray();
+    restoreGeometry(
+        settings.value(QStringLiteral("animator/geometry")).toByteArray());
+    const QByteArray state =
+        settings.value(QStringLiteral("animator/windowState")).toByteArray();
     if (!state.isEmpty()) {
         restoreState(state);
     }
@@ -378,7 +420,8 @@ void AnimatorWindow::onSaveDocumentAs() {
     const QString suggested =
         document_->hasPath()
             ? document_->path()
-            : QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+            : QDir(QStandardPaths::writableLocation(
+                       QStandardPaths::DocumentsLocation))
                   .filePath(QStringLiteral("untitled.incoanim"));
     const QString path = QFileDialog::getSaveFileName(
         this, tr("Save Animation As"), suggested,
@@ -389,8 +432,8 @@ void AnimatorWindow::onSaveDocumentAs() {
     // A user who types "hero" instead of "hero.incoanim" still gets a valid
     // asset, which matters because the asset browser dispatches on extension.
     QString target = path;
-    if (QFileInfo(target).suffix().compare(
-            QStringLiteral("incoanim"), Qt::CaseInsensitive) != 0) {
+    if (QFileInfo(target).suffix().compare(QStringLiteral("incoanim"),
+                                           Qt::CaseInsensitive) != 0) {
         target += QStringLiteral(".incoanim");
     }
     QString error;
@@ -460,6 +503,10 @@ void AnimatorWindow::closeEvent(QCloseEvent* event) {
     QSettings settings;
     settings.setValue(QStringLiteral("animator/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("animator/windowState"), saveState());
+    if (toolGroup_ != nullptr && toolGroup_->checkedAction() != nullptr) {
+        settings.setValue(QStringLiteral("animator/tool"),
+                          toolGroup_->checkedAction()->data().toString());
+    }
     event->accept();
 }
 
@@ -496,26 +543,78 @@ void AnimatorWindow::onAutosaved(const QString& path) {
 }
 
 void AnimatorWindow::onChannelOpenRequested(const QString& path) {
-    // Another Studio launch handed us this file. Surface the window so the
-    // user sees which editor answered.
+    // Another Studio launch handed us this file. Surface the window so the user
+    // sees which editor answered.
     showNormal();
     raise();
     activateWindow();
     openPath(path);
-    statusBar()->showMessage(tr("Focused existing window for %1")
-                                 .arg(QFileInfo(path).fileName()),
-                             4000);
+    statusBar()->showMessage(
+        tr("Focused existing window for %1").arg(QFileInfo(path).fileName()),
+        4000);
+}
+
+void AnimatorWindow::onZoomChanged(double percent) {
+    if (zoomLabel_ == nullptr) {
+        return;
+    }
+    zoomLabel_->setText(tr("%1 %").arg(percent, 0, 'f', percent < 10.0 ? 1 : 0));
+}
+
+void AnimatorWindow::onCanvasStatus(const QString& text) {
+    if (!text.isEmpty()) {
+        statusBar()->showMessage(text, 3000);
+    }
+}
+
+void AnimatorWindow::onToolTriggered() {
+    if (toolGroup_ == nullptr || canvas_ == nullptr) {
+        return;
+    }
+    QAction* action = toolGroup_->checkedAction();
+    if (action == nullptr) {
+        return;
+    }
+    canvas_->setActiveTool(action->data().toString().toStdString());
+    // Give the canvas keyboard focus so Space (temporary Hand) and Delete work
+    // without an extra click.
+    canvas_->setFocus(Qt::OtherFocusReason);
+}
+
+void AnimatorWindow::onFitStage() {
+    if (canvas_ != nullptr) {
+        canvas_->fitToStage();
+    }
+}
+
+void AnimatorWindow::onZoomIn() {
+    if (canvas_ != nullptr) {
+        canvas_->zoomBy(1.25);
+    }
+}
+
+void AnimatorWindow::onZoomOut() {
+    if (canvas_ != nullptr) {
+        canvas_->zoomBy(1.0 / 1.25);
+    }
+}
+
+void AnimatorWindow::onDeleteSelection() {
+    if (canvas_ != nullptr) {
+        canvas_->deleteSelection();
+    }
 }
 
 void AnimatorWindow::refreshWindowTitle() {
     const QString name = document_->displayName();
-    setWindowTitle(tr("%1%2 — Incogine Animator")
-                       .arg(name, document_->isDirty() ? QStringLiteral("*") : QString()));
+    setWindowTitle(
+        tr("%1%2 - Incogine Animator")
+            .arg(name, document_->isDirty() ? QStringLiteral("*") : QString()));
 }
 
 void AnimatorWindow::refreshUndoRedo() {
-    // QKeySequence::Undo's default text is localized, but our commands carry
-    // their own names, so label them from the stack instead.
+    // The command carries its own name, so label the action from the stack
+    // instead of Qt's localized generic "Undo".
     undoAction_->setEnabled(document_->canUndo());
     undoAction_->setText(document_->canUndo()
                              ? tr("&Undo %1").arg(document_->undoName())
@@ -538,3 +637,5 @@ void AnimatorWindow::refreshProperties() {
     stageInfo_->setText(stageSummary(model));
     updatingControls_ = false;
 }
+
+

@@ -1,0 +1,216 @@
+// Incogine Animator - the stage canvas and its view transform.
+// Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
+//
+// Coordinates (Milestone 2 decision): **y-down, origin at the stage's
+// top-left corner.** That matches the engine's world space (camera_math.h,
+// QuadRenderer), Qt's QPainter orientation, and the animated-sprite draw path,
+// so nothing anywhere needs a Y flip. `(0, 0)` is the stage's top-left pixel.
+//
+// Rendering (Milestone 2 decision): shapes are drawn from
+// `anim_geometry::Flatten()`, the SAME flattening the runtime rasterizer will
+// use. Qt's own QPainterPath bezier flattening is deliberately not used for the
+// geometry, because it is a different algorithm and the preview could then
+// differ from the baked sprite sheet. Qt still antialiases the resulting
+// polygons, so the canvas stays smooth.
+#pragma once
+
+#include <QHash>
+#include <QPointF>
+#include <QRectF>
+#include <QSet>
+#include <QWidget>
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include "animation/anim_commands.h"
+#include "animation/anim_document.h"
+#include "animation/anim_geometry.h"
+#include "animator_tools.h"
+
+class AnimatorDocument;
+class ITool;
+class HandTool;
+
+// Pan/zoom mapping between widget pixels and stage units.
+class StageView {
+public:
+    float zoom = 1.0f;  // widget pixels per stage unit
+    // Widget-pixel offset of stage origin (0,0).
+    QPointF offset;
+
+    QPointF toStage(const QPointF& widget) const;
+    QPointF toWidget(const QPointF& stage) const;
+    // Stage-space rectangle covered by a widget-space rect.
+    QRectF toStageRect(const QRectF& widgetRect) const;
+
+    // Zooms by `factor` keeping the stage point under `anchorWidget` fixed.
+    void zoomAt(float factor, const QPointF& anchorWidget);
+    void panByPixels(const QPointF& deltaWidget);
+
+    // Zooms/centers so the whole stage fits `viewport` with a margin, in widget
+    // pixels. Returns false for a degenerate viewport (nothing sensible to fit).
+    bool fitToStage(const QSize& viewport, int stageWidth, int stageHeight,
+                    double marginPixels = 24.0);
+
+    static constexpr float kMinZoom = 0.02f;
+    static constexpr float kMaxZoom = 64.0f;
+};
+
+// The stage canvas.
+class AnimatorCanvas : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit AnimatorCanvas(AnimatorDocument* document,
+                            QWidget* parent = nullptr);
+
+    // --- view ---
+    const StageView& view() const { return view_; }
+    void setView(const StageView& view);
+    void zoomBy(double factor);
+    void fitToStage();
+    // Fits after the first paint, when the widget has a real size.
+    void fitWhenSized();
+
+    // --- selection ---
+    // Selection is a set of shape ids on the ACTIVE layer's active keyframe.
+    // Pruned automatically when the document changes, so ids cannot outlive the
+    // shapes they name (Milestone 4's playhead will move which keyframe that is).
+    const QSet<uint64_t>& selection() const { return selection_; }
+    void setSelection(const QSet<uint64_t>& ids);
+    void addToSelection(const QSet<uint64_t>& ids);
+    void toggleInSelection(uint64_t shapeId);
+    void clearSelection();
+    int selectionCount() const { return static_cast<int>(selection_.size()); }
+    bool isSelected(uint64_t shapeId) const { return selection_.contains(shapeId); }
+
+    // --- frame targeting ---
+    // Cursor-tool edits apply to the keyframe covering this frame on the active
+    // layer. No timeline UI yet (Milestone 4), so it stays at frame 1 today, but
+    // routing through the same rule means nothing is revisited then.
+    int currentFrame() const { return currentFrame_; }
+    void setCurrentFrame(int frame);
+
+    // Active layer: the topmost visible, unlocked layer. nullptr when every
+    // layer is hidden or locked, which is what makes editing refuse cleanly.
+    uint64_t activeLayerId() const;
+    // Const and mutable variants have distinct names: C++ cannot overload on
+    // return type alone.
+    const icg::anim::AnimKeyframe* activeKeyframe() const;
+    icg::anim::AnimKeyframe* activeKeyframeMutable();
+
+    // True when the active layer can be edited (exists, not locked).
+    bool isEditable() const;
+
+    // Hit-tests in stage space against the active keyframe's shapes.
+    // Returns the topmost shape id under `stagePos`, or 0 when none.
+    // `toleranceStage` widens thin strokes so they stay clickable.
+    uint64_t hitTest(const QPointF& stagePos, double toleranceStage = 4.0) const;
+
+    // Shape ids fully enclosed by a stage-space rect (marquee selection).
+    std::vector<uint64_t> shapesInRect(const QRectF& stageRect) const;
+
+    // Applies a live drag offset to the selected shapes without touching the
+    // command stack; commitDrag() turns it into one undo step. Returns false
+    // when there is nothing to drag.
+    bool beginDrag(const QPointF& stageAnchor);
+    void updateDrag(const QPointF& stagePos);
+    bool commitDrag();
+    void cancelDrag();
+    bool isDragging() const { return drag_.active; }
+
+    // Deletes the current selection on the active keyframe, as one undo step.
+    // Refuses (and reports) when the layer is locked.
+    void deleteSelection();
+    void reportStatus(const QString& text);
+
+    // --- view helpers the tools use ---
+    // Pans by a widget-pixel delta. Kept here so HandTool does not need to know
+    // how the transform is stored.
+    void panBy(const QPointF& deltaWidget);
+    void updateViewAfterPan();
+    void setToolCursor();
+
+    // --- tools ---
+    // Activates a tool by id; an unknown id falls back to the cursor tool.
+    void setActiveTool(const std::string& id);
+    void setActiveTool(ITool* tool);
+    ITool* activeTool() const { return activeTool_; }
+    // The tool set, for the toolbar to enumerate available tools.
+    const ToolSet* toolSet() const { return &tools_; }
+    // The Hand tool, used temporarily whenever Space is held.
+    HandTool* handTool() const;
+
+    void setSpaceHeld(bool held);
+
+    // Resolved drawing state for every drawable shape on the active keyframe,
+    // in draw order (lowest index first, i.e. bottom of the stack first).
+    std::vector<icg::anim::ResolvedShape> drawList() const;
+
+signals:
+    void selectionChanged();
+    void zoomChanged(double percent);
+    void statusMessage(const QString& text);
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
+    void focusOutEvent(QFocusEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    // --- painting helpers ---
+    void paintBackdrop(QPainter& painter) const;
+    void paintStageFill(QPainter& painter) const;
+    void paintShapes(QPainter& painter) const;
+    void paintSelectionOutlines(QPainter& painter) const;
+    void paintStageOutline(QPainter& painter) const;
+    void paintEmptyHint(QPainter& painter) const;
+    QPainterPath toPainterPath(const icg::anim::ResolvedShape& shape) const;
+    static QColor toQColor(const icg::anim::AnimColor& color);
+
+    // --- flattening cache ---
+    // Keyed by shape id. A move drag changes transforms only, never path
+    // geometry, so this stays valid through a drag and is cleared whenever a
+    // command edits the document.
+    const icg::anim::FlatPath& flattenedPath(const icg::anim::AnimShape& shape);
+
+    // --- drag state ---
+    struct DragState {
+        bool active = false;
+        uint64_t layerId = 0;
+        int frame = 1;
+        QPointF anchorStage;
+        std::vector<icg::anim::ShapeTransformSnapshot> moves;
+    };
+
+    void pruneSelection();
+    void emitZoomChanged();
+
+    AnimatorDocument* document_;
+    StageView view_;
+    QSet<uint64_t> selection_;
+    int currentFrame_ = 1;
+    DragState drag_;
+    bool needsFitOnFirstSize_ = true;
+    QHash<uint64_t, icg::anim::FlatPath> pathCache_;
+
+    // Tool dispatch. The canvas owns the tools and forwards input; Space
+    // temporarily routes everything to the Hand tool.
+    // Value member: the tools are not QObjects and the canvas owns them for its
+    // whole lifetime, so a raw owned pointer would only add a leak to track.
+    ToolSet tools_;
+    ITool* activeTool_ = nullptr;
+    bool spaceHeld_ = false;
+    HandTool* handTool_ = nullptr;
+    // The tool that was active before Space was pressed, restored on release.
+    ITool* toolBeforeSpace_ = nullptr;
+};

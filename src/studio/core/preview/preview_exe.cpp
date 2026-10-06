@@ -1,4 +1,4 @@
-// Incogine Studio — preview executable resolution implementation.
+// Incogine Studio - preview executable resolution implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "preview_exe.h"
 
@@ -201,7 +201,7 @@ bool VerifyPreviewExe(const std::string& projectRoot, const std::string& exeBase
     std::ifstream in(sidecar, std::ios::binary);
     if (!in) {
         error = "missing checksum sidecar " + sidecar.string() +
-                " — not a Studio development build";
+                " - not a Studio development build";
         return false;
     }
     std::string recorded;
@@ -216,7 +216,7 @@ bool VerifyPreviewExe(const std::string& projectRoot, const std::string& exeBase
     }
     if (actual != recorded) {
         error = "checksum mismatch for " + exePath +
-                " — binary does not match the development build "
+                " - binary does not match the development build "
                 "(released or replaced executable?)";
         return false;
     }
@@ -241,3 +241,5 @@ bool VerifyPreviewExe(const std::string& projectRoot, const std::string& exeBase
 } // namespace preview
 } // namespace studio
 } // namespace icg
+
+

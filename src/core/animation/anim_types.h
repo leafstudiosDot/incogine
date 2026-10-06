@@ -1,4 +1,4 @@
-// Incogine — 2D vector animation: shared scalar/color/transform types.
+// Incogine - 2D vector animation: shared scalar/color/transform types.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Everything here is 2D and module-local on purpose. The engine already has
@@ -85,7 +85,7 @@ struct AnimColor {
     // "#RRGGBB" or "#RRGGBBAA" (alpha optional). Returns white on failure.
     static AnimColor FromHex(const std::string& hex);
 
-    // Always "#RRGGBBAA" — round-trips through FromHex exactly.
+    // Always "#RRGGBBAA" - round-trips through FromHex exactly.
     std::string ToHex() const;
 
     bool operator==(const AnimColor& o) const {
@@ -176,7 +176,7 @@ inline bool Invert(const Mat2x3& m, Mat2x3& out) {
     return true;
 }
 
-// Average absolute scale — used to turn a stroke width into device pixels.
+// Average absolute scale - used to turn a stroke width into device pixels.
 inline float Mat2x3MeanScale(const Mat2x3& m) {
     const float sx = std::sqrt(m.a * m.a + m.b * m.b);
     const float sy = std::sqrt(m.c * m.c + m.d * m.d);
@@ -225,7 +225,7 @@ struct Easing {
 // ------------------------------------------------------------- tween span --
 
 // What a span between two keyframes interpolates. Motion and Shape Tween are
-// not implemented yet — they are reserved in the timeline model so the spans
+// not implemented yet - they are reserved in the timeline model so the spans
 // exist, persist, and round-trip (Milestone 7).
 enum class TweenType {
     None = 0,

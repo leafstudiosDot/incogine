@@ -99,6 +99,61 @@ find_package(Qt6 QUIET COMPONENTS Widgets Multimedia Network)
 if(Qt6Widgets_FOUND)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTOUIC ON)
+
+    # ---- Windows: stage the Qt runtime next to the tools ----
+    # The game target copies SDL3's DLLs post-build (see the top-level
+    # CMakeLists.txt) so it runs from the build dir without any PATH setup. The
+    # Qt tools need the same treatment or they fail to start with
+    # "Qt6Widgetsd.dll was not found" — and even with the DLLs present, the
+    # qwindows platform plugin is mandatory, so only copying DLLs by hand would
+    # still fail. windeployqt resolves the full dependency set including plugins.
+    function(icg_deploy_qt_runtime _target)
+        if(NOT WIN32)
+            return()
+        endif()
+        # Prefer Qt's own imported tool so no Qt path is hardcoded anywhere; fall
+        # back to a lookup for older/odd Qt layouts that do not define it.
+        set(_tool "")
+        if(TARGET Qt6::windeployqt)
+            set(_tool Qt6::windeployqt)
+        else()
+            find_program(_tool NAMES windeployqt qt_deploy_assistant)
+        endif()
+        if(NOT _tool)
+            message(WARNING "Incogine Studio: windeployqt not found — ${_target} "
+                            "may fail to start without Qt's bin on PATH")
+            return()
+        endif()
+        add_custom_command(TARGET ${_target} POST_BUILD
+            COMMAND ${_tool}
+                --dir "$<TARGET_FILE_DIR:${_target}>"
+                # Multi-config generators need to be told which flavor to stage.
+                # A single IF expression, not two separate ones: a NOT-generator
+                # that evaluates false still emits an empty argument, and
+                # windeployqt rejects a bare "".
+                "--$<IF:$<CONFIG:Debug>,debug,release>"
+                # The UI ships English-only strings, so .qm catalogues would be
+                # tens of megabytes nobody loads.
+                --no-translations
+                # Widgets only — no Qt Quick, so skip its import scan.
+                --no-quick-import
+                # windeployqt only deploys the platform plugin the binary
+                # actually references (qwindows). The offscreen platform is
+                # equally required, because both --self-test modes run headless
+                # with QT_QPA_PLATFORM=offscreen — without it QApplication aborts
+                # in its constructor and the diagnostic modes are unusable from a
+                # staged build.
+                --include-plugins qoffscreen
+                # Stay consistent with how the game is staged (SDL DLLs only):
+                # the MSVC/MinGW runtime is the developer's toolchain, and
+                # copying a second copy into the build dir invites version skew.
+                --no-compiler-runtime
+                "$<TARGET_FILE:${_target}>"
+            COMMENT "Deploying the Qt runtime next to ${_target}"
+            VERBATIM
+        )
+    endfunction()
+
     set(ICG_STUDIO_UI_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/studio_main.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/ui/main_window.cpp
@@ -130,8 +185,12 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_main.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_canvas.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_canvas.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_tools.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_tools.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.h
     )
@@ -160,6 +219,7 @@ if(Qt6Widgets_FOUND)
         target_sources(IncogineAnimator PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/studio.rc")
     endif()
     source_group("Animator" FILES ${ICG_ANIMATOR_SOURCES})
+    icg_deploy_qt_runtime(IncogineAnimator)
     message(STATUS "Incogine Studio: IncogineAnimator animation editor enabled")
 
     add_executable(IncogineStudio ${ICG_STUDIO_UI_SOURCES})
@@ -218,6 +278,7 @@ if(Qt6Widgets_FOUND)
         target_sources(IncogineStudio PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/studio.rc")
     endif()
     source_group("Studio\\UI" FILES ${ICG_STUDIO_UI_SOURCES})
+    icg_deploy_qt_runtime(IncogineStudio)
     message(STATUS "Incogine Studio: Qt6 Widgets found — IncogineStudio target enabled")
 else()
     message(STATUS "Incogine Studio: Qt6 Widgets not found — IDE shell skipped (Core + IncogineIncoba still build)")

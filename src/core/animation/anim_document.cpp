@@ -8,59 +8,6 @@
 namespace icg {
 namespace anim {
 
-// ----------------------------------------------------------------- paths --
-
-AnimPath AnimPath::FromRect(float x, float y, float w, float h) {
-    AnimPath path;
-    path.segments.reserve(5);
-
-    AnimSegment move(AnimSegment::Kind::Move);
-    move.p[0] = Vec2(x, y);
-    path.segments.push_back(move);
-
-    float pts[4][2] = {{x + w, y}, {x + w, y + h}, {x, y + h}};
-    for (auto& pt : pts) {
-        AnimSegment line(AnimSegment::Kind::Line);
-        line.p[0] = Vec2(pt[0], pt[1]);
-        path.segments.push_back(line);
-    }
-
-    path.segments.push_back(AnimSegment(AnimSegment::Kind::Close));
-    return path;
-}
-
-AnimPath AnimPath::FromEllipse(float cx, float cy, float rx, float ry) {
-    // Magic constant for approximating a quarter circle with a cubic Bezier.
-    const float k = 0.5522847498f;
-
-    AnimPath path;
-    path.segments.reserve(5);
-
-    AnimSegment move(AnimSegment::Kind::Move);
-    move.p[0] = Vec2(cx, cy + ry);
-    path.segments.push_back(move);
-
-    struct Arc {
-        Vec2 c1, c2, end;
-    };
-    const Arc arcs[4] = {
-        {Vec2(cx + rx * k, cy + ry), Vec2(cx + rx, cy + ry * k), Vec2(cx + rx, cy)},
-        {Vec2(cx + rx, cy - ry * k), Vec2(cx + rx * k, cy - ry), Vec2(cx, cy - ry)},
-        {Vec2(cx - rx * k, cy - ry), Vec2(cx - rx, cy - ry * k), Vec2(cx - rx, cy)},
-        {Vec2(cx - rx, cy + ry * k), Vec2(cx - rx * k, cy + ry), Vec2(cx, cy + ry)},
-    };
-    for (const Arc& arc : arcs) {
-        AnimSegment cubic(AnimSegment::Kind::Cubic);
-        cubic.p[0] = arc.c1;
-        cubic.p[1] = arc.c2;
-        cubic.p[2] = arc.end;
-        path.segments.push_back(cubic);
-    }
-
-    path.segments.push_back(AnimSegment(AnimSegment::Kind::Close));
-    return path;
-}
-
 // -------------------------------------------------------------- transform --
 
 Mat2x3 AnimTransform::ToMatrix() const {
@@ -307,7 +254,7 @@ AnimFrame AnimDocument::ResolveFrame(int frame) const {
         entry.span = start->tweenIn;
 
         // The span runs from `start` to the next keyframe, and belongs to the
-        // END keyframe — so look for the successor of whatever actually
+        // END keyframe - so look for the successor of whatever actually
         // provided the artwork (which is `start` itself for the common case of
         // a layer whose first key is before this frame).
         const AnimKeyframe* end = layer.AtOrAfter(start->frame + 1);
@@ -408,6 +355,78 @@ void AnimDocument::Normalize() {
     if (nextId < 1) {
         nextId = 1;
     }
+}
+
+// -------------------------------------------------------------- drawing --
+
+AnimColor MultiplyColors(const AnimColor& a, const AnimColor& b) {
+    auto mul8 = [](int x, int y) {
+        // Round so a 50% tint of an odd channel value lands predictably.
+        return (x * y + 127) / 255;
+    };
+    return AnimColor(mul8(a.r, b.r), mul8(a.g, b.g), mul8(a.b, b.b),
+                     mul8(a.a, b.a));
+}
+
+AnimColor ScaleAlpha(const AnimColor& color, float factor) {
+    const float scaled = std::min(1.0f, std::max(0.0f, factor));
+    AnimColor out = color;
+    out.a = static_cast<int>(color.a * scaled + 0.5f);
+    return out;
+}
+
+Mat2x3 ResolveShapeMatrix(const AnimShape& shape, const AnimKeyframe& key) {
+    // key * shape: the shape transform is in shape-local space and the keyframe
+    // transform is the layer-level parent, so it applies second.
+    return key.transform.ToMatrix() * shape.transform.ToMatrix();
+}
+
+namespace {
+// Shared color composition for fill and stroke. `colorTransform` on the shape
+// multiplies the authored color; the keyframe's does the same for the whole
+// key; then both alphas apply multiplicatively.
+AnimColor ComposeColor(const AnimColor& authored, const AnimShape& shape,
+                       const AnimKeyframe& key) {
+    AnimColor out = MultiplyColors(authored, shape.transform.colorTransform);
+    out = MultiplyColors(out, key.transform.colorTransform);
+    return ScaleAlpha(out, shape.transform.alpha * key.transform.alpha);
+}
+} // namespace
+
+AnimColor ResolveFillColor(const AnimShape& shape, const AnimKeyframe& key) {
+    return ComposeColor(shape.style.fill, shape, key);
+}
+
+AnimColor ResolveStrokeColor(const AnimShape& shape, const AnimKeyframe& key) {
+    return ComposeColor(shape.style.stroke, shape, key);
+}
+
+ResolvedShape ResolveShape(const AnimShape& shape, const AnimKeyframe& key,
+                           float tolerance) {
+    ResolvedShape resolved;
+    resolved.shapeId = shape.id;
+    resolved.name = shape.name;
+    resolved.matrix = ResolveShapeMatrix(shape, key);
+    resolved.hasFill = shape.style.hasFill;
+    resolved.hasStroke = shape.style.hasStroke && shape.style.strokeWidth > 0.0f;
+    resolved.cap = shape.style.cap;
+    resolved.join = shape.style.join;
+
+    // Stroke width is authored in shape-local units, so it has to follow the
+    // transform's scale to stay visually consistent under scale/skew.
+    resolved.strokeWidth =
+        shape.style.strokeWidth * Mat2x3MeanScale(resolved.matrix);
+
+    // Fill/stroke colors are resolved even when the corresponding style is off
+    // so callers can inspect the composition without special-casing.
+    const AnimColor fillColor = ResolveFillColor(shape, key);
+    const AnimColor strokeColor = ResolveStrokeColor(shape, key);
+    resolved.fill = resolved.hasFill ? fillColor : AnimColor();
+    resolved.stroke = resolved.hasStroke ? strokeColor : AnimColor();
+
+    resolved.path = Flatten(shape.path, tolerance);
+    resolved.drawable = !resolved.path.polylines.empty();
+    return resolved;
 }
 
 } // namespace anim

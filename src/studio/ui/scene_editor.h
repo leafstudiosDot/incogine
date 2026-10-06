@@ -1,4 +1,4 @@
-// Incogine Studio — Unity-style scene editor tab (Qt Widgets).
+// Incogine Studio - Unity-style scene editor tab (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // The Scene tab: live game frames on a canvas with a mode toolbar, an
@@ -282,3 +282,4 @@ private:
     float orbitPitch_ = 20.0f;
     float dolly_ = 1.0f;
 };
+

@@ -1,4 +1,4 @@
-// Incogine Studio — shared XML helpers (Qt-free, stdlib).
+// Incogine Studio - shared XML helpers (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Trimming, escaping, tag lookup, and file loading shared by the
@@ -32,3 +32,4 @@ bool ReadTextFile(const std::string& path, std::string& out, std::string& error)
 } // namespace xml
 } // namespace studio
 } // namespace icg
+

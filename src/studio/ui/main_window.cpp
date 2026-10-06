@@ -1,4 +1,4 @@
-﻿// Incogine Studio — main window implementation (Qt Widgets).
+// Incogine Studio - main window implementation (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "main_window.h"
 
@@ -69,7 +69,7 @@ StudioMainWindow::StudioMainWindow(const std::string& projectRoot, QWidget* pare
     }
     onDiscoverScenes();
     onRefreshProject();
-    log(tr("Incogine Studio — project root: %1").arg(QString::fromStdString(projectRoot_)));
+    log(tr("Incogine Studio - project root: %1").arg(QString::fromStdString(projectRoot_)));
 }
 
 void StudioMainWindow::buildMenus() {
@@ -130,7 +130,7 @@ void StudioMainWindow::buildMenus() {
     QMenu* help = menuBar()->addMenu(tr("&Help"));
     help->addAction(tr("About Incogine Studio"), this, [this] {
         // Engine version comes from src/project.xml (<incogine_version>,
-        // mirrored from src/core/engine/version.h) — never hardcoded.
+        // mirrored from src/core/engine/version.h) - never hardcoded.
         QString engineVersion = tr("unknown");
         icg::studio::ProjectXml projectXml;
         std::string error;
@@ -306,7 +306,7 @@ void StudioMainWindow::buildDocks() {
     // Fallback: ProjectPaths expects the repo root; our root IS the repo root.
     const QString srcRoot = QString::fromStdString(projectRoot_ + "/src");
 
-    QDockWidget* projDock = new QDockWidget(tr("Project — src/"), this);
+    QDockWidget* projDock = new QDockWidget(tr("Project - src/"), this);
     projectModel_ = new QFileSystemModel(this);
     projectModel_->setRootPath(srcRoot);
     projectView_ = new QTreeView();
@@ -341,7 +341,7 @@ void StudioMainWindow::buildDocks() {
     addDockWidget(Qt::LeftDockWidgetArea, sceneDock);
     connect(sceneTree_, &QTreeWidget::itemClicked, this, &StudioMainWindow::onSceneSelected);
 
-    QDockWidget* assetsDock = new QDockWidget(tr("Asset Browser — src/assets/"), this);
+    QDockWidget* assetsDock = new QDockWidget(tr("Asset Browser - src/assets/"), this);
     assetsModel_ = new QFileSystemModel(this);
     const QString assetsRoot = QString::fromStdString(projectRoot_ + "/src/assets");
     assetsModel_->setRootPath(assetsRoot);
@@ -711,7 +711,7 @@ void StudioMainWindow::showLoadingOverlay(QTreeView* view, QFileSystemModel* mod
     overlay->show();
     // Hide once the requested root finishes. The emitted path string is
     // compared normalized (native separators/case differ per platform), and
-    // as a backstop any listed rows also dismiss it — visible files mean
+    // as a backstop any listed rows also dismiss it - visible files mean
     // loading produced content, so the badge has served its purpose.
     connect(model, &QFileSystemModel::directoryLoaded, overlay,
             [overlay, root](const QString& path) {
@@ -799,7 +799,7 @@ void StudioMainWindow::onOpenFile(const QString& path, int line) {
 void StudioMainWindow::openAnimation(const QString& path) {
     // Lazy: only pay for locating the executable when an animation is actually
     // opened. The hand-off itself lives in the Animator process, which listens
-    // on a per-document socket — Studio never holds a reference to it, so an
+    // on a per-document socket - Studio never holds a reference to it, so an
     // animation keeps running after Studio closes.
     if (animatorLauncher_ == nullptr) {
         animatorLauncher_ = new AnimatorLauncher(this);
@@ -960,7 +960,7 @@ void StudioMainWindow::onNewFolder() {
         return;
     }
     const QString dir = contextDir(contextModel_, contextIndex_);
-    // Script folders included: Studio never reserves language names —
+    // Script folders included: Studio never reserves language names -
     // any folder (e.g. src/scripts/newfolder/) is allowed as-is.
     const QString name = QInputDialog::getText(this, tr("New folder"), tr("Folder name:"));
     if (name.isEmpty()) {
@@ -1013,7 +1013,7 @@ void StudioMainWindow::onDeleteItems() {
     auto answer = QMessageBox::question(
         this, tr("Delete"),
         tr("Delete %1?\n\nRenaming/deleting source files may break #includes, "
-           "scene references, and script attachments — update them by hand.")
+           "scene references, and script attachments - update them by hand.")
             .arg(path));
     if (answer != QMessageBox::Yes) {
         return;
@@ -1238,7 +1238,7 @@ void StudioMainWindow::log(const QString& msg) {
 // Build-console line: errors red, warnings yellow, everything else in the
 // theme's default text color (palette-driven, so dark/light mode both
 // read correctly). Plain-text insert keeps the existing log content
-// intact — no HTML round trip.
+// intact - no HTML round trip.
 void StudioMainWindow::logBuildLine(const QString& line) {
     static const QRegularExpression isError(
         QStringLiteral("\\berror\\b|\\bfatal\\b|\\bfailed\\b|:error "),
@@ -1264,3 +1264,5 @@ void StudioMainWindow::logBuildLine(const QString& line) {
     cursor.insertText(line + QStringLiteral("\n"), format);
     output_->ensureCursorVisible();
 }
+
+

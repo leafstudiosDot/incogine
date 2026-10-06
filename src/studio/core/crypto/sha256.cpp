@@ -1,4 +1,4 @@
-// Incogine Studio — SHA-256 implementation (FIPS 180-4, stdlib only).
+// Incogine Studio - SHA-256 implementation (FIPS 180-4, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "sha256.h"
 
@@ -174,3 +174,4 @@ bool HexOfFile(const std::string& path, std::string& outHex, std::string& error)
 } // namespace sha256
 } // namespace studio
 } // namespace icg
+

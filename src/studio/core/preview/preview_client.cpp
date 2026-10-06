@@ -1,4 +1,4 @@
-// Incogine Studio — studio-preview consumer implementation (Qt-free).
+// Incogine Studio - studio-preview consumer implementation (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "preview_client.h"
 
@@ -204,3 +204,4 @@ bool PreviewClient::SendRaw(uint32_t code, uint64_t id, const float values[9],
 } // namespace preview
 } // namespace studio
 } // namespace icg
+

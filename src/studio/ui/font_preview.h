@@ -1,4 +1,4 @@
-// Incogine Studio — font preview tab (Qt Widgets).
+// Incogine Studio - font preview tab (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Loads a project font file and previews a pangram + digits at an
@@ -24,3 +24,4 @@ private:
     QSpinBox* sizeBox_ = nullptr;
     QString family_;
 };
+

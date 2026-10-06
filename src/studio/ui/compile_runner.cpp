@@ -1,4 +1,4 @@
-// Incogine Studio — manual game build runner implementation.
+// Incogine Studio - manual game build runner implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "compile_runner.h"
 
@@ -118,3 +118,4 @@ void CompileRunner::onProcessFinished(int exitCode, QProcess::ExitStatus status)
     }
     emit finished(ok, exitCode);
 }
+

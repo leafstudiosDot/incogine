@@ -1,4 +1,4 @@
-// Incogine Studio — find-in-files implementation (Qt Widgets).
+// Incogine Studio - find-in-files implementation (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "search_panel.h"
 
@@ -130,7 +130,7 @@ void SearchPanel::runSearch() {
         }
     }
     results_->setHeaderLabels(
-        {tr("File"), tr("Line"), tr("Text — %1 hit(s)").arg(hits)});
+        {tr("File"), tr("Line"), tr("Text - %1 hit(s)").arg(hits)});
 }
 
 void SearchPanel::onResultActivated(QTreeWidgetItem* item) {
@@ -140,3 +140,5 @@ void SearchPanel::onResultActivated(QTreeWidgetItem* item) {
     emit openFile(item->data(0, Qt::UserRole).toString(),
                   item->data(1, Qt::UserRole).toInt());
 }
+
+

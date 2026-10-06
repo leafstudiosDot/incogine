@@ -1,4 +1,4 @@
-// Incogine Studio — font preview implementation.
+// Incogine Studio - font preview implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "font_preview.h"
 
@@ -65,3 +65,4 @@ void FontPreview::onSizeChanged(int pointSize) {
     QFont font(family_, pointSize);
     preview_->setFont(font);
 }
+

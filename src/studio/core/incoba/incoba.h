@@ -1,4 +1,4 @@
-// Incogine Studio — `.incoba` asset bundle v1 (Qt-free, no third-party deps).
+// Incogine Studio - `.incoba` asset bundle v1 (Qt-free, no third-party deps).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Goals (packaging first, NOT DRM): bundle `src/assets/` into one file,
@@ -94,7 +94,7 @@ bool ReadIndex(const std::string& path, Index& out, std::string& error);
 //
 // Patch/update sets for live games are ordinary split outputs: ship the
 // set (or a subset directory with its own index) to the client and mount
-// it at runtime (see AssetManager::MountBundleDir) — entries there
+// it at runtime (see AssetManager::MountBundleDir) - entries there
 // override the base install, which is how versioned content updates
 // (e.g. gacha banners/events) are delivered without re-shipping the game.
 bool PackSplit(const std::string& assetDir, const std::string& outDir,
@@ -136,3 +136,4 @@ private:
 } // namespace incoba
 } // namespace studio
 } // namespace icg
+

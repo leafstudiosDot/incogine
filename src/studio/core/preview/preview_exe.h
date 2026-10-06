@@ -1,4 +1,4 @@
-// Incogine Studio — preview executable resolution + dev-build binding
+// Incogine Studio - preview executable resolution + dev-build binding
 // (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
@@ -53,3 +53,4 @@ bool VerifyPreviewExe(const std::string& projectRoot, const std::string& exeBase
 } // namespace preview
 } // namespace studio
 } // namespace icg
+

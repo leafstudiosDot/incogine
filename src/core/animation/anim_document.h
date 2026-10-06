@@ -1,4 +1,4 @@
-// Incogine — 2D vector animation document model.
+// Incogine - 2D vector animation document model.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // The authoritative, Qt-free data behind an `.incoanim` file. Studio edits it
@@ -8,7 +8,7 @@
 //
 // Keyframe model (Flash/Animate-like):
 //   * A layer stores keyframes ONLY. Frame spans fall out of "nearest
-//     keyframe at or before N" — there is no separate span list to keep in
+//     keyframe at or before N" - there is no separate span list to keep in
 //     sync.
 //   * A blank keyframe is an explicit keyframe whose `kind` is Blank: it holds
 //     the timing but no artwork, so deleting an object's keyframe leaves a
@@ -26,45 +26,12 @@
 #include <string>
 #include <vector>
 
+#include "anim_geometry.h"
+#include "anim_path.h"
 #include "anim_types.h"
 
 namespace icg {
 namespace anim {
-
-// ----------------------------------------------------------------- paths --
-
-// A path is a segment list. Segment kinds map 1:1 onto QPainterPath calls in
-// the editor and onto the software rasterizer, so all three consume the same
-// geometry.
-struct AnimSegment {
-    enum class Kind {
-        Move,  // start a new subpath at p[0]
-        Line,  // p[0] = end point
-        Cubic, // p[0] = c1, p[1] = c2, p[2] = end point
-        Close, // close the current subpath
-    };
-
-    Kind kind = Kind::Line;
-    // Line: p[0] = end. Cubic: p[0] = c1, p[1] = c2, p[2] = end.
-    // Move: p[0] = position. Close: unused.
-    Vec2 p[3];
-
-    AnimSegment() = default;
-    explicit AnimSegment(Kind segmentKind) : kind(segmentKind) {}
-};
-
-struct AnimPath {
-    std::vector<AnimSegment> segments;
-
-    bool IsEmpty() const { return segments.empty(); }
-    // True when the path ends on a Close segment.
-    bool IsClosed() const {
-        return !segments.empty() && segments.back().kind == AnimSegment::Kind::Close;
-    }
-
-    static AnimPath FromRect(float x, float y, float w, float h);
-    static AnimPath FromEllipse(float cx, float cy, float rx, float ry);
-};
 
 // ---------------------------------------------------------------- styles --
 
@@ -139,9 +106,9 @@ struct AnimLayer {
     // Keyframe exactly at `frame`, or nullptr.
     const AnimKeyframe* Find(int frame) const;
     AnimKeyframe* FindMutable(int frame);
-    // Nearest keyframe at or before `frame` — the active keyframe for a span.
+    // Nearest keyframe at or before `frame` - the active keyframe for a span.
     const AnimKeyframe* AtOrBefore(int frame) const;
-    // First keyframe at or after `frame` — the span's end.
+    // First keyframe at or after `frame` - the span's end.
     const AnimKeyframe* AtOrAfter(int frame) const;
     const AnimKeyframe* First() const;
     const AnimKeyframe* Last() const;
@@ -237,6 +204,55 @@ struct AnimDocument {
     // id in use. Cheap; call after any bulk operation.
     void Normalize();
 };
+
+// -------------------------------------------------------------- drawing --
+
+// Resolved drawing state for one shape on one keyframe.
+//
+// The editor canvas and the runtime rasterizer BOTH call these, so a preview
+// cannot drift from the baked sprite sheet. Nothing here is view-specific.
+
+struct ResolvedShape {
+    uint64_t shapeId = 0;
+    std::string name;
+    FlatPath path; // in shape-local space, before the transform
+    // Keyframe transform composed with the shape transform.
+    Mat2x3 matrix;
+    bool hasFill = false;
+    AnimColor fill;
+    bool hasStroke = false;
+    AnimColor stroke;
+    // Stroke width in stage units (the authored width scaled by the transform).
+    float strokeWidth = 0.0f;
+    LineCap cap = LineCap::Round;
+    LineJoin join = LineJoin::Round;
+    // False when the path is empty (nothing to draw or pick).
+    bool drawable = false;
+};
+
+// Multiplies two straight-alpha colors, channel-wise including alpha
+// (Flash-style color transform).
+AnimColor MultiplyColors(const AnimColor& a, const AnimColor& b);
+
+// Scales a color's alpha by `factor` (0..1), leaving RGB untouched.
+AnimColor ScaleAlpha(const AnimColor& color, float factor);
+
+// Combined keyframe-then-shape transform. Order matters: the shape transform
+// applies in shape-local space, then the keyframe transform on top, so
+// `key * shape` puts a shape-local offset under the layer's offset.
+Mat2x3 ResolveShapeMatrix(const AnimShape& shape, const AnimKeyframe& key);
+
+// Fill color: style color x shape color transform x key color transform,
+// alpha scaled by both transform alphas.
+AnimColor ResolveFillColor(const AnimShape& shape, const AnimKeyframe& key);
+
+// Stroke color, same composition as the fill.
+AnimColor ResolveStrokeColor(const AnimShape& shape, const AnimKeyframe& key);
+
+// Full resolved drawing state, ready for the canvas or the rasterizer.
+// `tolerance` is the Bezier flattening tolerance in shape-local units.
+ResolvedShape ResolveShape(const AnimShape& shape, const AnimKeyframe& key,
+                           float tolerance = kFlattenTolerance);
 
 } // namespace anim
 } // namespace icg

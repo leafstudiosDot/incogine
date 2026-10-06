@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene edit operations (Qt-free, stdlib).
+// Incogine Studio - C++ scene edit operations (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Line-span splicing plus the high-level mutations (rename, transform,
@@ -570,3 +570,4 @@ std::string SerializeHeader(const SceneFile& file) {
 } // namespace scenecpp
 } // namespace studio
 } // namespace icg
+

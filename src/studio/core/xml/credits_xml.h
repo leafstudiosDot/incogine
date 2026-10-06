@@ -1,4 +1,4 @@
-// Incogine Studio — src/credits.xml model (Qt-free).
+// Incogine Studio - src/credits.xml model (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Document-order block model: <project> children become an ordered list of
@@ -56,3 +56,4 @@ struct CreditsXml {
 
 } // namespace studio
 } // namespace icg
+

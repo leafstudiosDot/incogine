@@ -1,4 +1,4 @@
-// Incogine Studio — `.incoba` v1 bundle core (Qt-free, stdlib only).
+// Incogine Studio - `.incoba` v1 bundle core (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // CRC, single-bundle writer, directory packer, and the bundle Reader.
@@ -291,3 +291,4 @@ bool WriteBundle(const Bundle& bundle, const std::string& outFile, std::string& 
 } // namespace incoba
 } // namespace studio
 } // namespace icg
+

@@ -1,4 +1,4 @@
-// Incogine Animator — single-instance channel (server side).
+// Incogine Animator - single-instance channel (server side).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // An Animator holding a document listens on a local socket named after it (see
@@ -7,7 +7,7 @@
 // document instead of a second process starting up on it.
 //
 // Without this, double-clicking one animation twice would leave two editors
-// writing the same file — the last save wins silently, which is exactly the
+// writing the same file - the last save wins silently, which is exactly the
 // kind of data loss a user blames on the tool.
 #pragma once
 

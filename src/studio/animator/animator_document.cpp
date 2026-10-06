@@ -1,4 +1,4 @@
-﻿#include "animator_document.h"
+#include "animator_document.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -74,7 +74,7 @@ bool AnimatorDocument::load(const QString& path, QString* errorOut) {
 bool AnimatorDocument::save(QString* errorOut) {
     if (path_.isEmpty()) {
         if (errorOut != nullptr) {
-            *errorOut = tr("This animation has no file yet — use Save As.");
+            *errorOut = tr("This animation has no file yet - use Save As.");
         }
         return false;
     }
@@ -143,7 +143,7 @@ bool AnimatorDocument::redo() {
 bool AnimatorDocument::apply(std::unique_ptr<IAnimCommand> command) {
     if (!stack_.Execute(document_, std::move(command))) {
         // Refused: a no-op edit or an invalid value. Not an error worth a
-        // dialog — the caller (a spin box or button) simply sees no change.
+        // dialog - the caller (a spin box or button) simply sees no change.
         return false;
     }
     setDirty(true);
@@ -203,6 +203,31 @@ bool AnimatorDocument::setLayerLocked(uint64_t layerId, bool locked) {
 bool AnimatorDocument::moveLayer(size_t from, size_t to) {
     return apply(
         std::unique_ptr<IAnimCommand>(new icg::anim::MoveLayerCommand(from, to)));
+}
+
+bool AnimatorDocument::commitShapeMove(
+    uint64_t layerId, int frame,
+    const std::vector<icg::anim::ShapeTransformSnapshot>& moves) {
+    if (moves.empty()) {
+        return false;
+    }
+    // A drag that ended where it started must not leave a dead undo entry.
+    for (const auto& move : moves) {
+        if (!(move.start.position == move.end.position)) {
+            return apply(std::unique_ptr<IAnimCommand>(
+                new icg::anim::MoveShapesCommand(layerId, frame, moves)));
+        }
+    }
+    return false;
+}
+
+bool AnimatorDocument::deleteShapes(uint64_t layerId, int frame,
+                                   const std::vector<uint64_t>& shapeIds) {
+    if (shapeIds.empty()) {
+        return false;
+    }
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::DeleteShapesCommand(layerId, frame, shapeIds)));
 }
 
 // -------------------------------------------------------------- autosave --

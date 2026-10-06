@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "anim_document.h"
+#include "anim_path.h"
 
 namespace icg {
 namespace anim {

@@ -1,4 +1,4 @@
-// Incogine Studio — shared preview session implementation.
+// Incogine Studio - shared preview session implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "preview_session.h"
 
@@ -72,7 +72,7 @@ void PreviewSession::start(const QString& exe, const QStringList& args) {
     }
     emit runningChanged(true);
     poll_->start();
-    emit statusChanged(tr("Incogine started — waiting for frames..."));
+    emit statusChanged(tr("Incogine started - waiting for frames..."));
 }
 
 void PreviewSession::stop() {
@@ -81,7 +81,7 @@ void PreviewSession::stop() {
     }
     std::string error;
     if (connected_ && !client_.SendCommand(ICG_PREVIEW_CMD_QUIT, 3000, error)) {
-        emit statusChanged(tr("Engine did not acknowledge quit — terminating."));
+        emit statusChanged(tr("Engine did not acknowledge quit - terminating."));
     }
     proc_->terminate();
     if (!proc_->waitForFinished(3000)) {
@@ -109,7 +109,7 @@ void PreviewSession::onPoll() {
             emit connectedChanged(true);
         } else if (!error.empty() && error.find("token mismatch") != std::string::npos) {
             emit statusChanged(
-                tr("Session token mismatch — not the build Studio launched."));
+                tr("Session token mismatch - not the build Studio launched."));
             stop();
         }
         return;
@@ -134,3 +134,5 @@ void PreviewSession::onProcessFinished(int exitCode, QProcess::ExitStatus status
                            ? tr("Incogine exited (code %1).").arg(exitCode)
                            : tr("Incogine process crashed."));
 }
+
+

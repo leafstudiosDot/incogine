@@ -9,16 +9,16 @@
 
 // Central asset access. Resolution order:
 //
-//   1. Mounted update bundles (newest mount first) — downloadable content
+//   1. Mounted update bundles (newest mount first) - downloadable content
 //      packs (gacha events, patches) mounted via MountBundleDir/File.
-//   2. Loose files on disk (platform asset root) — developer override.
+//   2. Loose files on disk (platform asset root) - developer override.
 //   3. `.incoba` asset bundles next to the assets (`index.incobai` plus
 //      payload-capped `*.incoba`, or a single legacy bundle).
 //      The index maps every path to its bundle + file offset, so lookups
 //      never open or scan bundles that cannot contain the asset.
 //   4. Embedded data (only when compiled with ICG_EMBED_ASSETS=ON).
 //
-// Bundle layout (little-endian, v1 — see `src/studio/core/incoba.h`, the
+// Bundle layout (little-endian, v1 - see `src/studio/core/incoba.h`, the
 // reference implementation; this parser must stay in sync with it):
 //   bundle: magic[6]="INCOBA", version u16=1, flags u16=0, entryCount u32,
 //           per entry { pathLen u16, path, offset u64, size u64,
@@ -56,7 +56,7 @@ public:
     // patch set) or a lone `a.incoba`/`game.incoba`; MountBundleFile
     // accepts one `.incoba` bundle or `.incobai` index directly. Mounted
     // entries override same-path base-install assets; when several sets
-    // are mounted, the newest mount wins. Mounts work live — no restart
+    // are mounted, the newest mount wins. Mounts work live - no restart
     // needed. Returns false when nothing usable was found.
     bool MountBundleDir(const char* dir);
     bool MountBundleFile(const char* path);
@@ -132,3 +132,4 @@ private:
 };
 
 #endif // ASSETMANAGER_H
+

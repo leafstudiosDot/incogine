@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene text/bracket utilities (Qt-free, stdlib).
+// Incogine Studio - C++ scene text/bracket utilities (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // EOL/line splitting, whitespace, comment stripping, top-level
@@ -417,3 +417,4 @@ size_t MatchBracket(const std::string& text, size_t open, char close) {
 } // namespace scenecpp
 } // namespace studio
 } // namespace icg
+

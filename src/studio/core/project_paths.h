@@ -1,4 +1,4 @@
-// Incogine Studio — project root / path resolution (Qt-free).
+// Incogine Studio - project root / path resolution (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #pragma once
 
@@ -41,3 +41,4 @@ private:
 
 } // namespace studio
 } // namespace icg
+

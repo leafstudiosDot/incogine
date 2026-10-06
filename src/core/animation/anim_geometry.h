@@ -1,4 +1,4 @@
-// Incogine — 2D vector animation geometry.
+// Incogine - 2D vector animation geometry.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Shared by the rasterizer, the baker, and the editor's hit-testing, so the
@@ -10,7 +10,7 @@
 #include <cmath>
 #include <vector>
 
-#include "anim_document.h"
+#include "anim_path.h"
 #include "anim_types.h"
 
 namespace icg {
@@ -38,7 +38,7 @@ FlatPath Flatten(const AnimPath& path, float tolerance = kFlattenTolerance);
 
 // Axis-aligned bounds of `path` in path space. `minOut > maxOut` (empty) when
 // the path has no geometry. Bezier control points are included, so the box is
-// conservative rather than tight — correct for selection outlines, cheap to
+// conservative rather than tight - correct for selection outlines, cheap to
 // compute.
 void PathBounds(const AnimPath& path, Vec2& minOut, Vec2& maxOut);
 
@@ -60,7 +60,7 @@ bool PointInPolyline(const Vec2& point, const std::vector<Vec2>& polyline,
 bool PointInFlatPath(const Vec2& point, const FlatPath& flat, float tolerance);
 
 // True when `point` is within `distance` of the outline, inside or out. Used
-// for picking near a curved edge — flattened Beziers are straight chords, so
+// for picking near a curved edge - flattened Beziers are straight chords, so
 // an exact inside test misses points right on the curve.
 bool PointNearFlatPath(const Vec2& point, const FlatPath& flat, float distance);
 

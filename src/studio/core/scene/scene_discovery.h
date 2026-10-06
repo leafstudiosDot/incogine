@@ -1,4 +1,4 @@
-// Incogine Studio — scene discovery (Qt-free, read-only).
+// Incogine Studio - scene discovery (Qt-free, read-only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Scenes are currently imperative C++ (`class X : public Scene` under
@@ -29,3 +29,4 @@ public:
 
 } // namespace studio
 } // namespace icg
+

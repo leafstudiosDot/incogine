@@ -1,4 +1,4 @@
-// Incogine Studio — code editor widget (Qt Widgets).
+// Incogine Studio - code editor widget (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Plain-text editor with per-language syntax highlighting (C/C++, C#,
@@ -80,3 +80,4 @@ private:
     QLineEdit* findField_;
     QLineEdit* replaceField_;
 };
+

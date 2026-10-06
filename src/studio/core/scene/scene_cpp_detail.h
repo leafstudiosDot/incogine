@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene parser shared internals (Qt-free, stdlib).
+// Incogine Studio - C++ scene parser shared internals (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Internal declarations shared by the scene_cpp_* translation units. The
@@ -57,3 +57,4 @@ bool SpliceRange(std::vector<std::string>& lines, size_t bLine, size_t bCol,
 } // namespace scenecpp
 } // namespace studio
 } // namespace icg
+

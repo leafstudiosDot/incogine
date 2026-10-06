@@ -1,4 +1,4 @@
-// Incogine Studio — SceneDiscovery implementation (Qt-free).
+// Incogine Studio - SceneDiscovery implementation (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "scene_discovery.h"
 
@@ -65,3 +65,4 @@ std::vector<SceneInfo> SceneDiscovery::Scan(const std::string& scenesDir) {
 
 } // namespace studio
 } // namespace icg
+

@@ -1,4 +1,4 @@
-// Incogine Studio — ProjectPaths implementation (Qt-free).
+// Incogine Studio - ProjectPaths implementation (Qt-free).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "project_paths.h"
 
@@ -32,3 +32,4 @@ bool ProjectPaths::valid() const {
 
 } // namespace studio
 } // namespace icg
+

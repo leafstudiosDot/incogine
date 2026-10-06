@@ -1,4 +1,4 @@
-// Incogine — `.incoanim` importer (IAssetImporter implementation).
+// Incogine - `.incoanim` importer (IAssetImporter implementation).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // This is the seam a future FBX / OBJ / glTF / `.blend` importer would follow
@@ -17,7 +17,7 @@ namespace icg {
 namespace anim {
 
 // Parses `.incoanim` bytes into an AnimDocument. The document lives on the
-// importer, so callers read it through `document()` — the importer owns the
+// importer, so callers read it through `document()` - the importer owns the
 // parsed result rather than returning an untyped blob.
 class Anim2DImporter : public assets::IAssetImporter {
 public:

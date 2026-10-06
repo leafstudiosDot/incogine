@@ -1,4 +1,4 @@
-// Incogine Studio — live preview monitor tab (Qt Widgets).
+// Incogine Studio - live preview monitor tab (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Passive view over the shared PreviewSession: game picker with dev-build
@@ -67,3 +67,4 @@ private:
     QPushButton* launchButton_ = nullptr;
     QPushButton* stopButton_ = nullptr;
 };
+

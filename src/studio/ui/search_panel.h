@@ -1,4 +1,4 @@
-// Incogine Studio — find-in-files panel (Qt Widgets).
+// Incogine Studio - find-in-files panel (Qt Widgets).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Recursive text search over the project source tree. Build output,
@@ -36,3 +36,4 @@ private:
     QCheckBox* caseBox_ = nullptr;
     QTreeWidget* results_ = nullptr;
 };
+

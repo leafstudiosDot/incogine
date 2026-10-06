@@ -1,4 +1,4 @@
-// Incogine Studio — scene editor tab implementation.
+// Incogine Studio - scene editor tab implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "scene_editor.h"
 
@@ -303,8 +303,8 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     // checked without running the game (engine forces 16:9 on resize).
     toolbar->addWidget(new QLabel(tr("Window:")));
     windowCombo_ = new QComboBox();
-    windowCombo_->addItems({tr("640×360"), tr("854×480"), tr("1280×720"),
-                            tr("1600×900"), tr("1920×1080"), tr("2560×1440")});
+    windowCombo_->addItems({tr("640x360"), tr("854x480"), tr("1280x720"),
+                            tr("1600x900"), tr("1920x1080"), tr("2560x1440")});
     windowCombo_->setCurrentIndex(2);
     windowCombo_->setToolTip(tr("Simulated engine window size (16:9, like the game)"));
     toolbar->addWidget(windowCombo_);
@@ -379,7 +379,7 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
     inspectorLayout->addLayout(edgeRow);
     // One-shot anchor presets: fill the Position spins with design-space
     // points and commit constants (labels stay draggable); constrained or
-    // shared/dynamic layouts disable it — use the Stick toggles instead.
+    // shared/dynamic layouts disable it - use the Stick toggles instead.
     auto* anchorRow = new QHBoxLayout();
     anchorRow->addWidget(new QLabel(tr("Anchor:")));
     anchorCombo_ = new QComboBox();
@@ -387,7 +387,7 @@ SceneEditorTab::SceneEditorTab(const std::string& projectRoot, PreviewSession* s
                             tr("Middle-Left"), tr("Center"), tr("Middle-Right"),
                             tr("Bottom-Left"), tr("Bottom-Center"),
                             tr("Bottom-Right")});
-    anchorCombo_->setPlaceholderText(tr("Anchor…"));
+    anchorCombo_->setPlaceholderText(tr("Anchor..."));
     anchorCombo_->setCurrentIndex(-1);
     anchorCombo_->setEnabled(false);
     anchorCombo_->setToolTip(
@@ -825,7 +825,7 @@ void SceneEditorTab::refreshInspector() {
         idLabel_->setText(tr("id #%1").arg(obj.id));
         applyButton_->setEnabled(session_->isConnected());
     } else {
-        idLabel_->setText(tr("No file id — Save to source assigns one."));
+        idLabel_->setText(tr("No file id - Save to source assigns one."));
     }
 }
 
@@ -861,7 +861,7 @@ void SceneEditorTab::refreshTextInspector() {
         posSpin_[1]->setValue(0.0);
     }
     // Constants only while the label is freely placed: constrained labels
-    // keep their window-relative args (baking would destroy them — use the
+    // keep their window-relative args (baking would destroy them - use the
     // Stick toggles), shared loop sites refuse for their siblings.
     const bool freePlace = placed && !text->sharedSite && !text->hasConstraint;
     posSpin_[0]->setEnabled(freePlace);
@@ -881,7 +881,7 @@ void SceneEditorTab::refreshTextInspector() {
         anchorCombo_->blockSignals(false);
     }
     // Stick toggles mirror the parsed edge pins; enabled for any placed
-    // label with its own call site (constraints included — that's the point).
+    // label with its own call site (constraints included - that's the point).
     const bool canPin = placed && !text->sharedSite;
     const bool pinStates[4] = {text->xPin == "left", text->xPin == "right",
                                text->yPin == "top", text->yPin == "bottom"};
@@ -914,11 +914,11 @@ void SceneEditorTab::refreshTextInspector() {
         info += tr(" (no literal content)");
     }
     if (!placed) {
-        info += tr(" — dynamic layout, not draggable");
+        info += tr(" - dynamic layout, not draggable");
     } else if (text->sharedSite) {
-        info += tr(" — shared loop layout, not draggable");
+        info += tr(" - shared loop layout, not draggable");
     } else if (text->hasConstraint) {
-        info += tr(" — constrained to the window (Stick toggles), not draggable");
+        info += tr(" - constrained to the window (Stick toggles), not draggable");
     }
     idLabel_->setText(info);
 }
@@ -936,7 +936,7 @@ void SceneEditorTab::refreshZoomLabel() {
     if (!zoomLabel_ || !camera_) {
         return;
     }
-    // 2D camera zoom, 3D dolly — both default to 1 (100%).
+    // 2D camera zoom, 3D dolly - both default to 1 (100%).
     const float factor = isMode2D() ? camera_->GetZoom() : dolly_;
     zoomLabel_->setText(tr("%1%").arg(qRound(factor * 100.0f)));
 }
@@ -947,7 +947,7 @@ void SceneEditorTab::onModeChanged(int index) {
     canvas_->setMode2D(is2D);
     if (!is2D) {
         setNote(tr("3D: right-drag looks around, WASDQE flies while held. Picking and "
-                   "drag-editing need engine Cube rendering — coming next."));
+                   "drag-editing need engine Cube rendering - coming next."));
     }
     refreshZoomLabel();
     canvas_->update();
@@ -1068,7 +1068,7 @@ void SceneEditorTab::onReparent(const QString& childVar, const QString& newParen
     // Texts cannot parent (the engine has no such concept).
     for (const auto& text : sceneFile_.model.texts) {
         if (text.varName == childVar.toStdString()) {
-            setNote(tr("Font labels cannot parent — engine has no text hierarchy."));
+            setNote(tr("Font labels cannot parent - engine has no text hierarchy."));
             rebuildHierarchy();
             return;
         }
@@ -1313,7 +1313,7 @@ void SceneEditorTab::onWindowSizeChanged(int index) {
     refreshSourceView();
     refreshZoomLabel();
     canvas_->update();
-    setNote(tr("Simulated window %1×%2 — window-relative layout re-evaluated.")
+    setNote(tr("Simulated window %1x%2 - window-relative layout re-evaluated.")
                 .arg(windowWidth_)
                 .arg(windowHeight_));
 }
@@ -1321,7 +1321,7 @@ void SceneEditorTab::onWindowSizeChanged(int index) {
 void SceneEditorTab::applyEdgePin(int edge, bool on) {
     // CSS-like stick: each axis resolves to start/center/end/free from its
     // two toggles. Writes preserve the label's evaluated position (margins
-    // from the current simulated window), so toggling never jumps —
+    // from the current simulated window), so toggling never jumps -
     // constraints only change resize behavior.
     if (edge < 0 || edge > 3 || draggingObject_ || !ensureScene(tr("stick"))) {
         refreshInspector();
@@ -1341,7 +1341,7 @@ void SceneEditorTab::applyEdgePin(int edge, bool on) {
     const bool isX = (edge <= 1);
     const std::string curPin = isX ? text->xPin : text->yPin;
     // Canonical forms use this item's own getSize(): bare var for scalars,
-    // [index] for array elements (each owns its call site here — shared
+    // [index] for array elements (each owns its call site here - shared
     // loop sites are rejected above).
     QString v = QString::fromStdString(text->varName);
     if (text->index >= 0) {
@@ -1358,7 +1358,7 @@ void SceneEditorTab::applyEdgePin(int edge, bool on) {
     if (!measureFont(QString::fromStdString(text->fontFile), text->pointSize,
                      windowHeight_, QString::fromStdString(text->content), tw,
                      th)) {
-        setNote(tr("Stick needs a measurable font — set the font file first."));
+        setNote(tr("Stick needs a measurable font - set the font file first."));
         refreshInspector();
         return;
     }
@@ -1506,7 +1506,7 @@ void SceneEditorTab::onApplyLive() {
         return;
     }
     if (selectedKind_ == "text") {
-        setNote(tr("Font labels have no live objects — save to source instead."));
+        setNote(tr("Font labels have no live objects - save to source instead."));
         return;
     }
     const int idx = objectIndex(selectedVar_);
@@ -1514,7 +1514,7 @@ void SceneEditorTab::onApplyLive() {
         return;
     }
     if (!sceneFile_.model.objects[idx].hasId) {
-        setNote(tr("No file id — Save to source assigns one first."));
+        setNote(tr("No file id - Save to source assigns one first."));
         return;
     }
     sendLive(true);
@@ -1526,7 +1526,7 @@ bool SceneEditorTab::saveSceneToSource() {
     }
     // Byte-verbatim write (no QIODevice::Text): the serializer already
     // carries the detected EOL, and Text mode would translate every \n
-    // into \r\n on Windows — doubling CRLF files into blank lines.
+    // into \r\n on Windows - doubling CRLF files into blank lines.
     QFile sourceFile(sceneSource_);
     if (!sourceFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         setNote(tr("Cannot write %1").arg(sceneSource_));
@@ -1558,7 +1558,7 @@ bool SceneEditorTab::saveSceneToSource() {
 
 void SceneEditorTab::onSaveToSource() {
     if (saveSceneToSource()) {
-        setNote(tr("Saved — rebuild + relaunch the preview to run it."));
+        setNote(tr("Saved - rebuild + relaunch the preview to run it."));
     }
 }
 
@@ -1620,7 +1620,7 @@ void SceneEditorTab::onDeleteObject() {
         for (size_t ln : result.otherRefs) {
             refs += QString::number(ln) + " ";
         }
-        setNote(tr("Deleted. Also referenced at line(s) %1— update by hand.")
+        setNote(tr("Deleted. Also referenced at line(s) %1- update by hand.")
                     .arg(refs.trimmed()));
     } else {
         setNote(tr("Deleted. Save to source to persist."));
@@ -1664,7 +1664,7 @@ void SceneEditorTab::onDropFile(const QString& path, const QPoint& widgetPos) {
     rebuildHierarchy();
     refreshInspector();
     refreshSourceView();
-    setNote(tr("Added %1 (placeholder box — textures/scripts land later). "
+    setNote(tr("Added %1 (placeholder box - textures/scripts land later). "
                "Save to source to persist.")
                 .arg(var));
 }
@@ -1676,7 +1676,7 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
     float worldX = 0, worldY = 0;
     if (modeCombo_->currentIndex() != 0 || !widgetToWorld(widgetPos, worldX, worldY)) {
         if (modeCombo_->currentIndex() != 0) {
-            setNote(tr("Picking needs engine Cube rendering — 3D editing comes next."));
+            setNote(tr("Picking needs engine Cube rendering - 3D editing comes next."));
         }
         return;
     }
@@ -1722,19 +1722,19 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
         dragStartValid_ = true;
         if (text.sharedSite) {
             // One renderUI call draws every sibling: a rewrite would move
-            // them all, so the parser refuses — don't start a drag that
+            // them all, so the parser refuses - don't start a drag that
             // can only fail on release.
             draggingObject_ = false;
-            setNote(tr("Shared loop layout — drag disabled; edit the source instead."));
+            setNote(tr("Shared loop layout - drag disabled; edit the source instead."));
         } else if (text.hasConstraint) {
             // Window-relative args: baking drag constants would destroy the
-            // constraint — unstick with the edge toggles first.
+            // constraint - unstick with the edge toggles first.
             draggingObject_ = false;
-            setNote(tr("Constrained layout — drag disabled; use the Stick toggles or edit the source."));
+            setNote(tr("Constrained layout - drag disabled; use the Stick toggles or edit the source."));
         } else {
             draggingObject_ = gizmoCombo_->currentIndex() == 0;
             if (!draggingObject_) {
-                setNote(tr("Rotate/Scale drag arrives later — use the Inspector spins."));
+                setNote(tr("Rotate/Scale drag arrives later - use the Inspector spins."));
             }
         }
     } else {
@@ -1755,7 +1755,7 @@ void SceneEditorTab::onPick(const QPoint& widgetPos) {
         }
         draggingObject_ = gizmoCombo_->currentIndex() == 0;
         if (!draggingObject_) {
-            setNote(tr("Rotate/Scale drag arrives later — use the Inspector spins."));
+            setNote(tr("Rotate/Scale drag arrives later - use the Inspector spins."));
         }
     }
     refreshInspector();
@@ -1984,7 +1984,7 @@ bool SceneEditorTab::measureFont(const QString& assetPath, int pointSizePt,
 }
 
 void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
-    // Pure black like the game's glClearColor — the viewport must match
+    // Pure black like the game's glClearColor - the viewport must match
     // what the game sees.
     painter->fillRect(rect(), Qt::black);
     if (view.width() <= 0 || view.height() <= 0 || !sceneOk_) {
@@ -2001,7 +2001,7 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
     };
     // 1px border: the game window rect in world space, so it pans/zooms
     // with the content like Unity's canvas (at defaults it exactly fills
-    // the fitted view). In 3D it stays on the fitted view — the orbit
+    // the fitted view). In 3D it stays on the fitted view - the orbit
     // camera has no game-window frame.
     painter->setPen(QPen(Qt::white, 1));
     painter->setBrush(Qt::NoBrush);
@@ -2047,7 +2047,7 @@ void SceneEditorTab::paintOffline(QPainter* painter, const QRectF& view) {
     }
     // Font labels at their placed positions (dynamic ones are listed, not drawn).
     // Sizes scale with the viewport (base 1280x720) like the game's
-    // windowHeight/720 factor, so layout matches at any canvas size — and
+    // windowHeight/720 factor, so layout matches at any canvas size - and
     // stays backend-agnostic (SDL3/OpenGL today, DirectX/Metal/Vulkan later
     // must preserve the same design-pixel mapping).
     // Canvas px per engine px, times the engine's own glyph scale

@@ -1,4 +1,4 @@
-// Incogine Studio — `.incoba` shared codec internals (Qt-free, stdlib).
+// Incogine Studio - `.incoba` shared codec internals (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Little-endian helpers plus the bundle-writer core shared by the
@@ -90,3 +90,4 @@ bool WriteBundleAndCollect(const Bundle& bundle, const std::string& outFile,
 } // namespace incoba
 } // namespace studio
 } // namespace icg
+

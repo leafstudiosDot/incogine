@@ -1,4 +1,4 @@
-// Incogine Studio — SHA-256 (Qt-free, no third-party dependencies).
+// Incogine Studio - SHA-256 (Qt-free, no third-party dependencies).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Standard FIPS 180-4 implementation used to bind Studio launches to the
@@ -22,3 +22,4 @@ bool HexOfFile(const std::string& path, std::string& outHex, std::string& error)
 } // namespace sha256
 } // namespace studio
 } // namespace icg
+

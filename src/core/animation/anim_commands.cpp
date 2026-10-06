@@ -318,5 +318,84 @@ void MoveLayerCommand::Undo(AnimDocument& document) {
                            moved);
 }
 
+// ---------------------------------------------------------------- shapes --
+
+AnimKeyframe* MoveShapesCommand::FindKeyframe(AnimDocument& document,
+                                              uint64_t layerId, int frame) {
+    AnimLayer* layer = document.FindLayerById(layerId);
+    return layer != nullptr ? layer->FindMutable(frame) : nullptr;
+}
+
+bool MoveShapesCommand::Apply(AnimDocument& document, bool useEnd) {
+    AnimKeyframe* key = FindKeyframe(document, layerId_, frame_);
+    if (key == nullptr || moves_.empty()) {
+        return false;
+    }
+    for (const ShapeTransformSnapshot& move : moves_) {
+        for (AnimShape& shape : key->shapes) {
+            if (shape.id != move.shapeId) {
+                continue;
+            }
+            shape.transform = useEnd ? move.end : move.start;
+            break;
+        }
+    }
+    return true;
+}
+
+bool MoveShapesCommand::Do(AnimDocument& document) {
+    return Apply(document, true);
+}
+
+void MoveShapesCommand::Undo(AnimDocument& document) {
+    Apply(document, false);
+}
+
+AnimKeyframe* DeleteShapesCommand::FindKeyframe(AnimDocument& document,
+                                                uint64_t layerId, int frame) {
+    AnimLayer* layer = document.FindLayerById(layerId);
+    return layer != nullptr ? layer->FindMutable(frame) : nullptr;
+}
+
+bool DeleteShapesCommand::Do(AnimDocument& document) {
+    AnimKeyframe* key = FindKeyframe(document, layerId_, frame_);
+    if (key == nullptr || shapeIds_.empty()) {
+        return false;
+    }
+    removed_.clear();
+    for (uint64_t shapeId : shapeIds_) {
+        for (size_t i = 0; i < key->shapes.size(); ++i) {
+            if (key->shapes[i].id == shapeId) {
+                removed_.emplace_back(i, key->shapes[i]);
+                key->shapes.erase(key->shapes.begin() + static_cast<long>(i));
+                break;
+            }
+        }
+    }
+    if (removed_.empty()) {
+        return false; // nothing matched (already deleted): refuse the edit
+    }
+    // Restore in ascending index order so earlier insertions do not shift the
+    // positions of the later ones.
+    std::sort(removed_.begin(), removed_.end(),
+              [](const std::pair<size_t, AnimShape>& a,
+                 const std::pair<size_t, AnimShape>& b) {
+                  return a.first < b.first;
+              });
+    return true;
+}
+
+void DeleteShapesCommand::Undo(AnimDocument& document) {
+    AnimKeyframe* key = FindKeyframe(document, layerId_, frame_);
+    if (key == nullptr) {
+        return;
+    }
+    for (const auto& entry : removed_) {
+        const size_t at = std::min(entry.first, key->shapes.size());
+        key->shapes.insert(key->shapes.begin() + static_cast<long>(at),
+                           entry.second);
+    }
+}
+
 } // namespace anim
 } // namespace icg

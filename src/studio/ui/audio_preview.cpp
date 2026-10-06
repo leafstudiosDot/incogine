@@ -1,4 +1,4 @@
-// Incogine Studio — audio preview implementation.
+// Incogine Studio - audio preview implementation.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 #include "audio_preview.h"
 
@@ -210,7 +210,7 @@ AudioPreview::AudioPreview(const QString& path, QWidget* parent)
     playButton_ = new QPushButton(tr("Play"));
     playButton_->setFixedWidth(80);
     playButton_->setFocusPolicy(Qt::NoFocus);
-    // Playback unlocks once the waveform has loaded (or failed to —
+    // Playback unlocks once the waveform has loaded (or failed to -
     // the player backend is independent of the decoder).
     playButton_->setEnabled(false);
     timeLabel_ = new QLabel(tr("00:00 / 00:00"));
@@ -497,3 +497,4 @@ void AudioPreview::refreshInfo() {
     }
     infoLabel_->setText(text);
 }
+

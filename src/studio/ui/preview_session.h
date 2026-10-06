@@ -1,4 +1,4 @@
-// Incogine Studio — shared preview session (Qt Widgets + Core client).
+// Incogine Studio - shared preview session (Qt Widgets + Core client).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Owns the single preview game process and its channel: launch/stop,
@@ -68,3 +68,4 @@ private:
     uint32_t frameHeight_ = 0;
     uint32_t frameSeq_ = 0;
 };
+

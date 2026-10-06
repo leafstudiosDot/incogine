@@ -1,4 +1,4 @@
-// Incogine Studio — manual game build runner.
+// Incogine Studio - manual game build runner.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Owns the cmake QProcess: configure-on-first-run, then build of the
@@ -44,3 +44,4 @@ private:
     QString buffer_; // partial line across readyRead chunks
     bool configuring_ = false;
 };
+

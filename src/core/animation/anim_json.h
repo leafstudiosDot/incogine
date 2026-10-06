@@ -1,9 +1,9 @@
-// Incogine — minimal JSON value, parser, and writer (no third-party deps).
+// Incogine - minimal JSON value, parser, and writer (no third-party deps).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Why hand-rolled: `.incoanim` has to be readable by the SDL3 runtime, which
 // cannot depend on Qt, and the repo carries no JSON library. This mirrors the
-// existing stdlib-only codec approach (`incoba_detail.h`, `xml_util.h`) — and
+// existing stdlib-only codec approach (`incoba_detail.h`, `xml_util.h`) - and
 // the scope is deliberately small: it has to read back exactly what
 // `anim_json.cpp`'s writer produces.
 //
@@ -49,7 +49,7 @@ public:
 
     // Typed accessors. Each returns `fallback` when the type does not match, so
     // a hand-edited file with a wrong-typed field degrades instead of failing
-    // the whole load — the loader validates required fields separately.
+    // the whole load - the loader validates required fields separately.
     bool AsBool(bool fallback = false) const;
     double AsNumber(double fallback = 0.0) const;
     long long AsInt(long long fallback = 0) const;

@@ -1,4 +1,4 @@
-// Incogine Studio — C++ scene font/text-label scan (Qt-free, stdlib).
+// Incogine Studio - C++ scene font/text-label scan (Qt-free, stdlib).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Header `Font` declarations plus file-wide setFontFile/setTextContent/
@@ -83,7 +83,7 @@ int ResolveArraySize(const std::string& headerText, const std::string& expr) {
     }
     {
         // `Type name[] = { ... };` and bare `name = { ... };` (e.g. static
-        // const vectors) — count top-level initializers. Lookups are by
+        // const vectors) - count top-level initializers. Lookups are by
         // exact name, so extra entries are harmless.
         static const std::regex arrayInitRe(
             "([A-Za-z_]\\w*)\\s*(?:\\[\\s*\\])?\\s*=\\s*\\{");
@@ -783,7 +783,7 @@ void DetectPins(const std::string& rawArg, const std::string& var, int index,
     }
     if (flat.find("GetWindowSize()." + dim) != std::string::npos) {
         // Custom window-relative code (e.g. via locals): constrained, but
-        // the pin matcher doesn't name it — toggles stay convertible.
+        // the pin matcher doesn't name it - toggles stay convertible.
         pin.clear();
         return;
     }
@@ -1182,7 +1182,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
         }
         return out;
     };
-    // 2. setFontFile("path", pts) — per font (index ignored, uniform).
+    // 2. setFontFile("path", pts) - per font (index ignored, uniform).
     {
         static const std::regex fontFileRe(
             "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*setFontFile\\s*\\(\\s*"
@@ -1200,7 +1200,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
             it = m.suffix().first;
         }
     }
-    // 3. Literal setTextContent("...") — last wins per item.
+    // 3. Literal setTextContent("...") - last wins per item.
     {
         static const std::regex textRe(
             "([A-Za-z_]\\w*)\\s*(\\[[^\\]]*\\])?\\s*\\.\\s*setTextContent\\s*\\(\\s*"
@@ -1225,7 +1225,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
             it = m.suffix().first;
         }
     }
-    // 4. Numeric setColor(r, g, b, a) — last wins per item. Per-iteration
+    // 4. Numeric setColor(r, g, b, a) - last wins per item. Per-iteration
     //    colors inside loops depend on runtime selection state, so
     //    variable-index calls enclosed in a loop are skipped (items keep
     //    their default rather than baking one branch for all).
@@ -1428,7 +1428,7 @@ void ParseFonts(const std::string& headerText, const std::string& sourceText,
             }
         }
     }
-    // 5. renderUI(x, y) sites — last site wins per item; constant numeric
+    // 5. renderUI(x, y) sites - last site wins per item; constant numeric
     //    args place the item directly, counted-loop bodies evaluate
     //    per-iteration (locals + loop index, 1280x720 design constants),
     //    anything else marks the item dynamic. Loop-placed items share
@@ -1644,17 +1644,17 @@ bool SetTextPosition(SceneFile& file, const std::string& var, int index,
     }
     if (item->dynamicPos || !item->hasSite) {
         error = "dynamic layout for '" + var +
-                "' — edit the source instead of baking constants";
+                "' - edit the source instead of baking constants";
         return false;
     }
     if (item->hasConstraint) {
         error = "constrained layout for '" + var +
-                "' — unconstrain with the edge toggles or edit the source";
+                "' - unconstrain with the edge toggles or edit the source";
         return false;
     }
     if (item->sharedSite) {
         error = "shared loop layout for '" + var +
-                "' — one edit would move siblings; edit the source instead";
+                "' - one edit would move siblings; edit the source instead";
         return false;
     }
     return SetTextExpression(file, var, item->index, x, y, error);
@@ -1687,12 +1687,12 @@ bool SetTextExpression(SceneFile& file, const std::string& var, int index,
     }
     if (!item->hasSite) {
         error = "no renderUI site for '" + var +
-                "' — edit the source instead of baking constants";
+                "' - edit the source instead of baking constants";
         return false;
     }
     if (item->sharedSite) {
         error = "shared loop layout for '" + var +
-                "' — one edit would move siblings; edit the source instead";
+                "' - one edit would move siblings; edit the source instead";
         return false;
     }
     // Trim trailing whitespace inside each arg span, then splice the later
@@ -1708,7 +1708,7 @@ bool SetTextExpression(SceneFile& file, const std::string& var, int index,
         --a2e;
     }
     // NOTE: arg offsets address file.sourceText, but SpliceRange works on
-    // file.sourceLines — both derive from the same text, so convert via a
+    // file.sourceLines - both derive from the same text, so convert via a
     // temporary line split of the current text.
     const std::vector<size_t> starts = detail::LineStarts(file.sourceText);
     std::vector<std::string> lines = detail::SplitLines(file.sourceText, file.sourceEol);

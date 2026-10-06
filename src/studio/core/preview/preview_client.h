@@ -1,4 +1,4 @@
-// Incogine Studio — studio-preview consumer (Qt-free, stdlib only).
+// Incogine Studio - studio-preview consumer (Qt-free, stdlib only).
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
 // Reads frames published by a game running with --studio-preview and sends
@@ -59,3 +59,4 @@ private:
 } // namespace preview
 } // namespace studio
 } // namespace icg
+
