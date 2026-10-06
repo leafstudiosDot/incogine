@@ -29,6 +29,7 @@ class QLabel;
 class QLineEdit;
 class QSpinBox;
 class QWidget;
+class OptionsBar;
 
 // The editor window.
 class AnimatorWindow : public QMainWindow {
@@ -74,6 +75,7 @@ private slots:
 private:
     void buildMenus();
     void buildToolBar();
+    void buildOptionsBar();
     void buildDocks();
     void buildCentral();
     // Restores geometry/window state from QSettings; false on first run.
@@ -93,6 +95,11 @@ private:
     AnimatorCanvas* canvas_ = nullptr;
     QActionGroup* toolGroup_ = nullptr;
     QLabel* zoomLabel_ = nullptr;
+
+    // Tool options strip (M3): brush size / smoothing / opacity + stroke/fill
+    // colors + swatches. Owned here, edits the canvas directly.
+    OptionsBar* optionsBar_ = nullptr;
+    void refreshOptionsVisibility();
 
     QWidget* propertiesDock_ = nullptr;
     QSpinBox* widthSpin_ = nullptr;

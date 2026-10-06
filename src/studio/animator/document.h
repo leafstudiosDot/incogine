@@ -78,6 +78,12 @@ public:
     bool deleteShapes(uint64_t layerId, int frame,
                       const std::vector<uint64_t>& shapeIds);
 
+    // Adds one drawn shape (brush stroke, pen path) as one undo step,
+    // auto-creating the keyframe when needed. Returns the new shape id, or 0
+    // when the edit was refused. The shape is appended on top of the keyframe.
+    uint64_t addDrawnShape(uint64_t layerId, int frame, icg::anim::AnimPath path,
+                           icg::anim::AnimStyle style, const std::string& name);
+
     // --- autosave ---
     // Arms a timer that saves after `intervalMs` of inactivity. Editing while
     // dirty re-arms it, so a long drawing session writes periodically instead

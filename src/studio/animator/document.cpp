@@ -1,4 +1,4 @@
-#include "animator_document.h"
+#include "document.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -228,6 +228,28 @@ bool AnimatorDocument::deleteShapes(uint64_t layerId, int frame,
     }
     return apply(std::unique_ptr<IAnimCommand>(
         new icg::anim::DeleteShapesCommand(layerId, frame, shapeIds)));
+}
+
+uint64_t AnimatorDocument::addDrawnShape(uint64_t layerId, int frame,
+                                        icg::anim::AnimPath path,
+                                        icg::anim::AnimStyle style,
+                                        const std::string& name) {
+    if (layerId == 0 || frame < 1 || path.IsEmpty()) {
+        return 0;
+    }
+    icg::anim::AnimShape shape;
+    shape.id = document_.AllocId();
+    shape.name = name;
+    shape.path = std::move(path);
+    shape.style = style;
+    const uint64_t id = shape.id;
+    std::vector<icg::anim::AnimShape> shapes;
+    shapes.push_back(std::move(shape));
+    if (!apply(std::unique_ptr<IAnimCommand>(
+            new icg::anim::AddShapesCommand(layerId, frame, std::move(shapes))))) {
+        return 0;
+    }
+    return id;
 }
 
 // -------------------------------------------------------------- autosave --

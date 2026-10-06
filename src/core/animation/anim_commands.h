@@ -302,5 +302,28 @@ private:
     std::vector<std::pair<size_t, AnimShape>> removed_;
 };
 
+// Adds shapes to one keyframe, creating the keyframe when there is none.
+// When the keyframe does not exist it is created as a Key holding a copy of
+// the nearest keyframe at or before `frame` (Flash behavior: drawing on a
+// regular frame promotes it, keeping earlier artwork visible). Undo removes
+// the added shapes, and removes the whole keyframe when this command created
+// it, restoring the exact prior state.
+class AddShapesCommand : public IAnimCommand {
+public:
+    AddShapesCommand(uint64_t layerId, int frame,
+                     std::vector<AnimShape> shapes)
+        : layerId_(layerId), frame_(frame), shapes_(std::move(shapes)) {}
+    const char* name() const override { return "Draw"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+private:
+    uint64_t layerId_;
+    int frame_;
+    std::vector<AnimShape> shapes_;
+    std::vector<uint64_t> addedIds_;
+    bool createdKeyframe_ = false;
+};
+
 } // namespace anim
 } // namespace icg

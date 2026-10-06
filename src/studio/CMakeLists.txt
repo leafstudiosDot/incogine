@@ -183,16 +183,22 @@ if(Qt6Widgets_FOUND)
     # animation module, so the editor edits the same model the runtime bakes.
     set(ICG_ANIMATOR_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_main.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_channel.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_canvas.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_canvas.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_document.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_tools.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_tools.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/animator/animator_window.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/channel.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/channel.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/canvas.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/canvas.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/document.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/document.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/window.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/window.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/tools.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/tools.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/hand.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/cursor.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/brush.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/pen.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/widgets/options_bar.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/widgets/options_bar.cpp
     )
     add_executable(IncogineAnimator ${ICG_ANIMATOR_SOURCES})
     # IncogineStudioCore supplies the shared single-instance channel name, so

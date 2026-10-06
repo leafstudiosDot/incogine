@@ -23,11 +23,14 @@ animation editor can sit beside it rather than inside it.
 | Data model, geometry, `.incoanim` IO, importer | `src/core/animation/` (`IncogineAnim`, Qt-free) |
 | Importer registry seam | `src/core/assets/assetimport.h` (`IncogineAssets`, Qt-free) |
 | Editor window, canvas, tools, timeline | `src/studio/animator/` (Qt) |
-| Editor window | `src/studio/animator/animator_window.*` |
-| Document controller (document + stack + dirty + autosave) | `src/studio/animator/animator_document.*` |
-| Stage canvas and view transform | `src/studio/animator/animator_canvas.*` |
-| Tool interface (`ITool`), Hand, Cursor | `src/studio/animator/animator_tools.*` |
-| Single-instance channel (server side) | `src/studio/animator/animator_channel.*` |
+| Editor window | `src/studio/animator/window.*` |
+| Document controller (document + stack + dirty + autosave) | `src/studio/animator/document.*` |
+| Stage canvas and view transform | `src/studio/animator/canvas.*` |
+| Tool interface (`ITool`) + registry | `src/studio/animator/tools/tools.*` |
+| Hand / Cursor / Brush / Pen tools | `src/studio/animator/tools/hand.cpp`, `cursor.cpp`, `brush.cpp`, `pen.cpp` |
+| Tool options strip (size/smoothing/colors/swatches) | `src/studio/animator/widgets/options_bar.*` |
+| Single-instance channel (server side) | `src/studio/animator/channel.*` |
+| Entry point (`animator_main.cpp` keeps its prefix: `main.cpp` would collide with `src/main.cpp`) | `src/studio/animator/animator_main.cpp` |
 
 The model and all rasterization live in the **engine**, with no Qt dependency,
 so the SDL3 runtime can load `.incoanim` files itself. Studio's window is a thin
@@ -106,12 +109,12 @@ command stack, and the document-properties dock.
 - **Pan / zoom**: wheel zooms *at the cursor*, `Ctrl+0` fits the stage,
   `Ctrl+=` / `Ctrl+-` step, a live zoom readout sits in the status bar, and
   `Space`+drag pans temporarily with *any* tool. Middle-drag always pans.
-- **Tools** go through an `ITool` interface (`animator_tools.h`). The canvas owns
+- **Tools** go through an `ITool` interface (`tools/tools.h`). The canvas owns
   painting and the view transform and forwards input to the active tool, so
-  adding Pen, Line, Rect, Ellipse, Paint Bucket, Eraser, or Transform later means
+  adding Line, Rect, Ellipse, Paint Bucket, Eraser, or Transform later means
   writing one subclass and adding one line to `ToolSet`'s constructor — no change
-  to the canvas or the window. Milestone 2 ships **Hand** (pan) and **Cursor**
-  (select / move / delete / marquee).
+  to the canvas or the window. Shortcuts live on the tool (`V`/`H`/`B`/`P`) so a
+  new tool brings its own key.
 - **Selection** is a set of shape ids on the active layer's active keyframe,
   pruned automatically when the document changes so ids cannot outlive their
   shapes. Click selects, `Shift`+click adds, `Ctrl`+click toggles, dragging empty
@@ -123,6 +126,22 @@ command stack, and the document-properties dock.
 - **A drag is one undo step.** The shape transforms are mutated live for
   immediate feedback and the pre-drag transforms are captured, so release pushes a
   single `MoveShapesCommand`; a click that never moved pushes nothing.
+- **Brush (`B`)**: drag to paint a stroked path. Input is throttled to ~2 screen
+  px, then RDP-simplified and fitted to Beziers on release, so a shaky hand
+  produces a clean selectable stroke. A bare click makes a filled dot in the
+  stroke color. Size (stage units), smoothing, color, and opacity come from the
+  tool options strip; `Esc` cancels a stroke.
+- **Pen (`P`)**: Flash-style — click places corner points, click-drag pulls
+  symmetric Bezier handles for smooth points, clicking the start point closes,
+  double-click or `Enter` finishes an open path, `Esc` cancels, `Backspace`
+  drops the last point. Strokes only in M3; closed paths stay open strokes.
+- **Tool options strip** under the main toolbar, visible only for Brush/Pen:
+  size, smoothing, opacity, stroke + fill pickers, and swatches (click = stroke,
+  `Alt`+click = fill). Settings persist via `QSettings`; fill is stored for
+  future shape tools.
+- **Drawing auto-creates the keyframe** when the current frame has none,
+  copying the nearest earlier keyframe so the span stays continuous; undo
+  removes the whole promoted keyframe, restoring the exact prior state.
 
 Headless verification:
 
@@ -130,11 +149,13 @@ Headless verification:
 QT_QPA_PLATFORM=offscreen IncogineAnimator --self-test
 ```
 
-runs 56 checks: the command stack (edit/dirty/undo/redo, refused no-ops, layer
+runs 70+ checks: the command stack (edit/dirty/undo/redo, refused no-ops, layer
 add+undo, stage resize+undo), a save → reset → reload round trip, then the
 canvas — stage outline and fill pixels actually painted, view-transform
 round-trip, hit testing, selection, a drag with exact undo restoration, marquee
-enclosure, delete with undo, locked-layer refusal, and tool dispatch. It plants a
+enclosure, delete with undo, locked-layer refusal, tool dispatch (all four tools
+with shortcuts), drawing options, a committed stroke with hit-test + undo/redo,
+and locked-layer draw refusal leaving no history. It plants a
 fixture keyframe and shape when the document has none, so it works both bare and
 with a file argument. It exits non-zero on any failure.
 

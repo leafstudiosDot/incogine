@@ -1,4 +1,4 @@
-#include "animator_window.h"
+#include "window.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -21,9 +21,10 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
-#include "animator_canvas.h"
-#include "animator_channel.h"
-#include "animator_document.h"
+#include "canvas.h"
+#include "channel.h"
+#include "document.h"
+#include "widgets/options_bar.h"
 
 using icg::anim::AnimDocument;
 
@@ -66,6 +67,7 @@ AnimatorWindow::AnimatorWindow(QWidget* parent) : QMainWindow(parent) {
     buildCentral();
     buildDocks();
     buildToolBar();
+    buildOptionsBar();
     buildMenus();
 
     connect(document_.get(), &AnimatorDocument::documentChanged, this,
@@ -132,9 +134,12 @@ void AnimatorWindow::buildToolBar() {
             action->setToolTip(hint.isEmpty() ? tool->label()
                                               : tr("%1  (%2)").arg(tool->label(), hint));
             action->setData(id);
-            // First-letter shortcuts: V for Selection, H for Hand. Assigned from
-            // the tool's own id so a new tool gets one without extra wiring.
-            if (!id.isEmpty()) {
+            // Per-tool shortcut (V/H/B/P). Falls back to the id's first letter
+            // so a future tool without an explicit key still gets one.
+            const QString key = tool->keyShortcut();
+            if (!key.isEmpty()) {
+                action->setShortcut(QKeySequence(key));
+            } else if (!id.isEmpty()) {
                 action->setShortcut(QKeySequence(id.at(0).toUpper()));
             }
             connect(action, &QAction::triggered, this,
@@ -179,6 +184,22 @@ void AnimatorWindow::buildToolBar() {
     zoomLabel_->setAlignment(Qt::AlignCenter);
     statusBar()->addPermanentWidget(zoomLabel_);
     onZoomChanged(100.0);
+}
+
+void AnimatorWindow::buildOptionsBar() {
+    optionsBar_ = new OptionsBar(canvas_, this);
+    addToolBar(optionsBar_);
+    refreshOptionsVisibility();
+}
+
+void AnimatorWindow::refreshOptionsVisibility() {
+    if (optionsBar_ == nullptr || canvas_ == nullptr ||
+        canvas_->activeTool() == nullptr) {
+        return;
+    }
+    const std::string id = canvas_->activeTool()->id();
+    const bool drawing = id == "brush" || id == "pen";
+    optionsBar_->setVisible(drawing);
 }
 
 void AnimatorWindow::buildDocks() {
@@ -576,6 +597,7 @@ void AnimatorWindow::onToolTriggered() {
         return;
     }
     canvas_->setActiveTool(action->data().toString().toStdString());
+    refreshOptionsVisibility();
     // Give the canvas keyboard focus so Space (temporary Hand) and Delete work
     // without an extra click.
     canvas_->setFocus(Qt::OtherFocusReason);

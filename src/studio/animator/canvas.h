@@ -27,11 +27,24 @@
 #include "animation/anim_commands.h"
 #include "animation/anim_document.h"
 #include "animation/anim_geometry.h"
-#include "animator_tools.h"
+#include "tools/tools.h"
 
 class AnimatorDocument;
 class ITool;
 class HandTool;
+
+// Brush / pen style shared by the drawing tools. Owned by the canvas; the
+// options strip in the window edits it, and the tools read it when committing.
+// Fill is stored for future shape tools - brush and pen are stroke-only in M3
+// (except a single-click brush dot, which is a filled circle in the stroke
+// color so it looks like a dot rather than a ring).
+struct DrawingOptions {
+    icg::anim::AnimColor strokeColor = icg::anim::AnimColor(0, 0, 0, 255);
+    float strokeWidth = 4.0f; // stage units, zoom-independent
+    float opacity = 1.0f;     // 0..1, multiplies the stroke alpha
+    float smoothing = 1.5f;   // RDP tolerance in stage units
+    icg::anim::AnimColor fillColor = icg::anim::AnimColor(255, 255, 255, 255);
+};
 
 // Pan/zoom mapping between widget pixels and stage units.
 class StageView {
@@ -126,6 +139,20 @@ public:
     void deleteSelection();
     void reportStatus(const QString& text);
 
+    // --- drawing style (Brush / Pen) ---
+    const DrawingOptions& drawingOptions() const { return drawOptions_; }
+    void setStrokeWidth(float width);
+    void setStrokeColor(const icg::anim::AnimColor& color);
+    void setStrokeOpacity(float opacity);
+    void setSmoothing(float tolerance);
+    void setFillColor(const icg::anim::AnimColor& color);
+
+    // Commits one drawn shape on the active keyframe as one undo step,
+    // auto-creating the keyframe when needed. Selects the new shape. Returns
+    // the new shape id, or 0 when refused (locked/hidden layer, empty path).
+    uint64_t addDrawnShape(icg::anim::AnimPath path, icg::anim::AnimStyle style,
+                           const std::string& name);
+
     // --- view helpers the tools use ---
     // Pans by a widget-pixel delta. Kept here so HandTool does not need to know
     // how the transform is stored.
@@ -202,6 +229,7 @@ private:
     DragState drag_;
     bool needsFitOnFirstSize_ = true;
     QHash<uint64_t, icg::anim::FlatPath> pathCache_;
+    DrawingOptions drawOptions_;
 
     // Tool dispatch. The canvas owns the tools and forwards input; Space
     // temporarily routes everything to the Hand tool.

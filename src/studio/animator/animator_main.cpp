@@ -25,10 +25,10 @@
 
 #include <iostream>
 
-#include "animator_channel.h"
-#include "animator_canvas.h"
-#include "animator_document.h"
-#include "animator_window.h"
+#include "canvas.h"
+#include "channel.h"
+#include "document.h"
+#include "window.h"
 
 namespace {
 
@@ -265,9 +265,65 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
         // Tool dispatch.
         check(canvas->activeTool() != nullptr, "a tool is active by default");
         check(canvas->toolSet() != nullptr &&
-                  canvas->toolSet()->all().size() == 2,
-              "tool set holds Cursor and Hand");
+                  canvas->toolSet()->all().size() == 4,
+              "tool set holds Cursor, Hand, Brush, Pen");
         check(canvas->handTool() != nullptr, "hand tool available for Space");
+        check(canvas->toolSet()->find("brush") != nullptr, "brush tool registered");
+        check(canvas->toolSet()->find("pen") != nullptr, "pen tool registered");
+        check(canvas->toolSet()->find("brush")->keyShortcut() == "B",
+              "brush shortcut is B");
+        check(canvas->toolSet()->find("pen")->keyShortcut() == "P",
+              "pen shortcut is P");
+
+        // Drawing options round-trip through the canvas.
+        canvas->setStrokeWidth(7.5f);
+        check(canvas->drawingOptions().strokeWidth == 7.5f, "stroke width set");
+        canvas->setStrokeOpacity(0.5f);
+        check(canvas->drawingOptions().opacity == 0.5f, "opacity set");
+        canvas->setSmoothing(2.5f);
+        check(canvas->drawingOptions().smoothing == 2.5f, "smoothing set");
+
+        // A drawn shape commits through the stack, selects itself, and undoes.
+        {
+            icg::anim::AnimPath path = icg::anim::AnimPath::FromRect(
+                500.0f, 400.0f, 60.0f, 30.0f);
+            icg::anim::AnimStyle style;
+            style.hasFill = false;
+            style.hasStroke = true;
+            style.stroke = icg::anim::AnimColor(10, 20, 30, 40);
+            style.strokeWidth = 7.5f;
+            const uint64_t layerId = canvas->activeLayerId();
+            const int frame = canvas->currentFrame();
+            const size_t before =
+                canvas->activeKeyframe()->shapes.size();
+            const uint64_t drawnId =
+                canvas->addDrawnShape(std::move(path), style, "Self Test Stroke");
+            check(drawnId != 0, "drawn shape committed");
+            check(canvas->activeKeyframe()->shapes.size() == before + 1,
+                  "drawn shape appended on top");
+            check(canvas->isSelected(drawnId), "drawn shape auto-selected");
+            check(canvas->hitTest(QPointF(505.0, 400.0)) != 0,
+                  "drawn stroke is hit-testable");
+            check(doc->undo(), "draw undo available");
+            check(canvas->activeKeyframe()->shapes.size() == before,
+                  "draw undo removed the shape");
+            check(doc->redo(), "draw redo available");
+        }
+
+        // A locked layer refuses new shapes without touching the stack.
+        {
+            const size_t depthBefore = doc->stack().undoDepth();
+            doc->document().layers[0].locked = true;
+            icg::anim::AnimPath path = icg::anim::AnimPath::FromRect(
+                0.0f, 0.0f, 10.0f, 10.0f);
+            icg::anim::AnimStyle style;
+            style.hasStroke = true;
+            check(canvas->addDrawnShape(std::move(path), style, "Blocked") == 0,
+                  "locked layer refuses new shapes");
+            check(doc->stack().undoDepth() == depthBefore,
+                  "refused draw leaves no history");
+            doc->document().layers[0].locked = false;
+        }
     }
 
     QFile::remove(tempPath);

@@ -397,5 +397,76 @@ void DeleteShapesCommand::Undo(AnimDocument& document) {
     }
 }
 
+bool AddShapesCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr || shapes_.empty()) {
+        return false;
+    }
+    if (frame_ < 1 || frame_ > document.FrameCount()) {
+        return false;
+    }
+    for (const AnimShape& shape : shapes_) {
+        if (shape.path.IsEmpty()) {
+            return false; // refuse rather than push an invisible shape
+        }
+    }
+
+    AnimKeyframe* key = layer->FindMutable(frame_);
+    createdKeyframe_ = false;
+    if (key == nullptr) {
+        // Promote this frame: copy the nearest earlier keyframe so existing
+        // artwork stays visible, then append the new shapes on top.
+        AnimKeyframe fresh;
+        fresh.frame = frame_;
+        fresh.kind = KeyframeKind::Key;
+        const AnimKeyframe* source = layer->AtOrBefore(frame_);
+        if (source != nullptr) {
+            fresh.shapes = source->shapes;
+            fresh.transform = source->transform;
+        }
+        layer->SetKeyframe(std::move(fresh));
+        key = layer->FindMutable(frame_);
+        if (key == nullptr) {
+            return false;
+        }
+        createdKeyframe_ = true;
+    }
+
+    addedIds_.clear();
+    for (AnimShape& shape : shapes_) {
+        if (shape.id == 0) {
+            shape.id = document.AllocId();
+        }
+        addedIds_.push_back(shape.id);
+        key->shapes.push_back(shape);
+    }
+    return true;
+}
+
+void AddShapesCommand::Undo(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr) {
+        return;
+    }
+    if (createdKeyframe_) {
+        // Whole keyframe is ours: removing it restores the exact prior state
+        // (the copied shapes live on in the earlier keyframe).
+        layer->RemoveKeyframe(frame_);
+        return;
+    }
+    AnimKeyframe* key = layer->FindMutable(frame_);
+    if (key == nullptr) {
+        return;
+    }
+    for (uint64_t id : addedIds_) {
+        for (size_t i = 0; i < key->shapes.size(); ++i) {
+            if (key->shapes[i].id == id) {
+                key->shapes.erase(key->shapes.begin() + static_cast<long>(i));
+                break;
+            }
+        }
+    }
+}
+
 } // namespace anim
 } // namespace icg

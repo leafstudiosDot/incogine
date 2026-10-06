@@ -1,4 +1,4 @@
-#include "animator_canvas.h"
+#include "canvas.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "animator_document.h"
+#include "document.h"
 
 using icg::anim::AnimColor;
 using icg::anim::AnimKeyframe;
@@ -770,6 +770,75 @@ void AnimatorCanvas::deleteSelection() {
 
 void AnimatorCanvas::reportStatus(const QString& text) {
     emit statusMessage(text);
+}
+
+// ------------------------------------------------------- drawing options --
+
+void AnimatorCanvas::setStrokeWidth(float width) {
+    if (width < 0.5f) {
+        width = 0.5f;
+    }
+    if (width > 100.0f) {
+        width = 100.0f;
+    }
+    drawOptions_.strokeWidth = width;
+    update();
+}
+
+void AnimatorCanvas::setStrokeColor(const icg::anim::AnimColor& color) {
+    drawOptions_.strokeColor = color;
+    update();
+}
+
+void AnimatorCanvas::setStrokeOpacity(float opacity) {
+    if (opacity < 0.05f) {
+        opacity = 0.05f;
+    }
+    if (opacity > 1.0f) {
+        opacity = 1.0f;
+    }
+    drawOptions_.opacity = opacity;
+    update();
+}
+
+void AnimatorCanvas::setSmoothing(float tolerance) {
+    if (tolerance < 0.0f) {
+        tolerance = 0.0f;
+    }
+    if (tolerance > 8.0f) {
+        tolerance = 8.0f;
+    }
+    drawOptions_.smoothing = tolerance;
+}
+
+void AnimatorCanvas::setFillColor(const icg::anim::AnimColor& color) {
+    drawOptions_.fillColor = color;
+}
+
+uint64_t AnimatorCanvas::addDrawnShape(icg::anim::AnimPath path,
+                                      icg::anim::AnimStyle style,
+                                      const std::string& name) {
+    if (document_ == nullptr || path.IsEmpty()) {
+        return 0;
+    }
+    if (!isEditable()) {
+        reportStatus(tr("Layer is locked - nothing drawn."));
+        return 0;
+    }
+    const uint64_t layerId = activeLayerId();
+    if (layerId == 0) {
+        reportStatus(tr("No visible layer - nothing drawn."));
+        return 0;
+    }
+    const uint64_t id =
+        document_->addDrawnShape(layerId, currentFrame_, std::move(path), style, name);
+    if (id == 0) {
+        return 0;
+    }
+    // Select the new stroke so the user gets immediate feedback and can move
+    // it straight away with the Selection tool.
+    setSelection(QSet<uint64_t>{id});
+    return id;
 }
 
 // ---------------------------------------------------------------- events --

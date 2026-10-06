@@ -841,6 +841,71 @@ static void TestCommandStack() {
                                        new SetBakeScaleCommand(0.0f))));
     CHECK(!styleStack.Execute(doc, std::unique_ptr<IAnimCommand>(
                                        new SetBakeScaleCommand(-1.0f))));
+
+    // AddShapesCommand: brush/pen strokes land on top, undo removes them.
+    AnimCommandStack drawStack;
+    AnimDocument sketch = AnimDocument::New(640, 480, 24);
+    sketch.lengthFrames = 24;
+    const uint64_t sketchLayer = sketch.layers[0].id;
+    AnimKeyframe seed;
+    seed.frame = 1;
+    seed.kind = KeyframeKind::Key;
+    sketch.layers[0].SetKeyframe(seed);
+
+    AnimShape stroke;
+    stroke.id = sketch.AllocId();
+    stroke.name = "stroke";
+    stroke.path = AnimPath::FromRect(0.0f, 0.0f, 40.0f, 10.0f);
+    stroke.style.hasFill = false;
+    stroke.style.hasStroke = true;
+    std::vector<AnimShape> one;
+    one.push_back(stroke);
+    REQUIRE(drawStack.Execute(
+        sketch, std::unique_ptr<IAnimCommand>(
+                    new AddShapesCommand(sketchLayer, 1, std::move(one)))));
+    REQUIRE(sketch.layers[0].Find(1) != nullptr);
+    CHECK_EQ(sketch.layers[0].Find(1)->shapes.size(), static_cast<size_t>(1));
+    CHECK(drawStack.Undo(sketch));
+    CHECK_EQ(sketch.layers[0].Find(1)->shapes.size(), static_cast<size_t>(0));
+    CHECK(drawStack.Redo(sketch));
+    CHECK_EQ(sketch.layers[0].Find(1)->shapes.size(), static_cast<size_t>(1));
+
+    // Drawing on a frame with no keyframe promotes it, copying earlier artwork
+    // so the span stays continuous; undo removes the whole promoted keyframe.
+    AnimShape second;
+    second.id = sketch.AllocId();
+    second.path = AnimPath::FromRect(100.0f, 100.0f, 20.0f, 20.0f);
+    second.style.hasStroke = true;
+    std::vector<AnimShape> two;
+    two.push_back(second);
+    REQUIRE(drawStack.Execute(
+        sketch, std::unique_ptr<IAnimCommand>(
+                    new AddShapesCommand(sketchLayer, 10, std::move(two)))));
+    REQUIRE(sketch.layers[0].Find(10) != nullptr);
+    // Promoted key holds the copied stroke plus the new shape.
+    CHECK_EQ(sketch.layers[0].Find(10)->shapes.size(), static_cast<size_t>(2));
+    CHECK(drawStack.Undo(sketch));
+    CHECK(sketch.layers[0].Find(10) == nullptr);
+    CHECK(drawStack.Redo(sketch));
+    REQUIRE(sketch.layers[0].Find(10) != nullptr);
+    CHECK_EQ(sketch.layers[0].Find(10)->shapes.size(), static_cast<size_t>(2));
+
+    // Refusals: empty path, bad layer, out-of-range frame.
+    AnimShape empty;
+    empty.id = sketch.AllocId();
+    std::vector<AnimShape> emptyVec;
+    emptyVec.push_back(empty);
+    CHECK(!drawStack.Execute(
+        sketch, std::unique_ptr<IAnimCommand>(
+                    new AddShapesCommand(sketchLayer, 1, std::move(emptyVec)))));
+    AnimShape ghost;
+    ghost.id = sketch.AllocId();
+    ghost.path = AnimPath::FromRect(0.0f, 0.0f, 5.0f, 5.0f);
+    std::vector<AnimShape> ghostVec;
+    ghostVec.push_back(ghost);
+    CHECK(!drawStack.Execute(
+        sketch, std::unique_ptr<IAnimCommand>(
+                    new AddShapesCommand(999999, 1, std::move(ghostVec)))));
 }
 
 int main() {

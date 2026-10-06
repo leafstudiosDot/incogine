@@ -1,4 +1,4 @@
-#include "animator_channel.h"
+#include "channel.h"
 
 #include "core/anim_channel.h"
 
