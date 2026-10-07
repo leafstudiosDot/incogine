@@ -67,6 +67,20 @@ public:
     bool setLayerLocked(uint64_t layerId, bool locked);
     bool moveLayer(size_t from, size_t to);
 
+    // --- frame edits (timeline; each goes through the command stack) ---
+    // Insert/remove frames at `frame` across all layers (Flash F5/Shift+F5).
+    bool insertFrames(int frame, int count = 1);
+    bool removeFrames(int frame, int count = 1);
+    // Insert one keyframe (Flash F6 key / F7 blank). Fails when one sits there.
+    bool insertKeyframe(uint64_t layerId, int frame, bool blank);
+    // Remove the keyframe at `frame` so the span falls back. Fails when none.
+    bool clearKeyframe(uint64_t layerId, int frame);
+    // Paste copied keyframes at `frame`, preserving relative offsets. The
+    // clipboard lives in the timeline widget (a read-only model copy); the
+    // command owns replacement, id remapping, and undo.
+    bool pasteFrames(uint64_t layerId, int frame,
+                     std::vector<icg::anim::AnimKeyframe> keys);
+
     // --- shape edits (Cursor tool) ---
     // Commits a drag as ONE undo step. `start`/`end` are the per-shape transform
     // pairs the drag produced; an empty list or one where nothing actually moved

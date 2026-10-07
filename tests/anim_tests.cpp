@@ -1581,6 +1581,248 @@ static void TestSceneMesh() {
     }
 }
 
+// ---------------------------------------------------------- frame ops --
+
+// Timeline frame operations (M4 editing model): every op below is one undo
+// step, refuses cleanly when there is nothing to do, and round-trips through
+// undo AND redo back to the exact prior state.
+static AnimDocument MakeTimelineDoc() {
+    AnimDocument doc = AnimDocument::New(1280, 720, 24);
+    doc.lengthFrames = 10;
+    for (int l = 0; l < 2; ++l) {
+        AnimLayer layer;
+        layer.id = doc.AllocId();
+        layer.name = l == 0 ? "A" : "B";
+        for (int f : {1, 5}) {
+            AnimKeyframe key;
+            key.frame = f;
+            AnimShape shape;
+            shape.id = doc.AllocId();
+            shape.name = "L" + layer.name + "F" + std::to_string(f);
+            AnimSegment mv(AnimSegment::Kind::Move);
+            mv.p[0] = Vec2(static_cast<float>(f), 0.0f);
+            shape.path.segments.push_back(mv);
+            key.shapes.push_back(shape);
+            layer.frames.push_back(key);
+        }
+        doc.layers.push_back(layer);
+    }
+    return doc;
+}
+
+static void TestFrameOps() {
+    TEST_GROUP("frame ops");
+
+    // InsertFrames: timeline grows, keys at/after shift, undo restores.
+    {
+        AnimDocument doc = MakeTimelineDoc();
+        AnimCommandStack stack;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertFramesCommand(5, 2))));
+        CHECK_EQ(doc.lengthFrames, 12);
+        for (const AnimLayer& layer : doc.layers) {
+            if (layer.name != "A" && layer.name != "B") {
+                continue;
+            }
+            CHECK(layer.Find(1) != nullptr);
+            CHECK(layer.Find(5) == nullptr);
+            REQUIRE(layer.Find(7) != nullptr);
+            CHECK_EQ(layer.Find(7)->shapes[0].name,
+                     "L" + layer.name + "F5");
+        }
+        REQUIRE(stack.Undo(doc));
+        CHECK_EQ(doc.lengthFrames, 10);
+        for (const AnimLayer& layer : doc.layers) {
+            if (layer.name != "A" && layer.name != "B") {
+                continue;
+            }
+            REQUIRE(layer.Find(5) != nullptr);
+        }
+        REQUIRE(stack.Redo(doc));
+        CHECK_EQ(doc.lengthFrames, 12);
+        // Inserting past the end clamps to append; frame 0 refuses.
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertFramesCommand(99, 1))));
+        CHECK_EQ(doc.lengthFrames, 13);
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertFramesCommand(0, 1))));
+    }
+
+    // RemoveFrames: timeline shrinks, dropped keys come back on undo,
+    // collisions merge forward and restore on undo.
+    {
+        AnimDocument doc = MakeTimelineDoc();
+        AnimCommandStack stack;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new RemoveFramesCommand(5, 2))));
+        CHECK_EQ(doc.lengthFrames, 8);
+        for (const AnimLayer& layer : doc.layers) {
+            if (layer.name != "A" && layer.name != "B") {
+                continue;
+            }
+            // F5 key is gone (shifted to 3? no: removed range [5,6], keys at
+            // 1 stay, keys past 6 shift left by 2 - nothing past 6 here).
+            CHECK(layer.Find(5) == nullptr);
+            CHECK(layer.Find(1) != nullptr);
+        }
+        REQUIRE(stack.Undo(doc));
+        CHECK_EQ(doc.lengthFrames, 10);
+        for (const AnimLayer& layer : doc.layers) {
+            if (layer.name != "A" && layer.name != "B") {
+                continue;
+            }
+            REQUIRE(layer.Find(5) != nullptr);
+            CHECK_EQ(layer.Find(5)->shapes[0].name,
+                     "L" + layer.name + "F5");
+        }
+        // Removing past the end refuses; shrinking floors the length at 1.
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new RemoveFramesCommand(99, 1))));
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new RemoveFramesCommand(1, 50))));
+        CHECK_EQ(doc.lengthFrames, 1);
+        REQUIRE(stack.Undo(doc));
+        CHECK_EQ(doc.lengthFrames, 10);
+    }
+
+    // RemoveFrames deletes the range content and shifts only the tail: keys
+    // at 4 and 6 with frame 4 removed -> 4 is gone, 6 lands on 5. Undo
+    // restores both exactly (no merge ever eats a keyframe).
+    {
+        AnimDocument doc = AnimDocument::New(1280, 720, 24);
+        doc.lengthFrames = 10;
+        AnimLayer layer;
+        layer.id = doc.AllocId();
+        for (int f : {4, 6}) {
+            AnimKeyframe key;
+            key.frame = f;
+            AnimShape shape;
+            shape.id = doc.AllocId();
+            shape.name = "F" + std::to_string(f);
+            key.shapes.push_back(shape);
+            layer.frames.push_back(key);
+        }
+        doc.layers.push_back(layer);
+        const uint64_t lid = layer.id;
+        AnimCommandStack stack;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new RemoveFramesCommand(4, 1))));
+        CHECK_EQ(doc.lengthFrames, 9);
+        REQUIRE(doc.FindLayerById(lid)->Find(4) == nullptr);
+        REQUIRE(doc.FindLayerById(lid)->Find(5) != nullptr);
+        CHECK_EQ(doc.FindLayerById(lid)->Find(5)->shapes[0].name, "F6");
+        REQUIRE(stack.Undo(doc));
+        CHECK_EQ(doc.lengthFrames, 10);
+        REQUIRE(doc.FindLayerById(lid)->Find(4) != nullptr);
+        REQUIRE(doc.FindLayerById(lid)->Find(6) != nullptr);
+        CHECK_EQ(doc.FindLayerById(lid)->Find(4)->shapes[0].name, "F4");
+        CHECK_EQ(doc.FindLayerById(lid)->Find(6)->shapes[0].name, "F6");
+        REQUIRE(stack.Redo(doc));
+        CHECK(doc.FindLayerById(lid)->Find(4) == nullptr);
+        CHECK_EQ(doc.FindLayerById(lid)->Find(5)->shapes[0].name, "F6");
+    }
+
+    // InsertKeyframe: blank is empty, key copies the span's artwork,
+    // existing refuses, undo removes, redo restores.
+    {
+        AnimDocument doc = MakeTimelineDoc();
+        AnimCommandStack stack;
+        const uint64_t layerId = doc.layers.back().id;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertKeyframeCommand(
+                                             layerId, 3,
+                                             KeyframeKind::Blank))));
+        REQUIRE(doc.FindLayerById(layerId)->Find(3) != nullptr);
+        CHECK(doc.FindLayerById(layerId)->Find(3)->shapes.empty());
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertKeyframeCommand(
+                                             layerId, 7, KeyframeKind::Key))));
+        const AnimKeyframe* copied = doc.FindLayerById(layerId)->Find(7);
+        REQUIRE(copied != nullptr);
+        REQUIRE_EQ(copied->shapes.size(), static_cast<size_t>(1));
+        CHECK_EQ(copied->shapes[0].name,
+                 doc.FindLayerById(layerId)->Find(5)->shapes[0].name);
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertKeyframeCommand(
+                                             layerId, 7, KeyframeKind::Key))));
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new InsertKeyframeCommand(
+                                             999999, 3, KeyframeKind::Blank))));
+        REQUIRE(stack.Undo(doc)); // removes the F7 key
+        CHECK(doc.FindLayerById(layerId)->Find(7) == nullptr);
+        REQUIRE(stack.Redo(doc));
+        CHECK(doc.FindLayerById(layerId)->Find(7) != nullptr);
+    }
+
+    // ClearKeyframe: removes the key so the span falls back; missing fails.
+    {
+        AnimDocument doc = MakeTimelineDoc();
+        AnimCommandStack stack;
+        const uint64_t layerId = doc.layers.back().id;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new ClearKeyframeCommand(layerId, 5))));
+        CHECK(doc.FindLayerById(layerId)->Find(5) == nullptr);
+        // Span falls back to the F1 key.
+        REQUIRE(doc.FindLayerById(layerId)->AtOrBefore(5) != nullptr);
+        CHECK_EQ(doc.FindLayerById(layerId)->AtOrBefore(5)->frame, 1);
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new ClearKeyframeCommand(layerId, 5))));
+        REQUIRE(stack.Undo(doc));
+        REQUIRE(doc.FindLayerById(layerId)->Find(5) != nullptr);
+        CHECK_EQ(doc.FindLayerById(layerId)->Find(5)->shapes[0].name, "LBF5");
+        REQUIRE(stack.Redo(doc));
+        CHECK(doc.FindLayerById(layerId)->Find(5) == nullptr);
+    }
+
+    // PasteFrames: relative offsets preserved, ids remapped, replaced keys
+    // restored on undo, out-of-range skipped, empty clipboard refused.
+    {
+        AnimDocument doc = MakeTimelineDoc();
+        AnimCommandStack stack;
+        const uint64_t layerId = doc.layers.back().id;
+        std::vector<AnimKeyframe> clipboard;
+        clipboard.push_back(*doc.FindLayerById(layerId)->Find(1));
+        clipboard.push_back(*doc.FindLayerById(layerId)->Find(5));
+        const uint64_t originalId =
+            doc.FindLayerById(layerId)->Find(1)->shapes[0].id;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new PasteFramesCommand(layerId, 7,
+                                                                clipboard))));
+        // Range [1,5] pasted at 7 -> keys at 7 and 11... 11 is past length 10,
+        // so only 7 lands (5+6=11 skipped).
+        const AnimKeyframe* pasted = doc.FindLayerById(layerId)->Find(7);
+        REQUIRE(pasted != nullptr);
+        REQUIRE_EQ(pasted->shapes.size(), static_cast<size_t>(1));
+        CHECK(pasted->shapes[0].id != originalId);
+        CHECK(doc.FindLayerById(layerId)->Find(1) != nullptr); // source kept
+        REQUIRE(stack.Undo(doc));
+        // Destination 7 had no key before (keys were at 1,5), so it is gone;
+        // source keys untouched throughout.
+        CHECK(doc.FindLayerById(layerId)->Find(7) == nullptr);
+        REQUIRE(doc.FindLayerById(layerId)->Find(5) != nullptr);
+        REQUIRE(stack.Redo(doc));
+        CHECK(doc.FindLayerById(layerId)->Find(7) != nullptr);
+
+        // Paste over an existing key replaces it; undo brings it back.
+        std::vector<AnimKeyframe> single;
+        single.push_back(*doc.FindLayerById(layerId)->Find(1));
+        const std::string before =
+            doc.FindLayerById(layerId)->Find(5)->shapes[0].name;
+        REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new PasteFramesCommand(layerId, 5,
+                                                                single))));
+        CHECK_EQ(doc.FindLayerById(layerId)->Find(5)->shapes[0].name,
+                 doc.FindLayerById(layerId)->Find(1)->shapes[0].name);
+        REQUIRE(stack.Undo(doc));
+        CHECK_EQ(doc.FindLayerById(layerId)->Find(5)->shapes[0].name, before);
+
+        std::vector<AnimKeyframe> empty;
+        CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                         new PasteFramesCommand(layerId, 5,
+                                                                empty))));
+    }
+}
+
 // ------------------------------------------------------------ commands --
 
 static void TestCommandStack() {
@@ -1680,33 +1922,34 @@ static void TestCommandStack() {
     REQUIRE(layerStack.Execute(
         doc, std::unique_ptr<IAnimCommand>(new AddLayerCommand("New Layer"))));
     CHECK_EQ(doc.layers.size(), before + 1);
-    const uint64_t addedId = doc.layers.back().id;
+    // New layers go on top (index 0), not at the back.
+    const uint64_t addedId = doc.layers.front().id;
     CHECK(layerStack.Undo(doc));
     CHECK_EQ(doc.layers.size(), before);
     CHECK(doc.FindLayerById(addedId) == nullptr);
     CHECK(layerStack.Redo(doc));
     CHECK(doc.FindLayerById(addedId) != nullptr);
 
-    const std::string originalName = doc.layers.back().name;
+    const std::string originalName = doc.layers.front().name;
     REQUIRE(layerStack.Execute(doc, std::unique_ptr<IAnimCommand>(
                                        new RenameLayerCommand(addedId, "Zed"))));
-    CHECK_EQ(doc.layers.back().name, std::string("Zed"));
+    CHECK_EQ(doc.layers.front().name, std::string("Zed"));
     CHECK(layerStack.Undo(doc));
-    CHECK_EQ(doc.layers.back().name, originalName);
+    CHECK_EQ(doc.layers.front().name, originalName);
 
     REQUIRE(layerStack.Execute(
         doc, std::unique_ptr<IAnimCommand>(
                 new SetLayerVisibleCommand(addedId, false))));
-    CHECK(!doc.layers.back().visible);
+    CHECK(!doc.layers.front().visible);
     CHECK(layerStack.Undo(doc));
-    CHECK(doc.layers.back().visible);
+    CHECK(doc.layers.front().visible);
 
     REQUIRE(layerStack.Execute(
         doc, std::unique_ptr<IAnimCommand>(
                 new SetLayerLockedCommand(addedId, true))));
-    CHECK(doc.layers.back().locked);
+    CHECK(doc.layers.front().locked);
     CHECK(layerStack.Undo(doc));
-    CHECK(!doc.layers.back().locked);
+    CHECK(!doc.layers.front().locked);
 
     // MoveLayer reorders by index, and undo restores the original order.
     if (doc.layers.size() >= 2) {
@@ -1849,6 +2092,7 @@ int main() {
     TestFileIO();
     TestContainer();
     TestSceneMesh();
+    TestFrameOps();
     TestCommandStack();
     return ::icgtest::Report("animation");
 }

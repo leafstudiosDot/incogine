@@ -205,6 +205,36 @@ bool AnimatorDocument::moveLayer(size_t from, size_t to) {
         std::unique_ptr<IAnimCommand>(new icg::anim::MoveLayerCommand(from, to)));
 }
 
+bool AnimatorDocument::insertFrames(int frame, int count) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::InsertFramesCommand(frame, count)));
+}
+
+bool AnimatorDocument::removeFrames(int frame, int count) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::RemoveFramesCommand(frame, count)));
+}
+
+bool AnimatorDocument::insertKeyframe(uint64_t layerId, int frame, bool blank) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::InsertKeyframeCommand(
+            layerId, frame,
+            blank ? icg::anim::KeyframeKind::Blank
+                  : icg::anim::KeyframeKind::Key)));
+}
+
+bool AnimatorDocument::clearKeyframe(uint64_t layerId, int frame) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::ClearKeyframeCommand(layerId, frame)));
+}
+
+bool AnimatorDocument::pasteFrames(
+    uint64_t layerId, int frame,
+    std::vector<icg::anim::AnimKeyframe> keys) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::PasteFramesCommand(layerId, frame, std::move(keys))));
+}
+
 bool AnimatorDocument::commitShapeMove(
     uint64_t layerId, int frame,
     const std::vector<icg::anim::ShapeTransformSnapshot>& moves) {

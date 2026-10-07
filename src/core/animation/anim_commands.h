@@ -302,6 +302,114 @@ private:
     std::vector<std::pair<size_t, AnimShape>> removed_;
 };
 
+// ---- frames (timeline editing) ----
+
+// Inserts `count` blank frames at `frame` in EVERY layer (Flash F5): keys at
+// or after `frame` shift right and the timeline grows. Always succeeds for a
+// valid frame (extending the timeline is itself the edit, even when no layer
+// has a key to shift). Exactly invertible, so undo stores only the old
+// length, never geometry.
+class InsertFramesCommand : public IAnimCommand {
+  public:
+    InsertFramesCommand(int frame, int count = 1)
+        : frame_(frame), count_(count) {}
+    const char* name() const override { return "Insert Frame"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+  private:
+    int frame_;
+    int count_;
+    int oldLength_ = 1;
+};
+
+// Removes `count` frames at `frame` in EVERY layer (Flash Shift+F5): keys at
+// or after `frame` shift left and the timeline shrinks (never below 1). Lossy
+// by nature - keys pushed out of range are dropped and left-shift collisions
+// merge - so undo snapshots the touched layers' keyframe lists plus the old
+// length. Only touched layers are snapshotted, not the whole document.
+class RemoveFramesCommand : public IAnimCommand {
+  public:
+    RemoveFramesCommand(int frame, int count = 1)
+        : frame_(frame), count_(count) {}
+    const char* name() const override { return "Remove Frame"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+  private:
+    int frame_;
+    int count_;
+    int oldLength_ = 1;
+    // (layerId, keyframes before the shift) for layers the shift touched.
+    std::vector<std::pair<uint64_t, std::vector<AnimKeyframe>>> removed_;
+};
+
+// Inserts one keyframe (Flash F6 for a key, F7 for a blank). A Key copies the
+// artwork the span currently shows (nearest keyframe at or before `frame`,
+// if any); a Blank is empty. Fails when the layer is missing, the frame is
+// off the timeline, or a keyframe already sits there. Re-running Do()
+// (redo) rebuilds the identical key: undo removed exactly what Do added, so
+// the copy source is stable across the pair.
+class InsertKeyframeCommand : public IAnimCommand {
+  public:
+    InsertKeyframeCommand(uint64_t layerId, int frame, KeyframeKind kind)
+        : layerId_(layerId), frame_(frame), kind_(kind) {}
+    const char* name() const override { return "Insert Keyframe"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+  private:
+    uint64_t layerId_;
+    int frame_;
+    KeyframeKind kind_;
+};
+
+// Removes the keyframe at `frame`, so the span falls back to the previous
+// key (or to nothing). Fails when there is none. Undo restores the removed
+// keyframe exactly (order comes back via the sorted insert).
+class ClearKeyframeCommand : public IAnimCommand {
+  public:
+    ClearKeyframeCommand(uint64_t layerId, int frame)
+        : layerId_(layerId), frame_(frame) {}
+    const char* name() const override { return "Clear Keyframe"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+  private:
+    uint64_t layerId_;
+    int frame_;
+    AnimKeyframe removed_;
+    bool hasRemoved_ = false;
+};
+
+// Pastes copied keyframes at `targetFrame`, preserving their relative
+// offsets (Flash paste-at-playhead). Keyframes landing outside the timeline
+// are skipped; the rest REPLACE whatever sits at their destination frames.
+// Pasted shapes get fresh ids (a paste must never duplicate an id already in
+// the document), remapped once on the first Do() so redo is deterministic.
+// Undo removes the pasted keys and restores every replaced one.
+class PasteFramesCommand : public IAnimCommand {
+  public:
+    PasteFramesCommand(uint64_t layerId, int targetFrame,
+                       std::vector<AnimKeyframe> clipboard)
+        : layerId_(layerId),
+          targetFrame_(targetFrame),
+          clipboard_(std::move(clipboard)) {}
+    const char* name() const override { return "Paste Frames"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+
+  private:
+    uint64_t layerId_;
+    int targetFrame_;
+    std::vector<AnimKeyframe> clipboard_;
+    bool remapped_ = false;
+    // Destination frames this paste wrote.
+    std::vector<int> inserted_;
+    // (frame, keyframe) overwritten by the paste, restored on undo.
+    std::vector<std::pair<int, AnimKeyframe>> replaced_;
+};
+
 // Adds shapes to one keyframe, creating the keyframe when there is none.
 // When the keyframe does not exist it is created as a Key holding a copy of
 // the nearest keyframe at or before `frame` (Flash behavior: drawing on a

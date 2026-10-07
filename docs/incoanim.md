@@ -90,6 +90,11 @@ runtime next to it (see [Incogine Studio](./studio.md#windows-the-qt-runtime-is-
 memory, dirty tracking with the close prompt, autosave, undo/redo over the
 command stack, and the document-properties dock.
 
+**M4:** the timeline — layers panel, frame grid, playhead, playback. The
+editing model (frame/insert/remove/keyframe/clear/paste commands) is done and
+tested; see [Timeline](./timeline.md) for the UI design. Frame-step resolve
+cost measured at 0.008 ms (no preload cache needed).
+
 **M2:** the real canvas replaces the placeholder.
 
 - **Coordinates: y-down, origin at the stage's top-left corner.** `(0, 0)` is

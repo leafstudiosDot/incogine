@@ -97,11 +97,16 @@ inline int Report(const char* suite) {
 #define CHECK(cond) \
     ::icgtest::Record((cond), #cond, __FILE__, __LINE__, std::string())
 
+// Binds the condition to a local FIRST: an earlier version evaluated `(cond)`
+// twice (once for Record, once for the early return), which double-executed
+// side-effecting calls like stack.Execute() inside REQUIRE. Idempotent
+// commands hid it; InsertFrames (length += count per Do) exposed it.
 #define REQUIRE(cond)                                     \
     do {                                                  \
-        ::icgtest::Record((cond), #cond, __FILE__,        \
+        const bool icg_ok = (cond);                       \
+        ::icgtest::Record(icg_ok, #cond, __FILE__,        \
                           __LINE__, std::string());      \
-        if (!(cond)) {                                   \
+        if (!icg_ok) {                                   \
             return;                                      \
         }                                                 \
     } while (0)

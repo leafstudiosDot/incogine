@@ -186,7 +186,15 @@ void SetLengthFramesCommand::Undo(AnimDocument& document) {
 
 bool AddLayerCommand::Do(AnimDocument& document) {
     AnimLayer layer;
-    layer.id = document.AllocId();
+    // Allocate once: redo must restore the SAME id undo removed, not mint a
+    // fresh one. Stale ids break selection and canvas caches, which key on
+    // them (id 0 is never valid - AllocId starts at 1 - so it marks "fresh").
+    // Redo can only run on the post-undo document (any new edit clears the
+    // redo branch), where this id is guaranteed free.
+    if (layerId_ == 0) {
+        layerId_ = document.AllocId();
+    }
+    layer.id = layerId_;
     layer.name = name_;
     layer.visible = true;
     layer.locked = false;
@@ -466,6 +474,192 @@ void AddShapesCommand::Undo(AnimDocument& document) {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------- frames --
+
+bool InsertFramesCommand::Do(AnimDocument& document) {
+    if (frame_ < 1 || count_ < 1) {
+        return false;
+    }
+    const int frame = std::min(frame_, document.FrameCount() + 1);
+    oldLength_ = document.FrameCount();
+    const int newLength = oldLength_ + count_;
+    for (AnimLayer& layer : document.layers) {
+        layer.ShiftFrames(frame, count_, newLength);
+    }
+    document.lengthFrames = newLength;
+    document.Normalize();
+    frame_ = frame; // remember the clamped frame so Undo mirrors this Do
+    return true;
+}
+
+void InsertFramesCommand::Undo(AnimDocument& document) {
+    for (AnimLayer& layer : document.layers) {
+        layer.ShiftFrames(frame_, -count_, oldLength_);
+    }
+    document.lengthFrames = oldLength_;
+    document.Normalize();
+}
+
+bool RemoveFramesCommand::Do(AnimDocument& document) {
+    if (frame_ < 1 || count_ < 1 || frame_ > document.FrameCount()) {
+        return false;
+    }
+    oldLength_ = document.FrameCount();
+    const int newLength = std::max(1, oldLength_ - count_);
+    removed_.clear();
+    for (AnimLayer& layer : document.layers) {
+        bool touched = false;
+        for (const AnimKeyframe& key : layer.frames) {
+            if (key.frame >= frame_) {
+                touched = true;
+                break;
+            }
+        }
+        if (!touched) {
+            continue;
+        }
+        removed_.emplace_back(layer.id, layer.frames);
+        // Content in the removed range is deleted (Flash semantics); only the
+        // tail shifts left. Deleting first keeps the shift bijective, so no
+        // merge can ever eat a keyframe silently.
+        for (int f = frame_; f < frame_ + count_; ++f) {
+            layer.RemoveKeyframe(f);
+        }
+        layer.ShiftFrames(frame_ + count_, -count_, newLength);
+    }
+    document.lengthFrames = newLength;
+    document.Normalize();
+    return true;
+}
+
+void RemoveFramesCommand::Undo(AnimDocument& document) {
+    for (auto& entry : removed_) {
+        if (AnimLayer* layer = document.FindLayerById(entry.first)) {
+            layer->frames = std::move(entry.second);
+        }
+    }
+    removed_.clear();
+    document.lengthFrames = oldLength_;
+    document.Normalize();
+}
+
+bool InsertKeyframeCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr || frame_ < 1 || frame_ > document.FrameCount()) {
+        return false;
+    }
+    if (layer->Find(frame_) != nullptr) {
+        return false; // never silently replace: paste owns replacement
+    }
+    AnimKeyframe key;
+    key.frame = frame_;
+    key.kind = kind_;
+    if (kind_ == KeyframeKind::Key) {
+        // F6 copies what the span currently shows.
+        if (const AnimKeyframe* source = layer->AtOrBefore(frame_)) {
+            key.shapes = source->shapes;
+            key.transform = source->transform;
+        }
+    }
+    layer->SetKeyframe(std::move(key));
+    document.Normalize();
+    return true;
+}
+
+void InsertKeyframeCommand::Undo(AnimDocument& document) {
+    if (AnimLayer* layer = document.FindLayerById(layerId_)) {
+        layer->RemoveKeyframe(frame_);
+    }
+    document.Normalize();
+}
+
+bool ClearKeyframeCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr) {
+        return false;
+    }
+    const AnimKeyframe* key = layer->Find(frame_);
+    if (key == nullptr) {
+        return false;
+    }
+    removed_ = *key;
+    hasRemoved_ = true;
+    layer->RemoveKeyframe(frame_);
+    document.Normalize();
+    return true;
+}
+
+void ClearKeyframeCommand::Undo(AnimDocument& document) {
+    if (!hasRemoved_) {
+        return;
+    }
+    if (AnimLayer* layer = document.FindLayerById(layerId_)) {
+        layer->SetKeyframe(std::move(removed_));
+        hasRemoved_ = false;
+    }
+    document.Normalize();
+}
+
+bool PasteFramesCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr || clipboard_.empty()) {
+        return false;
+    }
+    if (!remapped_) {
+        // Fresh ids once: pasted shapes must never duplicate an id already in
+        // the document (selection and the canvas caches key on ids).
+        for (AnimKeyframe& key : clipboard_) {
+            for (AnimShape& shape : key.shapes) {
+                shape.id = document.AllocId();
+            }
+        }
+        std::stable_sort(clipboard_.begin(), clipboard_.end(),
+                         [](const AnimKeyframe& a, const AnimKeyframe& b) {
+                             return a.frame < b.frame;
+                         });
+        remapped_ = true;
+    }
+    const int offset = targetFrame_ - clipboard_.front().frame;
+    inserted_.clear();
+    replaced_.clear();
+    bool wrote = false;
+    for (const AnimKeyframe& key : clipboard_) {
+        const int dest = key.frame + offset;
+        if (dest < 1 || dest > document.FrameCount()) {
+            continue;
+        }
+        if (const AnimKeyframe* existing = layer->Find(dest)) {
+            replaced_.emplace_back(dest, *existing);
+        }
+        AnimKeyframe staged = key;
+        staged.frame = dest;
+        layer->SetKeyframe(std::move(staged));
+        inserted_.push_back(dest);
+        wrote = true;
+    }
+    if (!wrote) {
+        return false;
+    }
+    document.Normalize();
+    return true;
+}
+
+void PasteFramesCommand::Undo(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr) {
+        return;
+    }
+    for (int frame : inserted_) {
+        layer->RemoveKeyframe(frame);
+    }
+    inserted_.clear();
+    for (auto& entry : replaced_) {
+        layer->SetKeyframe(std::move(entry.second));
+    }
+    replaced_.clear();
+    document.Normalize();
 }
 
 } // namespace anim
