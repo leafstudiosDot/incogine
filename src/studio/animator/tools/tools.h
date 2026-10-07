@@ -167,9 +167,11 @@ private:
     std::vector<uint64_t> selectionBeforeMarquee_;
 };
 
-// Freehand brush: drag to paint a stroked path. Raw input points are throttled
-// to ~2 screen px, then simplified (RDP) and fitted to Beziers on release, so
-// a shaky hand produces a clean selectable stroke. A bare click makes a dot.
+// Freeform pen: drag to paint a Flash-style filled brush shape. Raw input is
+// throttled, fitted to smooth Beziers on release (like the Pen tool draws by
+// hand), then expanded ONCE to a filled outline which is what gets stored - so
+// a brush shape paints as a plain fill, with no per-repaint stroker cost. A
+// bare click makes a dot.
 class BrushTool : public ITool {
 public:
     std::string id() const override { return "brush"; }
@@ -190,6 +192,9 @@ public:
 private:
     bool finishStroke(AnimatorCanvas& canvas);
     void appendIfSpaced(const icg::anim::Vec2& point, float spacing);
+    // Minimum input spacing in stage units: 2 screen px, floored at a fraction
+    // of the stroke width so zoom cannot make the input arbitrarily dense.
+    float sampleSpacing(const AnimatorCanvas& canvas) const;
 
     bool stroking_ = false;
     std::vector<icg::anim::Vec2> raw_;

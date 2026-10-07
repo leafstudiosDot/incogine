@@ -18,6 +18,7 @@
 #include <QFileInfo>
 #include <QLabel>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QStyleFactory>
 #include <QTimer>
 
@@ -262,6 +263,35 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
         doc->document().layers[0].locked = false;
         check(canvas->isEditable(), "unlocked layer is editable");
 
+        // Culling round-trip: zoomed in the artwork must still paint (nothing
+        // visible may be skipped); panned fully away it must vanish without
+        // taking the app down; restored, every pixel comes back.
+        {
+            auto countBright = [&](int threshold) {
+                const QImage image = canvas->grab().toImage();
+                int n = 0;
+                for (int y = 0; y < image.height(); y += 2) {
+                    const QRgb* line =
+                        reinterpret_cast<const QRgb*>(image.constScanLine(y));
+                    for (int x = 0; x < image.width(); x += 2) {
+                        if (qRed(line[x]) + qGreen(line[x]) + qBlue(line[x]) >
+                            threshold) {
+                            ++n;
+                        }
+                    }
+                }
+                return n;
+            };
+            canvas->fitToStage();
+            check(countBright(200) > 0, "fit view paints");
+            canvas->zoomBy(4.0);
+            check(countBright(200) > 0, "zoomed view still paints");
+            canvas->panBy(QPointF(20000.0, 20000.0));
+            check(countBright(200) == 0, "panned-away view paints nothing");
+            canvas->fitToStage();
+            check(countBright(200) > 0, "artwork intact after cull round-trip");
+        }
+
         // Tool dispatch.
         check(canvas->activeTool() != nullptr, "a tool is active by default");
         check(canvas->toolSet() != nullptr &&
@@ -282,6 +312,15 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
         check(canvas->drawingOptions().opacity == 0.5f, "opacity set");
         canvas->setSmoothing(2.5f);
         check(canvas->drawingOptions().smoothing == 2.5f, "smoothing set");
+
+        // Preview quality round-trips and moves the flatten tolerance.
+        canvas->setPreviewQuality(PreviewQuality::Draft);
+        check(canvas->previewQuality() == PreviewQuality::Draft,
+              "draft quality set");
+        check(canvas->flattenTolerance() > 0.25f, "draft coarsens subdivision");
+        canvas->setPreviewQuality(PreviewQuality::Normal);
+        check(canvas->previewQuality() == PreviewQuality::Normal,
+              "normal quality restored");
 
         // A drawn shape commits through the stack, selects itself, and undoes.
         {
@@ -323,6 +362,60 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
             check(doc->stack().undoDepth() == depthBefore,
                   "refused draw leaves no history");
             doc->document().layers[0].locked = false;
+        }
+
+        // The real Brush tool paints a Flash-style FILLED shape (a freeform
+        // pen), not a stroked path. Drive it with synthetic events and check
+        // the committed shape carries a fill and no stroke.
+        {
+            canvas->setActiveTool("brush");
+            canvas->setStrokeWidth(6.0f);
+            canvas->setSmoothing(1.0f);
+            ITool* brush = canvas->toolSet()->find("brush");
+            check(brush != nullptr, "brush tool found for stroke test");
+            const size_t before =
+                canvas->activeKeyframe()->shapes.size();
+            const QPointF p0(300.0, 300.0);
+            check(brush->onPress(
+                      *canvas,
+                      QMouseEvent(QEvent::MouseButtonPress, p0, p0, p0,
+                                  Qt::LeftButton, Qt::LeftButton, Qt::NoModifier)),
+                  "brush press starts a stroke");
+            for (int i = 1; i <= 10; ++i) {
+                const QPointF p(p0.x() + i * 12.0,
+                                p0.y() + std::sin(i * 0.9) * 20.0);
+                brush->onMove(
+                    *canvas,
+                    QMouseEvent(QEvent::MouseMove, p, p, p, Qt::NoButton,
+                                Qt::LeftButton, Qt::NoModifier));
+            }
+            const QPointF pEnd(p0.x() + 132.0, p0.y());
+            check(brush->onRelease(
+                      *canvas,
+                      QMouseEvent(QEvent::MouseButtonRelease, pEnd, pEnd, pEnd,
+                                  Qt::LeftButton, Qt::NoButton, Qt::NoModifier)),
+                  "brush release commits a shape");
+            check(canvas->activeKeyframe()->shapes.size() == before + 1,
+                  "brush stroke appended one shape");
+            const icg::anim::AnimShape& committed =
+                canvas->activeKeyframe()->shapes.back();
+            check(committed.style.hasFill &&
+                      !committed.style.hasStroke,
+                  "brush shape is a fill, not a stroked path");
+            // Probe ON the stroke: widget point of move 5, which the fitted
+            // centerline passes within the smoothing tolerance of, well
+            // inside the half width. (A point merely near the stroke misses:
+            // a fill has no stroke halo to catch it.)
+            const QPointF pMid(p0.x() + 5 * 12.0,
+                               p0.y() + std::sin(5 * 0.9) * 20.0);
+            check(canvas->hitTest(canvas->view().toStage(pMid)) != 0,
+                  "brush shape is hit-testable on its band");
+            check(canvas->isSelected(committed.id),
+                  "brush shape auto-selected");
+            check(doc->undo(), "brush undo available");
+            check(canvas->activeKeyframe()->shapes.size() == before,
+                  "brush undo removed the shape");
+            check(doc->redo(), "brush redo available");
         }
     }
 

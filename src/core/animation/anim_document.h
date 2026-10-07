@@ -35,8 +35,10 @@ namespace anim {
 
 // ---------------------------------------------------------------- styles --
 
-enum class LineCap { Butt, Round, Square };
-enum class LineJoin { Miter, Round, Bevel };
+// LineCap/LineJoin live in anim_types.h: anim_geometry needs them for
+// StrokeToOutline, and anim_geometry cannot include anim_document.h (this
+// header includes anim_geometry.h). They are still reachable unqualified
+// through this header, so existing users are unaffected.
 
 struct AnimStyle {
     bool hasFill = false;

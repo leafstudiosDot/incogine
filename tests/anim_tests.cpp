@@ -147,6 +147,26 @@ static void TestGeometry() {
     CHECK(bhi.x >= 50.0f && bhi.y >= 50.0f);
     CHECK(blo.x <= -50.0f && blo.y <= -50.0f);
 
+    // Transformed bounds: identity keeps the flat box, translation shifts it,
+    // and the pad inflates every side (stroke halos for culling/marquee).
+    Vec2 tlo, thi;
+    FlatTransformedBounds(rect, Mat2x3Identity(), 0.0f, tlo, thi);
+    CHECK_NEAR(tlo.x, 0.0f, 1e-3f);
+    CHECK_NEAR(thi.x, 100.0f, 1e-3f);
+    FlatTransformedBounds(rect, Mat2x3Translate(10.0f, 20.0f), 2.0f, tlo, thi);
+    CHECK_NEAR(tlo.x, 8.0f, 1e-3f);
+    CHECK_NEAR(tlo.y, 18.0f, 1e-3f);
+    CHECK_NEAR(thi.x, 112.0f, 1e-3f);
+    CHECK_NEAR(thi.y, 72.0f, 1e-3f);
+    // Empty path stays empty (min > max marker), pad or not.
+    FlatPath empty;
+    FlatTransformedBounds(empty, Mat2x3Identity(), 5.0f, tlo, thi);
+    CHECK(thi.x < tlo.x && thi.y < tlo.y);
+    // A negative pad clamps to zero rather than shrinking the box.
+    FlatTransformedBounds(rect, Mat2x3Identity(), -5.0f, tlo, thi);
+    CHECK_NEAR(tlo.x, 0.0f, 1e-3f);
+    CHECK_NEAR(thi.x, 100.0f, 1e-3f);
+
     // Distance to a polyline.
     std::vector<Vec2> line = {Vec2(0.0f, 0.0f), Vec2(100.0f, 0.0f)};
     Vec2 nearest;
@@ -164,6 +184,543 @@ static void TestGeometry() {
     CHECK(simplified.size() >= 2);
     CHECK_EQ(simplified.front().x, 0.0f);
     CHECK_EQ(simplified.back().x, 100.0f);
+
+    // DecimateForStroke: reduces vertices (RDP), preserves subpaths/closed
+    // flags/endpoints. The canvas deliberately does NOT use it on strokes -
+    // the measured tradeoff has no safe-and-fast operating point - but the
+    // geometry helper is correct and tested.
+    {
+        // Dense curve: many vertices, all within a pixel of a gentle arc.
+        FlatPath dense;
+        dense.polylines.push_back(std::vector<Vec2>());
+        dense.closed.push_back(false);
+        std::vector<Vec2>& poly = dense.polylines.back();
+        for (int i = 0; i <= 500; ++i) {
+            const float t = static_cast<float>(i) / 500.0f;
+            poly.push_back(Vec2(t * 200.0f, 40.0f + std::sin(t * 3.0f) * 20.0f));
+        }
+        const size_t before = poly.size();
+
+        const FlatPath lean = DecimateForStroke(dense, 0.08f);
+        REQUIRE_EQ(lean.polylines.size(), static_cast<size_t>(1));
+        REQUIRE_EQ(lean.closed.size(), static_cast<size_t>(1));
+        const std::vector<Vec2>& out = lean.polylines[0];
+        CHECK(out.size() >= 2);
+        CHECK(out.size() < before); // fewer vertices -> the actual speedup
+        CHECK_EQ(lean.closed[0], false);
+        // Endpoints preserved.
+        CHECK_NEAR(out.front().x, dense.polylines[0].front().x, 1e-3f);
+        CHECK_NEAR(out.back().x, dense.polylines[0].back().x, 1e-3f);
+        // Error bound: every original point is within the tolerance of the
+        // decimated polyline (RDP's guarantee).
+        for (const Vec2& p : dense.polylines[0]) {
+            Vec2 near;
+            CHECK(DistanceToPolyline(p, out, near) <= 0.08f + 1e-3f);
+        }
+
+        // A looser tolerance keeps fewer vertices and still respects ITS bound.
+        const FlatPath wide = DecimateForStroke(dense, 1.0f);
+        CHECK(wide.polylines[0].size() <= out.size());
+        for (const Vec2& p : dense.polylines[0]) {
+            Vec2 near;
+            CHECK(DistanceToPolyline(p, wide.polylines[0], near) <= 1.0f + 1e-3f);
+        }
+
+        // Degenerate tolerances stay valid rather than dropping geometry.
+        const FlatPath hair = DecimateForStroke(dense, 0.0f);
+        CHECK(hair.polylines[0].size() >= 2);
+        const FlatPath neg = DecimateForStroke(dense, -5.0f);
+        CHECK(neg.polylines[0].size() >= 2);
+
+        // Empty input stays empty rather than inventing geometry.
+        const FlatPath none = DecimateForStroke(FlatPath(), 0.08f);
+        CHECK(none.polylines.empty());
+
+        // Multiple subpaths and the closed flag survive the round trip.
+        FlatPath two;
+        two.polylines.push_back(dense.polylines[0]);
+        two.polylines.push_back(dense.polylines[0]);
+        two.closed.push_back(true);
+        two.closed.push_back(false);
+        const FlatPath twoLean = DecimateForStroke(two, 0.08f);
+        REQUIRE_EQ(twoLean.polylines.size(), static_cast<size_t>(2));
+        CHECK_EQ(twoLean.closed[0], true);
+        CHECK_EQ(twoLean.closed[1], false);
+    }
+
+    // StrokeToOutline: the performance-critical path (a stroke is painted as a
+    // filled outline, not with a pen). Correctness here is what stops that from
+    // changing the artwork.
+    {
+        // A straight horizontal segment of width 4 becomes a closed band 4 tall,
+        // with butt caps that do NOT overhang the endpoints.
+        FlatPath line;
+        line.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(100.0f, 0.0f)});
+        line.closed.push_back(false);
+
+        StrokeOutlineOptions butt;
+        butt.width = 4.0f;
+        butt.cap = LineCap::Butt;
+        butt.join = LineJoin::Round;
+        const FlatPath band = StrokeToOutline(line, butt);
+        REQUIRE_EQ(band.polylines.size(), static_cast<size_t>(1));
+        CHECK_EQ(band.closed[0], true);
+        Vec2 lo, hi;
+        FlatTransformedBounds(band, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.y, -2.0f, 0.05f); // half width above the centerline
+        CHECK_NEAR(hi.y, 2.0f, 0.05f);  // half width below
+        CHECK_NEAR(lo.x, 0.0f, 0.05f);  // butt cap: no overhang
+        CHECK_NEAR(hi.x, 100.0f, 0.05f);
+        // Solid on the stroke, empty off it - i.e. it really is the stroke.
+        CHECK(PointInFlatPath(Vec2(50.0f, 0.0f), band, 0.0f));
+        CHECK(PointInFlatPath(Vec2(50.0f, 1.5f), band, 0.0f));
+        CHECK(!PointInFlatPath(Vec2(50.0f, 4.0f), band, 0.0f));
+        CHECK(!PointInFlatPath(Vec2(-4.0f, 0.0f), band, 0.0f));
+
+        // Round and square caps both extend the band by the radius at each end.
+        StrokeOutlineOptions round = butt;
+        round.cap = LineCap::Round;
+        const FlatPath roundBand = StrokeToOutline(line, round);
+        FlatTransformedBounds(roundBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.x, -2.0f, 0.1f);
+        CHECK_NEAR(hi.x, 102.0f, 0.1f);
+        CHECK(roundBand.polylines[0].size() > band.polylines[0].size());
+        StrokeOutlineOptions sq = butt;
+        sq.cap = LineCap::Square;
+        const FlatPath squareBand = StrokeToOutline(line, sq);
+        FlatTransformedBounds(squareBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.x, -2.0f, 0.05f);
+        CHECK_NEAR(hi.x, 102.0f, 0.05f);
+
+        // Width scales the band exactly.
+        StrokeOutlineOptions wide = butt;
+        wide.width = 10.0f;
+        const FlatPath wideBand = StrokeToOutline(line, wide);
+        FlatTransformedBounds(wideBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.y, -5.0f, 0.05f);
+        CHECK_NEAR(hi.y, 5.0f, 0.05f);
+
+        // A corner. Probe points are chosen from measured behaviour, and they
+        // avoid the region where the two offset rectangles overlap: that region
+        // needs the WINDING fill rule (which the canvas uses), and
+        // PointInFlatPath is even-odd, so it reports the overlap as outside.
+        FlatPath corner;
+        corner.polylines.push_back(
+            {Vec2(0.0f, 0.0f), Vec2(50.0f, 0.0f), Vec2(50.0f, 50.0f)});
+        corner.closed.push_back(false);
+        const FlatPath cornerBand = StrokeToOutline(corner, butt);
+        CHECK(cornerBand.polylines[0].size() >= 6);
+        CHECK(PointInFlatPath(Vec2(25.0f, 0.0f), cornerBand, 0.0f)); // on the band
+        CHECK(!PointInFlatPath(Vec2(45.0f, 3.0f), cornerBand, 0.0f)); // off it
+        // Round join covers the outside of the bend...
+        CHECK(PointInFlatPath(Vec2(51.0f, -1.0f), cornerBand, 0.0f));
+        // ...bevel cuts it off. This pair is the round-vs-bevel discriminator.
+        StrokeOutlineOptions bevel = butt;
+        bevel.join = LineJoin::Bevel;
+        const FlatPath bevelBand = StrokeToOutline(corner, bevel);
+        CHECK(bevelBand.polylines[0].size() < cornerBand.polylines[0].size());
+        CHECK(!PointInFlatPath(Vec2(51.0f, -1.0f), bevelBand, 0.0f));
+        // Miter keeps the vertex where the two offset lines meet, (48, 2);
+        // once the miter limit is exceeded it degrades to the bevel and the
+        // vertex is gone.
+        StrokeOutlineOptions miter = butt;
+        miter.join = LineJoin::Miter;
+        const FlatPath miterBand = StrokeToOutline(corner, miter);
+        auto hasVertexNear = [](const FlatPath& f, const Vec2& p, float eps) {
+            for (const Vec2& q : f.polylines[0]) {
+                const float dx = q.x - p.x;
+                const float dy = q.y - p.y;
+                if (std::sqrt(dx * dx + dy * dy) <= eps) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        CHECK(hasVertexNear(miterBand, Vec2(48.0f, 2.0f), 0.1f));
+        CHECK(!hasVertexNear(cornerBand, Vec2(48.0f, 2.0f), 0.1f));
+        miter.miterLimit = 1.0f;
+        const FlatPath limited = StrokeToOutline(corner, miter);
+        CHECK(!hasVertexNear(limited, Vec2(48.0f, 2.0f), 0.1f));
+
+        // A multi-segment subpath: the backward pass over the right side must
+        // cover EVERY segment, not skip the last one. A butt cap at a slanted
+        // end puts the band corners at +/- radius along the end normal, which
+        // pins the bounds without guessing.
+        FlatPath zig;
+        zig.polylines.push_back(
+            {Vec2(0, 0), Vec2(20, 10), Vec2(40, 0), Vec2(60, 10)});
+        zig.closed.push_back(false);
+        const FlatPath zigBand = StrokeToOutline(zig, butt);
+        CHECK(PointInFlatPath(Vec2(20.0f, 10.0f), zigBand, 0.0f));
+        CHECK(!PointInFlatPath(Vec2(20.0f, 20.0f), zigBand, 0.0f));
+        CHECK(!PointInFlatPath(Vec2(20.0f, -20.0f), zigBand, 0.0f));
+        FlatTransformedBounds(zigBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.y, -1.79f, 0.05f);
+        CHECK_NEAR(hi.y, 11.79f, 0.05f);
+
+        // A closed centerline becomes a ring around it. This one outline needs the
+        // WINDING fill rule: it is a single loop containing a hole, so an
+        // even-odd test (PointInFlatPath) reports the hole as OUTSIDE, which is
+        // the correct even-odd answer and the wrong one for painting. The
+        // canvas fills with WindingFill for exactly this reason.
+        FlatPath square;
+        square.polylines.push_back(Flatten(
+            AnimPath::FromRect(20.0f, 20.0f, 20.0f, 20.0f),
+            kFlattenTolerance)
+                                         .polylines.front());
+        square.closed.push_back(true);
+        const FlatPath ring = StrokeToOutline(square, round);
+        REQUIRE_EQ(ring.polylines.size(), static_cast<size_t>(1));
+        CHECK_EQ(ring.closed[0], true);
+        FlatTransformedBounds(ring, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.x, 18.0f, 0.3f);
+        CHECK_NEAR(hi.x, 42.0f, 0.3f);
+        CHECK_NEAR(lo.y, 18.0f, 0.3f);
+        CHECK_NEAR(hi.y, 42.0f, 0.3f);
+        // Non-zero overall winding, so the outer and inner loops cancel in the
+        // hole: a fill leaves a real ring rather than a solid square.
+        CHECK(Winding(ring.polylines[0]) != 0);
+        CHECK(ring.polylines[0].size() > square.polylines[0].size());
+
+        // Degenerate input must not produce NaNs: repeated points, a
+        // single-point subpath, and a zero width.
+        FlatPath dots;
+        dots.polylines.push_back({Vec2(5.0f, 5.0f), Vec2(5.0f, 5.0f)});
+        dots.closed.push_back(false);
+        const FlatPath dotBand = StrokeToOutline(dots, butt);
+        for (const Vec2& p : dotBand.polylines[0]) {
+            CHECK(std::isfinite(p.x) && std::isfinite(p.y));
+        }
+        FlatPath single;
+        single.polylines.push_back({Vec2(5.0f, 5.0f)});
+        single.closed.push_back(false);
+        const FlatPath singleBand = StrokeToOutline(single, butt);
+        for (const Vec2& p : singleBand.polylines[0]) {
+            CHECK(std::isfinite(p.x) && std::isfinite(p.y));
+        }
+        StrokeOutlineOptions hairline = butt;
+        hairline.width = 0.0f;
+        CHECK(StrokeToOutline(line, hairline).polylines.size() <= 1);
+        CHECK_EQ(StrokeToOutline(FlatPath(), butt).polylines.size(),
+                 static_cast<size_t>(0));
+
+        // Tolerance controls arc detail: a loose tolerance needs fewer points
+        // and a tight one more. Crucially, the cap must not collapse - a
+        // tolerance as large as the stroke radius satisfies the sagitta bound
+        // with a single step, which used to drop the round cap's overhang
+        // entirely.
+        StrokeOutlineOptions loose = round;
+        loose.tolerance = 2.0f;
+        StrokeOutlineOptions tight = round;
+        tight.tolerance = 0.01f;
+        const FlatPath looseBand = StrokeToOutline(line, loose);
+        const FlatPath tightBand = StrokeToOutline(line, tight);
+        CHECK(looseBand.polylines[0].size() < tightBand.polylines[0].size());
+        // The tight band lands on the true radius.
+        FlatTransformedBounds(tightBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK_NEAR(lo.x, -2.0f, 0.05f);
+        CHECK_NEAR(hi.x, 102.0f, 0.05f);
+        // The loose band still bulges outward, and never past the tolerance.
+        FlatTransformedBounds(looseBand, Mat2x3Identity(), 0.0f, lo, hi);
+        CHECK(lo.x >= -2.0f - 1e-3f);
+        CHECK(lo.x <= -2.0f + loose.tolerance);
+        CHECK(hi.x <= 102.0f + 1e-3f);
+        CHECK(hi.x >= 102.0f - loose.tolerance);
+    }
+
+    // Band solidity under DENSE input - the regression test for cuts in a
+    // painted stroke. A stroke must cover every point within half its width of
+    // the centerline. Brush input used to be sampled far denser than the stroke
+    // is wide when zoomed in, and the offset outline folded back on itself,
+    // leaving pinholes. PointInFlatPath cannot see this (it is even-odd, and a
+    // self-overlapping outline trips it), so this uses the WINDING rule - the
+    // one the canvas actually paints with.
+    {
+        auto insideWinding = [](const std::vector<Vec2>& poly, float px,
+                                float py) {
+            int winding = 0;
+            const size_t n = poly.size();
+            for (size_t i = 0, j = n - 1; i < n; j = i++) {
+                const Vec2& a = poly[i];
+                const Vec2& b = poly[j];
+                if (a.y <= py) {
+                    if (b.y > py) {
+                        const double ax =
+                            a.x + (static_cast<double>(b.x) - a.x) *
+                                      (py - a.y) / (b.y - a.y);
+                        if (static_cast<double>(px) < ax) ++winding;
+                    }
+                } else if (b.y <= py) {
+                    const double ax = a.x + (static_cast<double>(b.x) - a.x) *
+                                              (py - a.y) / (b.y - a.y);
+                    if (static_cast<double>(px) < ax) --winding;
+                }
+            }
+            return winding != 0;
+        };
+
+        StrokeOutlineOptions opts;
+        opts.width = 4.0f;
+        opts.cap = LineCap::Round;
+        opts.join = LineJoin::Round;
+        const float half = opts.width * 0.5f;
+
+        // Hand-like jitter sampled at the density the brush actually produces at high
+        // zoom (its spacing floor is strokeWidth * 0.2, i.e. ~0.8u for a 4u
+        // stroke) - the regime that produced the cuts.
+        std::vector<Vec2> center;
+        unsigned seed = 99991u;
+        float cx = 0.0f, cy = 0.0f, vx = 0.0f, vy = 0.0f;
+        for (int i = 0; i < 400; ++i) {
+            seed = seed * 1664525u + 1013904223u;
+            const float rx =
+                static_cast<float>((seed >> 8) & 0xFFFFu) / 65535.0f - 0.5f;
+            seed = seed * 1664525u + 1013904223u;
+            const float ry =
+                static_cast<float>((seed >> 8) & 0xFFFFu) / 65535.0f - 0.5f;
+            center.push_back(Vec2(cx, cy));
+            vx = vx * 0.82f + rx * 3.0f;
+            vy = vy * 0.82f + ry * 3.0f;
+            cx += 0.8f + vx * 0.24f;
+            cy += vy * 0.24f;
+        }
+        FlatPath flat;
+        flat.polylines.push_back(center);
+        flat.closed.push_back(false);
+        const FlatPath band = StrokeToOutline(flat, opts);
+        REQUIRE_EQ(band.polylines.size(), static_cast<size_t>(1));
+
+        // Every point ON the centerline must be inside the band. Probing only
+        // the centerline keeps this independent of how polygonal the outer
+        // boundary is, which is a legitimate tolerance effect.
+        long holes = 0;
+        long probes = 0;
+        for (size_t i = 1; i < center.size(); ++i) {
+            ++probes;
+            if (!insideWinding(band.polylines[0], center[i].x, center[i].y)) {
+                ++holes;
+            }
+        }
+        const double holePct = 100.0 * static_cast<double>(holes) /
+                               static_cast<double>(probes);
+        // Measured: 8.8% before the join-arc clamp, ~0.1% after. A generous
+        // ceiling still catches a regression by a wide margin.
+        CHECK_MSG(holePct < 1.0, "centerline holes in a dense stroke");
+        // And the outline must be far denser than the naive offset - that is
+        // the clamp doing its job, keeping arcs from overshooting neighbours.
+        CHECK(band.polylines[0].size() > center.size());
+        (void)half;
+    }
+
+    // OutlineToAnimPath: the Flash-style brush stores the expanded outline, not
+    // the centerline. The stored path must flatten back to the same band.
+    {
+        // Straight stroke -> closed outline -> stored path -> same band back.
+        FlatPath line;
+        line.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(100.0f, 0.0f)});
+        line.closed.push_back(false);
+        StrokeOutlineOptions opts;
+        opts.width = 4.0f;
+        opts.cap = LineCap::Round;
+        opts.join = LineJoin::Round;
+        const FlatPath band = StrokeToOutline(line, opts);
+        const AnimPath stored = OutlineToAnimPath(band);
+        CHECK(!stored.IsEmpty());
+        CHECK(stored.IsClosed());
+        const FlatPath back = Flatten(stored, kFlattenTolerance);
+        REQUIRE_EQ(back.polylines.size(), static_cast<size_t>(1));
+        CHECK_EQ(back.closed[0], true);
+        CHECK_EQ(back.polylines[0].size(), band.polylines[0].size());
+        for (size_t i = 0; i < band.polylines[0].size(); ++i) {
+            CHECK_NEAR(back.polylines[0][i].x, band.polylines[0][i].x, 1e-4f);
+            CHECK_NEAR(back.polylines[0][i].y, band.polylines[0][i].y, 1e-4f);
+        }
+        // The stored band still covers the stroke it came from.
+        CHECK(PointInFlatPath(Vec2(50.0f, 0.0f), back, 0.0f));
+        CHECK(!PointInFlatPath(Vec2(50.0f, 4.0f), back, 0.0f));
+
+        // Open subpaths stay open (no Close appended).
+        FlatPath open;
+        open.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(10.0f, 5.0f),
+                                  Vec2(20.0f, 0.0f)});
+        open.closed.push_back(false);
+        const AnimPath openStored = OutlineToAnimPath(open);
+        CHECK(!openStored.IsEmpty());
+        CHECK(!openStored.IsClosed());
+
+        // Degenerate subpaths are dropped, never stored as slivers.
+        FlatPath junk;
+        junk.polylines.push_back({Vec2(1.0f, 1.0f)});
+        junk.closed.push_back(false);
+        junk.polylines.push_back({Vec2(2.0f, 2.0f), Vec2(2.0f, 2.0f)});
+        junk.closed.push_back(true);
+        CHECK(OutlineToAnimPath(junk).IsEmpty());
+        CHECK(OutlineToAnimPath(FlatPath()).IsEmpty());
+    }
+
+    // StrokeToPieces: union-correct fill pieces. Every piece shares one
+    // winding, so one WindingFill paints their exact union - including where
+    // the stroke crosses itself, where the single outline loop cancels to zero
+    // and punches a hole (a brush circle's overlap reading as subtracted).
+    {
+        auto insideAnyWinding = [](const FlatPath& f, float px, float py) {
+            for (const std::vector<Vec2>& poly : f.polylines) {
+                int winding = 0;
+                const size_t n = poly.size();
+                for (size_t i = 0, j = n - 1; i < n; j = i++) {
+                    const Vec2& a = poly[i];
+                    const Vec2& b = poly[j];
+                    if (a.y <= py) {
+                        if (b.y > py) {
+                            const double ax =
+                                a.x + (static_cast<double>(b.x) - a.x) *
+                                          (py - a.y) / (b.y - a.y);
+                            if (static_cast<double>(px) < ax) ++winding;
+                        }
+                    } else if (b.y <= py) {
+                        const double ax =
+                            a.x + (static_cast<double>(b.x) - a.x) *
+                                      (py - a.y) / (b.y - a.y);
+                        if (static_cast<double>(px) < ax) --winding;
+                    }
+                }
+                if (winding != 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        auto sharedWinding = [](const FlatPath& f) {
+            int sign = 0;
+            for (const std::vector<Vec2>& poly : f.polylines) {
+                const int w = Winding(poly);
+                if (w == 0) {
+                    return 0; // degenerate piece
+                }
+                if (sign == 0) {
+                    sign = w;
+                } else if (w != sign) {
+                    return 999; // mixed windings: overlaps would cancel
+                }
+            }
+            return sign;
+        };
+
+        StrokeOutlineOptions opts;
+        opts.width = 4.0f;
+        opts.cap = LineCap::Round;
+        opts.join = LineJoin::Round;
+
+        // A straight segment: one quad plus two cap discs, all one winding,
+        // covering the band and nothing far outside it.
+        FlatPath line;
+        line.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(100.0f, 0.0f)});
+        line.closed.push_back(false);
+        const FlatPath straight = StrokeToPieces(line, opts);
+        CHECK_EQ(straight.polylines.size(), static_cast<size_t>(3));
+        CHECK(sharedWinding(straight) != 0 && sharedWinding(straight) != 999);
+        CHECK(insideAnyWinding(straight, 50.0f, 0.0f));
+        CHECK(insideAnyWinding(straight, 50.0f, 1.5f));
+        CHECK(!insideAnyWinding(straight, 50.0f, 4.0f));
+        // Round caps cover the tips.
+        CHECK(insideAnyWinding(straight, -1.5f, 0.0f));
+        CHECK(insideAnyWinding(straight, 101.5f, 0.0f));
+        // Butt caps do not overhang.
+        StrokeOutlineOptions butt = opts;
+        butt.cap = LineCap::Butt;
+        const FlatPath buttBand = StrokeToPieces(line, butt);
+        CHECK_EQ(buttBand.polylines.size(), static_cast<size_t>(1));
+        CHECK(!insideAnyWinding(buttBand, -1.0f, 0.0f));
+        CHECK(insideAnyWinding(buttBand, 50.0f, 0.0f));
+        // Square caps extend by the radius.
+        StrokeOutlineOptions square = opts;
+        square.cap = LineCap::Square;
+        const FlatPath squareBand = StrokeToPieces(line, square);
+        CHECK(insideAnyWinding(squareBand, -1.5f, 0.0f));
+        CHECK(insideAnyWinding(squareBand, 101.5f, 0.0f));
+        CHECK(!insideAnyWinding(squareBand, -2.5f, 0.0f));
+
+        // A circle whose end overlaps its start: EVERY band probe must be
+        // inside some piece. This is the regression test for the subtracted
+        // overlap - the single loop left 2.6% of painted pixels missing here.
+        FlatPath circle;
+        circle.polylines.push_back(std::vector<Vec2>());
+        std::vector<Vec2>& ring = circle.polylines.back();
+        for (int i = 0; i <= 160; ++i) {
+            const double t = (static_cast<double>(i) / 160.0) * 6.634f; // 380deg
+            ring.push_back(Vec2(960.0f + static_cast<float>(150.0 * std::cos(t)),
+                                540.0f + static_cast<float>(150.0 * std::sin(t))));
+        }
+        circle.closed.push_back(false);
+        StrokeOutlineOptions wide = opts;
+        wide.width = 10.0f;
+        const FlatPath circlePieces = StrokeToPieces(circle, wide);
+        CHECK(sharedWinding(circlePieces) != 0 &&
+              sharedWinding(circlePieces) != 999);
+        long holes = 0;
+        long probes = 0;
+        for (size_t i = 1; i < ring.size(); ++i) {
+            ++probes;
+            const float mx = (ring[i - 1].x + ring[i].x) * 0.5f;
+            const float my = (ring[i - 1].y + ring[i].y) * 0.5f;
+            if (!insideAnyWinding(circlePieces, mx, my)) {
+                ++holes;
+            }
+        }
+        CHECK_MSG(holes == 0, "circle overlap holes in fill pieces");
+
+        // Bevel uses flat triangles instead of discs, so fewer vertices; the
+        // band stays covered.
+        FlatPath corner;
+        corner.polylines.push_back(
+            {Vec2(0.0f, 0.0f), Vec2(50.0f, 0.0f), Vec2(50.0f, 50.0f)});
+        corner.closed.push_back(false);
+        const FlatPath roundCorner = StrokeToPieces(corner, opts);
+        StrokeOutlineOptions bevel = opts;
+        bevel.join = LineJoin::Bevel;
+        const FlatPath bevelCorner = StrokeToPieces(corner, bevel);
+        CHECK(sharedWinding(bevelCorner) != 0 &&
+              sharedWinding(bevelCorner) != 999);
+        // One joint: round emits 1 disc piece, bevel 2 flat triangles.
+        CHECK_EQ(bevelCorner.polylines.size(),
+                 roundCorner.polylines.size() + 1);
+        size_t roundVerts = 0, bevelVerts = 0;
+        for (const auto& p : roundCorner.polylines) roundVerts += p.size();
+        for (const auto& p : bevelCorner.polylines) bevelVerts += p.size();
+        CHECK(bevelVerts < roundVerts);
+        CHECK(insideAnyWinding(bevelCorner, 25.0f, 0.0f));
+        // Miter keeps the outer point within the limit, degrades past it.
+        StrokeOutlineOptions miter = opts;
+        miter.join = LineJoin::Miter;
+        const FlatPath miterCorner = StrokeToPieces(corner, miter);
+        auto hasPieceVertexNear = [](const FlatPath& f, const Vec2& p,
+                                     float eps) {
+            for (const std::vector<Vec2>& poly : f.polylines) {
+                for (const Vec2& q : poly) {
+                    const float dx = q.x - p.x;
+                    const float dy = q.y - p.y;
+                    if (std::sqrt(dx * dx + dy * dy) <= eps) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        CHECK(hasPieceVertexNear(miterCorner, Vec2(48.0f, 2.0f), 0.15f));
+        miter.miterLimit = 1.0f;
+        CHECK(!hasPieceVertexNear(StrokeToPieces(corner, miter),
+                                  Vec2(48.0f, 2.0f), 0.15f));
+
+        // Degenerate input yields no pieces, never NaNs.
+        FlatPath dots;
+        dots.polylines.push_back({Vec2(5.0f, 5.0f), Vec2(5.0f, 5.0f)});
+        dots.closed.push_back(false);
+        CHECK(StrokeToPieces(dots, opts).polylines.empty());
+        StrokeOutlineOptions hairline = opts;
+        hairline.width = 0.0f;
+        CHECK(StrokeToPieces(line, hairline).polylines.empty());
+        CHECK(StrokeToPieces(FlatPath(), opts).polylines.empty());
+    }
 
     // Error-bounded fitting: far fewer segments than points, each within
     // tolerance of the input, starting at the polyline's first point.

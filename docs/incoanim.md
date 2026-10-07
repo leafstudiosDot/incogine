@@ -130,15 +130,196 @@ command stack, and the document-properties dock.
   (cleared on any command); a repaint only re-resolves matrices and colors,
   so paint cost is O(shapes), not O(segments). Live move drags only touch
   transforms, so the cache stays valid through them.
-- **Brush (`B`)**: drag to paint a stroked path. Input is throttled to ~2 screen
-  px, then fitted to error-bounded Beziers on release (least-squares cubics,
-  longest-within-tolerance wins), so a shaky hand produces a clean selectable
-  stroke. The smoothing slider IS the fit tolerance, so the knob is honest:
-  curves stay within it of the drawn input (a 3000-point torture scribble
-  lands ~215 segments / ~13kB at the 1.0 default, vs ~980 segments before).
-  A bare click makes a filled dot in the stroke color. Size (stage units),
-  smoothing, color, and opacity come from the tool options strip; `Esc`
-  cancels a stroke.
+- **Viewport culling.** Shapes whose stroke-inflated bounds miss the visible
+  stage rect skip path AND raster work entirely. The pad covers the stroke
+  halo plus antialiasing, so culling can never clip a visible pixel -
+  artwork is untouched, only fully-offscreen shapes are skipped. Marquee
+  selection and selection handles use the same stroke-inflated box, so wide
+  strokes select by their rendered pixels, not their centerline.
+- **Bounded checkerboard.** The transparency grid draws in fixed 8px widget
+  cells clipped to the stage, so its cost is bounded by the viewport at any
+  zoom (stage-space cells exploded into hundreds of thousands of rects
+  zoomed in).
+- **One draw list per paint.** The culled draw list is built once and shared by
+  every painter in a paint pass, instead of each rebuilding its own deep copy.
+
+### Known cost: Qt's raster stroker
+
+Painting a dense stroke is dominated by Qt's raster `QPainterPathStroker`, at
+roughly **20us per vertex**, scaling with the stroke band's **device-space**
+width - so it gets worse as you zoom in. Measured on a fitted brush stroke
+(12 strokes, 3648 flattened vertices, pen width 4, 1200x800):
+
+| Operation | Cost |
+|---|---|
+| `NoPen` fill of the same geometry | ~0.1 ms |
+| Stroked, antialiasing off | no faster than AA on |
+| Stroked, 3648 verts | 43 ms (zoom 1) → 173 ms (zoom 8) |
+
+Rasterization is essentially free; the stroker is the whole cost. Turning off
+antialiasing, switching join styles, and culling offscreen shapes do not
+address it.
+
+Decimating the centerline before the stroker was implemented, measured, and
+**rejected** (`DecimateForStroke` keeps the geometry helper, unused, with the
+numbers recorded). There is no useful operating point:
+
+| Tolerance | Verts kept | Speedup | Worst-case pixel error |
+|---|---|---|---|
+| 0.004 | 92.5% | 1.0x | max 90, 22 visibly wrong px |
+| 0.008 | 87.5% | 1.0x | max 132, 188 bad px |
+| 0.020 | 73.0% | 1.0–1.2x | max 333, 1906 bad px |
+| 0.080 | 34.9% | 1.4–1.7x | max 504, 8548 bad px |
+
+Tolerances small enough to preserve the artwork buy no speedup; the ones that
+buy speedup damage it. The vertices decimation removes are the same ones the
+stroker needs to resolve sub-pixel detail into smooth edges.
+
+Real options, none taken yet:
+- Render the canvas with an OpenGL viewport (`QOpenGLWidget`), where path
+  stroking is GPU-side. Changes the preview rasterizer away from QPainter, so
+  the "preview matches bake" guarantee needs re-checking.
+- Cache the stage raster and only re-render on change, so zoom/pan blit a
+  bitmap instead of re-stroking. Trades memory and adds invalidation bugs.
+
+### Fix adopted: strokes are filled pieces, not pen strokes
+
+The fix taken was to stop asking the rasterizer to stroke at all.
+`anim_geometry::StrokeToPieces()` expands a centerline into **union-correct fill
+pieces** - one convex quad per segment, a disc at every round joint and round
+cap, bevel/miter triangles elsewhere - all sharing one winding, so a single
+`WindingFill` paints their exact union. This is what Flash/Animate do - their
+brush produces a filled shape, not a stroked path. (An earlier single-outline-
+loop version, `StrokeToOutline()`, is kept for the selection highlight, where
+only its edges are stroked and winding never applies.)
+
+Measured with the shipped engine code, 12 fitted brush strokes (3648 centerline
+vertices, pen width 4, 1200x800):
+
+| Zoom | Qt stroker | Pieces fill | Speedup |
+|---|---|---|---|
+| 1 | 72.4 ms | 14.1 ms | **5.2x** |
+| 2 | 122.3 ms | 21.1 ms | **5.8x** |
+| 4 | 165.2 ms | 16.0 ms | **10.3x** |
+| 8 | 283.7 ms | 23.1 ms | **12.3x** |
+| 16 | 100.5 ms | 15.8 ms | **6.4x** |
+
+The win **grows with zoom**, which is the whole point: the old cost scaled with
+the device-space band width. The pieces are cached per shape (rebuilt only when
+the transform, width, cap or join changes), so panning and zooming reuse them
+entirely.
+
+Fills must use `WindingFill`, not even-odd: the pieces share one winding by
+construction (a `sharedWinding` test enforces it - one inconsistent triangle is
+enough to punch a hole), and only the winding rule paints their union solid.
+
+### Self-overlap holes, fixed by pieces
+
+The single-loop outline cancelled to zero where a stroke crossed itself: a brush
+circle's overlap read as subtracted/masked. Measured on a 380-degree circle
+(pen width 10), missing pixels (reference painted, outline left white):
+
+| Zoom | Single loop (winding) | Pieces (winding) |
+|---|---|---|
+| 1 | 99 missing | **6 missing** |
+| 4 | 1418 missing | **17 missing** |
+
+The residual single-digit misses are edge antialiasing, not holes (mean
+difference 0.03/765). Pieces also removed the old self-intersection darkening
+difference: an opaque stroke no longer darkens where it overlaps itself, and a
+non-crossing stroke is pixel-identical to the stroker.
+
+### Preview quality (the zoom lever)
+
+`View > Preview Quality` (persisted in `QSettings`, default Normal):
+
+| Level | Antialiasing | Curve tolerance | Effect at zoom 4-8 |
+|---|---|---|---|
+| Draft | off | 4x (1.0) | **~12-18x faster** than Normal |
+| Normal | on | 1x (0.25) | default |
+| High | on | 0.5x (0.125) | slower, smoother curves up close |
+
+Draft is the answer to zoomed-in lag on dense brushwork: it attacks both zoom
+costs at once (fill-rate via no AA, tessellation via fewer vertices). It is a
+preview-only tradeoff - the stored vector data is untouched, and switching back
+to Normal repaints full fidelity. The canvas previously painted with no
+antialiasing at all (QPainter's default); Normal now enables it explicitly.
+
+### Pixel fidelity, and one intentional difference
+
+Measured against Qt's stroker, worst case:
+
+- A stroke that does **not** cross itself: **pixel-identical** (0 differing
+  pixels, mean difference 0.007/765).
+- A stroke that **does** cross itself: ~1.7% of painted pixels differ by more
+  than 3% per channel.
+
+The cause is understood, and the outline is the more correct of the two: Qt's
+stroker composites each overlapping segment separately, so a self-intersection
+is drawn darker than the surrounding stroke, while one filled polygon paints it
+uniform. An opaque stroke should not darken where it overlaps itself. The
+difference is therefore a rendering behavior change at self-intersections, not a
+regression - but it is visible, so it is recorded here rather than buried.
+
+Tightening the arc tolerance barely helps (25x tighter moves 1487 differing
+pixels to 1179), confirming the residual is structural rather than tessellation.
+The default tolerance is kept because it is also the cheapest.
+
+### Cuts in strokes, and why zoom made them worse
+
+The first outline version produced visible gaps ("cuts") in brush strokes. The
+cause was not the outline code alone but an interaction with how the brush
+samples input.
+
+The brush sampled every ~2 **screen** px, which is right for constant visual
+resolution - but in **stage** units that spacing shrinks as `2 / zoom`. At zoom
+64 it was ~0.03 stage units against a 4-unit stroke: input ~130x denser than
+the stroke is wide.
+
+Dense input breaks a round join. The join sweeps an arc whose extent along each
+adjacent segment is `radius * tan(sweep / 2)`. Once neighbouring points are
+closer together than that, the arc runs *past* the next vertex; the outline then
+travels forward beyond a vertex and folds back to it, and under the winding rule
+the fold cancels to zero and opens a hole. Measured by probing every point along
+the centerline with a winding-rule point-in test:
+
+| Input spacing (stroke width 4, radius 2) | Centerline outside the band |
+|---|---|
+| much greater than width | 0.00% |
+| about equal to width | 0.00% |
+| less than width/4 | 0.37% |
+| ~0.2 units (zoom-64 brush, before fix) | **8.8%** |
+
+Two fixes, both needed:
+
+1. **The join arc is clamped** so it cannot overshoot its adjacent vertices
+   (`radius * tan(sweep/2) <= min(adjacent segment lengths)`). This is free
+   visually: a clamped arc only ever occurs on micro-vertices whose neighbours
+   are closer than the stroke is wide, where the full arc was buried in the band
+   anyway. 8.8% -> 0.4%.
+2. **The brush floors its sample spacing** at `strokeWidth * 0.2` stage units
+   (`BrushTool::sampleSpacing`). Below that floor extra points carry no visible
+   detail. This also bounds vertex count independently of zoom, so zooming in no
+   longer costs more to draw - the same input that caused the cuts was causing
+   the zoomed-in slowdown.
+
+At the floored density the stroke measures **0.06%** centerline holes (2 probes
+of 3366, both at the cap), and a 300-unit stroke carries ~26x fewer vertices at
+zoom 64 than before.
+- **Brush (`B`)**: a freeform Pen — drag to paint a Flash-style **filled**
+  brush shape, not a stroked path. Input is throttled to ~2 screen px (floored
+  at 20% of the brush width so zoom cannot make it arbitrarily dense), fitted
+  to error-bounded Beziers on release (least-squares cubics,
+  longest-within-tolerance wins), then expanded ONCE to union-correct fill
+  pieces which is what gets stored. Painting them later is a plain fill: no
+  per-repaint stroker, no zoom-dependent cost, no holes on overlap. The smoothing slider IS the fit tolerance,
+  so the knob is honest: curves stay within it of the drawn input (a 3000-point
+  torture scribble lands ~215 segments / ~13kB at the 1.0 default, vs ~980
+  segments before). A bare click makes a filled dot in the stroke color. Size
+  (stage units), smoothing, color, and opacity come from the tool options
+  strip; `Esc` cancels a stroke. The live preview outlines the raw input as a
+  fill (no QPen stroking, which was the while-drawing lag); the committed
+  shape is slightly smoother, matching Flash's ink-then-smooth feel.
 - **Pen (`P`)**: Flash-style — click places corner points, click-drag pulls
   symmetric Bezier handles for smooth points, clicking the start point closes,
   double-click or `Enter` finishes an open path, `Esc` cancels, `Backspace`

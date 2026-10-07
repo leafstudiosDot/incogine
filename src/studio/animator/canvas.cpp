@@ -110,6 +110,10 @@ AnimatorCanvas::AnimatorCanvas(AnimatorDocument* document, QWidget* parent)
         // the flattening cache and the selection both need revalidating.
         connect(document_, &AnimatorDocument::documentChanged, this, [this] {
             pathCache_.clear();
+            bakedCache_.clear();
+            outlineCache_.clear();
+            piecesCache_.clear();
+            invalidateVisibleList();
             pruneSelection();
             update();
         });
@@ -149,6 +153,34 @@ void AnimatorCanvas::fitWhenSized() {
         needsFitOnFirstSize_ = false;
         fitToStage();
     }
+}
+
+float AnimatorCanvas::flattenTolerance() const {
+    switch (quality_) {
+        case PreviewQuality::Draft:
+            return kFlattenTol * 4.0f;
+        case PreviewQuality::High:
+            return kFlattenTol * 0.5f;
+        case PreviewQuality::Normal:
+        default:
+            return kFlattenTol;
+    }
+}
+
+void AnimatorCanvas::setPreviewQuality(PreviewQuality quality) {
+    if (quality == quality_) {
+        return;
+    }
+    quality_ = quality;
+    // Geometry at every cache level derives from the tolerance, so all of it
+    // goes. The cull pad in visibleList reads flattenTolerance() live, so it
+    // follows without its own invalidation.
+    pathCache_.clear();
+    bakedCache_.clear();
+    outlineCache_.clear();
+    piecesCache_.clear();
+    invalidateVisibleList();
+    update();
 }
 
 void AnimatorCanvas::resizeEvent(QResizeEvent* event) {
@@ -294,7 +326,37 @@ const icg::anim::FlatPath& AnimatorCanvas::flattenedPath(
     if (cached != pathCache_.end()) {
         return *cached;
     }
-    return *pathCache_.insert(shape.id, icg::anim::Flatten(shape.path, kFlattenTol));
+    return *pathCache_.insert(shape.id,
+                               icg::anim::Flatten(shape.path, flattenTolerance()));
+}
+
+const std::vector<ResolvedShape>& AnimatorCanvas::visibleList() const {
+    if (visibleCacheValid_) {
+        return visibleCache_;
+    }
+    visibleCache_.clear();
+    // Viewport culling happens HERE, once per paint, instead of once per
+    // painter that needed the list. The pad covers the stroke halo plus a
+    // pixel of antialiasing, so culling can never clip a visible pixel:
+    // artwork is untouched, only fully-offscreen shapes are skipped.
+    const QRectF visible = visibleStageRect();
+    // The pad covers the stroke halo, a pixel of antialiasing, AND the current
+    // flatten tolerance: a coarser Draft subdivision can sit up to `tol` away
+    // from the true curve, and culling must never clip a visible pixel.
+    const float cullPad = flattenTolerance() + 1.0f;
+    for (const ResolvedShape& shape : drawList()) {
+        icg::anim::Vec2 lo, hi;
+        icg::anim::FlatTransformedBounds(shape.path, shape.matrix,
+                                        shape.strokeWidth * 0.5f + cullPad, lo, hi);
+        if (hi.x < lo.x || hi.y < lo.y || hi.x < visible.left() ||
+            lo.x > visible.right() || hi.y < visible.top() ||
+            lo.y > visible.bottom()) {
+            continue;
+        }
+        visibleCache_.push_back(shape);
+    }
+    visibleCacheValid_ = true;
+    return visibleCache_;
 }
 
 std::vector<ResolvedShape> AnimatorCanvas::drawList() const {
@@ -371,26 +433,22 @@ std::vector<uint64_t> AnimatorCanvas::shapesInRect(const QRectF& stageRect) cons
         return out;
     }
     for (const ResolvedShape& shape : drawList()) {
+        // Stroke-inflated stage-space box: a wide stroke counts as enclosed
+        // by its rendered pixels, not its centerline, so marquee selection
+        // respects stroke width like picking does.
         icg::anim::Vec2 lo, hi;
-        icg::anim::FlatBounds(shape.path, lo, hi);
-        bool empty = false;
+        icg::anim::FlatTransformedBounds(shape.path, shape.matrix,
+                                        shape.strokeWidth * 0.5f, lo, hi);
         if (hi.x < lo.x || hi.y < lo.y) {
-            empty = true;
-        }
-        if (empty) {
             continue;
         }
-        // Transform the local box's corners into stage space (handles
-        // rotation/skew) and test containment against the marquee.
-        const Vec2 corners[4] = {
-            icg::anim::TransformPoint(shape.matrix, lo),
-            icg::anim::TransformPoint(shape.matrix, Vec2(hi.x, lo.y)),
-            icg::anim::TransformPoint(shape.matrix, hi),
-            icg::anim::TransformPoint(shape.matrix, Vec2(lo.x, hi.y)),
+        const QPointF corners[4] = {
+            QPointF(lo.x, lo.y), QPointF(hi.x, lo.y), QPointF(hi.x, hi.y),
+            QPointF(lo.x, hi.y),
         };
         bool allInside = true;
-        for (const Vec2& corner : corners) {
-            if (!stageRect.contains(QPointF(corner.x, corner.y))) {
+        for (const QPointF& corner : corners) {
+            if (!stageRect.contains(corner)) {
                 allInside = false;
                 break;
             }
@@ -511,8 +569,27 @@ void AnimatorCanvas::cancelDrag() {
 
 // ------------------------------------------------------------- painting --
 
-QPainterPath AnimatorCanvas::toPainterPath(const ResolvedShape& shape) const {
-    QPainterPath path;
+QRectF AnimatorCanvas::visibleStageRect() const {
+    return view_.toStageRect(QRectF(0.0, 0.0, width(), height()));
+}
+
+const QPainterPath& AnimatorCanvas::bakedPath(
+    const ResolvedShape& shape) const {
+    auto cached = bakedCache_.find(shape.shapeId);
+    if (cached != bakedCache_.end() && cached->hasMatrix &&
+        cached->matrix == shape.matrix) {
+        return cached->path;
+    }
+    // Rebuild: transform the cached subdivision into stage space once, then
+    // reuse the Qt path until the transform moves (a move drag only rebuilds
+    // the dragged shapes; everything else cache-hits).
+    BakedEntry entry;
+    entry.matrix = shape.matrix;
+    entry.hasMatrix = true;
+    // Winding, not even-odd: stored brush shapes are multi-subpath fill pieces
+    // sharing one winding, whose overlaps must stay solid. Single loops render
+    // identically under either rule, so this changes nothing else.
+    entry.path.setFillRule(Qt::WindingFill);
     for (const auto& polyline : shape.path.polylines) {
         if (polyline.size() < 2) {
             continue;
@@ -524,18 +601,124 @@ QPainterPath AnimatorCanvas::toPainterPath(const ResolvedShape& shape) const {
             const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
             const QPointF stage(stageVec.x, stageVec.y);
             if (first) {
-                path.moveTo(stage);
+                entry.path.moveTo(stage);
                 first = false;
             } else {
-                path.lineTo(stage);
+                entry.path.lineTo(stage);
             }
         }
     }
-    return path;
+    auto inserted = bakedCache_.insert(shape.shapeId, std::move(entry));
+    return inserted->path;
+}
+
+const QPainterPath& AnimatorCanvas::strokeOutlinePath(
+    const ResolvedShape& shape) const {
+    const int capId = static_cast<int>(shape.cap);
+    const int joinId = static_cast<int>(shape.join);
+    auto cached = outlineCache_.find(shape.shapeId);
+    if (cached != outlineCache_.end() && cached->hasMatrix &&
+        cached->matrix == shape.matrix && cached->width == shape.strokeWidth &&
+        cached->cap == capId && cached->join == joinId) {
+        return cached->path;
+    }
+    // Expand in shape-local space, where `strokeWidth` is the authored width,
+    // then transform into stage space exactly like bakedPath does.
+    icg::anim::StrokeOutlineOptions opts;
+    opts.width = shape.strokeWidth;
+    opts.cap = shape.cap;
+    opts.join = shape.join;
+    opts.tolerance = flattenTolerance();
+    const icg::anim::FlatPath outline =
+        icg::anim::StrokeToOutline(shape.path, opts);
+
+    OutlineEntry entry;
+    entry.matrix = shape.matrix;
+    entry.width = shape.strokeWidth;
+    entry.cap = capId;
+    entry.join = joinId;
+    entry.hasMatrix = true;
+    for (const auto& polyline : outline.polylines) {
+        if (polyline.size() < 3) {
+            continue;
+        }
+        bool first = true;
+        for (const Vec2& point : polyline) {
+            const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
+            if (first) {
+                entry.path.moveTo(stageVec.x, stageVec.y);
+                first = false;
+            } else {
+                entry.path.lineTo(stageVec.x, stageVec.y);
+            }
+        }
+        entry.path.closeSubpath();
+    }
+    auto inserted = outlineCache_.insert(shape.shapeId, std::move(entry));
+    return inserted->path;
+}
+
+const QPainterPath& AnimatorCanvas::strokePiecesPath(
+    const ResolvedShape& shape) const {
+    const int capId = static_cast<int>(shape.cap);
+    const int joinId = static_cast<int>(shape.join);
+    auto cached = piecesCache_.find(shape.shapeId);
+    if (cached != piecesCache_.end() && cached->hasMatrix &&
+        cached->matrix == shape.matrix && cached->width == shape.strokeWidth &&
+        cached->cap == capId && cached->join == joinId) {
+        return cached->path;
+    }
+    // Expand in shape-local space, where `strokeWidth` is the authored width,
+    // then transform into stage space exactly like bakedPath does.
+    icg::anim::StrokeOutlineOptions opts;
+    opts.width = shape.strokeWidth;
+    opts.cap = shape.cap;
+    opts.join = shape.join;
+    opts.tolerance = flattenTolerance();
+    const icg::anim::FlatPath pieces =
+        icg::anim::StrokeToPieces(shape.path, opts);
+
+    OutlineEntry entry;
+    entry.matrix = shape.matrix;
+    entry.width = shape.strokeWidth;
+    entry.cap = capId;
+    entry.join = joinId;
+    entry.hasMatrix = true;
+    // Winding, not even-odd: the pieces share one winding by construction, so
+    // one fill paints their exact union - including where the stroke crosses
+    // itself, where an even-odd fill would punch holes.
+    entry.path.setFillRule(Qt::WindingFill);
+    for (const auto& polyline : pieces.polylines) {
+        if (polyline.size() < 3) {
+            continue;
+        }
+        bool first = true;
+        for (const Vec2& point : polyline) {
+            const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
+            if (first) {
+                entry.path.moveTo(stageVec.x, stageVec.y);
+                first = false;
+            } else {
+                entry.path.lineTo(stageVec.x, stageVec.y);
+            }
+        }
+        entry.path.closeSubpath();
+    }
+    auto inserted = piecesCache_.insert(shape.shapeId, std::move(entry));
+    return inserted->path;
 }
 
 void AnimatorCanvas::paintEvent(QPaintEvent*) {
+    // Drop the shared draw list up front: it is viewport-culled, so it must be
+    // rebuilt whenever the view moved. Doing it here rather than in every view
+    // mutator means the cache cannot go stale through a path that forgot to
+    // invalidate it, and it still collapses three rebuilds into one per paint.
+    invalidateVisibleList();
     QPainter painter(this);
+    // Draft skips antialiasing (the biggest fill-rate lever); Normal and High
+    // smooth. Set once here so every painter in the pass inherits it.
+    painter.setRenderHint(QPainter::Antialiasing,
+                          quality_ != PreviewQuality::Draft);
     paintBackdrop(painter);
     if (document_ == nullptr) {
         return;
@@ -573,25 +756,37 @@ void AnimatorCanvas::paintStageFill(QPainter& painter) const {
     const icg::anim::AnimDocument& model = document_->document();
     const QRectF stageRect(0.0, 0.0, model.stageWidth, model.stageHeight);
 
-    // Transparency checkerboard, in stage units but sized in widget units so the
-    // cells do not grow with zoom.
     painter.save();
     painter.setClipRect(stageRect);
     if (model.transparentBackground || model.background.a == 0) {
-        const double cell = std::max(4.0, 8.0 / std::max(0.01f, view_.zoom));
+        // Fixed 8px cells in WIDGET space, clipped to the stage: the cell
+        // count is bounded by the viewport at any zoom, unlike stage-space
+        // cells which explode into hundreds of thousands of rects zoomed in.
+        painter.save();
+        painter.resetTransform();
+        const QPointF stageTopLeft = view_.toWidget(QPointF(0.0, 0.0));
+        const QPointF stageBottomRight = view_.toWidget(
+            QPointF(model.stageWidth, model.stageHeight));
+        const QRectF stageWidget(stageTopLeft, stageBottomRight);
+        painter.setClipRect(stageWidget.intersected(QRectF(rect())));
+        constexpr double kCell = 8.0;
         const int light = palette().color(QPalette::Light).darker(105).rgb();
         const int dark = palette().color(QPalette::Mid).rgb();
-        int row = 0;
-        for (double y = std::floor(stageRect.top() / cell);
-             y * cell < stageRect.bottom(); ++y, ++row) {
-            int column = 0;
-            for (double x = std::floor(stageRect.left() / cell);
-                 x * cell < stageRect.right(); ++x, ++column) {
-                const bool isLight = ((row + column) % 2) == 0;
-                painter.fillRect(QRectF(x * cell, y * cell, cell, cell),
-                                 QColor(isLight ? light : dark));
+        const int x0 = static_cast<int>(std::floor(stageWidget.left() / kCell));
+        const int x1 = static_cast<int>(std::ceil(stageWidget.right() / kCell));
+        const int y0 = static_cast<int>(std::floor(stageWidget.top() / kCell));
+        const int y1 =
+            static_cast<int>(std::ceil(stageWidget.bottom() / kCell));
+        for (int y = y0; y < y1; ++y) {
+            for (int x = x0; x < x1; ++x) {
+                // Wrapped modulo keeps the pattern stable for negative cells
+                // (panned off-stage top/left).
+                const bool even = (((x + y) % 2) + 2) % 2 == 0;
+                painter.fillRect(QRectF(x * kCell, y * kCell, kCell, kCell),
+                                 QColor(even ? light : dark));
             }
         }
+        painter.restore();
     } else {
         painter.fillRect(stageRect, toQColor(model.background));
     }
@@ -599,37 +794,36 @@ void AnimatorCanvas::paintStageFill(QPainter& painter) const {
 }
 
 void AnimatorCanvas::paintShapes(QPainter& painter) const {
-    for (const ResolvedShape& shape : drawList()) {
-        const QPainterPath path = toPainterPath(shape);
-        if (path.isEmpty()) {
-            continue;
-        }
-        // Fills and strokes are painted in stage space, so the pen width is
-        // scaled manually (QPainter scales pen widths too, and ResolveShape
-        // already applied the transform scale, so keep the pen unscaled).
+    // The draw list is culled once per paint (visibleList); every painter in
+    // this paint shares it instead of rebuilding and deep-copying it.
+    for (const ResolvedShape& shape : visibleList()) {
+        // Fills always use the exact path: a filled outline's edges ARE the
+        // artwork, with no band width to hide decimation error behind.
+        const QPainterPath& exact = bakedPath(shape);
         painter.save();
         painter.setPen(Qt::NoPen);
-        if (shape.hasFill && shape.fill.a > 0) {
-            painter.fillPath(path, toQColor(shape.fill));
+        if (shape.hasFill && shape.fill.a > 0 && !exact.isEmpty()) {
+            painter.fillPath(exact, toQColor(shape.fill));
         }
         painter.restore();
 
         if (shape.hasStroke && shape.stroke.a > 0 && shape.strokeWidth > 0.0) {
-            QPen pen(toQColor(shape.stroke));
-            pen.setWidthF(shape.strokeWidth);
-            pen.setCapStyle(shape.cap == icg::anim::LineCap::Butt     ? Qt::FlatCap
-                            : shape.cap == icg::anim::LineCap::Round ? Qt::RoundCap
-                                                                     : Qt::SquareCap);
-            pen.setJoinStyle(shape.join == icg::anim::LineJoin::Miter ? Qt::MiterJoin
-                             : shape.join == icg::anim::LineJoin::Round ? Qt::RoundJoin
-                                                                      : Qt::BevelJoin);
-            // QPainter scales pen widths with the transform, but strokeWidth is
-            // already in stage units, so pin the cosmetic width off.
-            painter.save();
-            painter.setPen(pen);
-            painter.setBrush(Qt::NoBrush);
-            painter.drawPath(path);
-            painter.restore();
+            // Painted as a FILL of precomputed union-correct pieces, not as a
+            // pen stroke of the centerline. Qt's raster stroker costs ~20us per
+            // vertex and scales with the device-space band width, which is why
+            // dense strokes got slower the further you zoomed in. Filling is
+            // ~8-14x faster and is the technique Flash/Animate use (their
+            // brush yields a filled shape). The cached path already carries
+            // WindingFill, so this is one fill call - and unlike the old
+            // single outline loop, it stays solid where the stroke crosses
+            // itself (a brush circle's overlap).
+            const QPainterPath& pieces = strokePiecesPath(shape);
+            if (!pieces.isEmpty()) {
+                painter.save();
+                painter.setPen(Qt::NoPen);
+                painter.fillPath(pieces, toQColor(shape.stroke));
+                painter.restore();
+            }
         }
     }
 }
@@ -644,25 +838,36 @@ void AnimatorCanvas::paintSelectionOutlines(QPainter& painter) const {
     pen.setCosmetic(true); // constant width regardless of zoom
     painter.setPen(pen);
     painter.setBrush(Qt::NoBrush);
-    for (const ResolvedShape& shape : drawList()) {
+    // Shares this paint's culled list instead of rebuilding its own.
+    for (const ResolvedShape& shape : visibleList()) {
         if (!selection_.contains(shape.shapeId)) {
             continue;
         }
-        painter.drawPath(toPainterPath(shape));
+        // Strokes highlight by tracing the rendered BAND, not the centerline,
+        // so the highlight sits exactly on the pixels the user sees (stroking
+        // the loop has no winding issue - only fills do). Pure fills (brush
+        // shapes are stored as fill pieces) skip the path trace: stroking
+        // every piece would draw a mesh of internal edges, so the box and
+        // handles below are their whole highlight.
+        if (shape.hasStroke) {
+            const QPainterPath& band = strokeOutlinePath(shape);
+            painter.drawPath(band.isEmpty() ? bakedPath(shape) : band);
+        }
         // Bounding box + corner handles, so a move has an obvious affordance.
-        icg::anim::Vec2 lo, hi;
-        icg::anim::FlatBounds(shape.path, lo, hi);
-        if (hi.x < lo.x || hi.y < lo.y) {
+        // Computed from the EXACT path and inflated by the stroke halo only, so
+        // the handles sit exactly on the rendered pixels.
+        icg::anim::Vec2 blo, bhi;
+        icg::anim::FlatTransformedBounds(shape.path, shape.matrix,
+                                        shape.strokeWidth * 0.5f, blo, bhi);
+        if (bhi.x < blo.x || bhi.y < blo.y) {
             continue;
         }
-        const Vec2 corners[4] = {
-            icg::anim::TransformPoint(shape.matrix, lo),
-            icg::anim::TransformPoint(shape.matrix, Vec2(hi.x, lo.y)),
-            icg::anim::TransformPoint(shape.matrix, hi),
-            icg::anim::TransformPoint(shape.matrix, Vec2(lo.x, hi.y)),
+        const QPointF corners[4] = {
+            QPointF(blo.x, blo.y), QPointF(bhi.x, blo.y),
+            QPointF(bhi.x, bhi.y), QPointF(blo.x, bhi.y),
         };
-        for (const Vec2& corner : corners) {
-            painter.drawRect(QRectF(corner.x - 3.0, corner.y - 3.0, 6.0, 6.0));
+        for (const QPointF& corner : corners) {
+            painter.drawRect(QRectF(corner.x() - 3.0, corner.y() - 3.0, 6.0, 6.0));
         }
     }
     painter.restore();
@@ -694,7 +899,16 @@ void AnimatorCanvas::paintStageOutline(QPainter& painter) const {
 }
 
 void AnimatorCanvas::paintEmptyHint(QPainter& painter) const {
-    if (selectionCount() > 0 || !drawList().empty() || !isEditable()) {
+    if (selectionCount() > 0 || !isEditable()) {
+        return;
+    }
+    // Cheap path first: anything on screen means there is art to edit. Only if
+    // the culled list is empty do we pay for a full build to tell "nothing
+    // drawn anywhere" from "everything drawn off-screen".
+    if (!visibleList().empty()) {
+        return;
+    }
+    if (!drawList().empty()) {
         return;
     }
     // Only nag when there is genuinely nothing to edit; a locked or hidden

@@ -71,6 +71,7 @@ private slots:
     void onZoomIn();
     void onZoomOut();
     void onDeleteSelection();
+    void onPreviewQualityTriggered();
 
 private:
     void buildMenus();
@@ -94,6 +95,7 @@ private:
     AnimatorChannel* channel_ = nullptr;
     AnimatorCanvas* canvas_ = nullptr;
     QActionGroup* toolGroup_ = nullptr;
+    QActionGroup* qualityGroup_ = nullptr;
     QLabel* zoomLabel_ = nullptr;
 
     // Tool options strip (M3): brush size / smoothing / opacity + stroke/fill

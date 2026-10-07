@@ -103,6 +103,22 @@ struct Mat2x3 {
     float a = 1.0f, b = 0.0f, c = 0.0f, d = 1.0f, e = 0.0f, f = 0.0f;
 };
 
+// How a stroke ends.
+enum class LineCap { Butt, Round, Square };
+// How a stroke turns a corner.
+enum class LineJoin { Miter, Round, Bevel };;
+
+// Exact comparison: used to detect whether a cached baked path is still
+// valid, not geometric closeness (same inputs recompute bitwise-identical
+// outputs, so any difference means the transform really moved).
+inline bool operator==(const Mat2x3& x, const Mat2x3& y) {
+    return x.a == y.a && x.b == y.b && x.c == y.c && x.d == y.d &&
+           x.e == y.e && x.f == y.f;
+}
+inline bool operator!=(const Mat2x3& x, const Mat2x3& y) {
+    return !(x == y);
+}
+
 inline Mat2x3 Mat2x3Identity() {
     return Mat2x3();
 }

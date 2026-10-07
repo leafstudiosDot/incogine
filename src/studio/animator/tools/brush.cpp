@@ -1,9 +1,9 @@
-// Incogine Animator - freehand brush tool.
+// Incogine Animator - Flash-style freeform brush tool.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
-// Drag to paint a stroked path. Raw input points are throttled to ~2 screen
-// px, then RDP-simplified and fitted to Beziers on release, so a shaky hand
-// produces a clean selectable stroke. A bare click makes a dot.
+// Drag to paint a filled brush shape (a freeform Pen: input is fitted to smooth
+// Beziers on release, then expanded once to a filled outline which is what gets
+// stored). A bare click makes a dot.
 //
 // NOTE: handlers take events by const reference, so members are accessed with
 // '.' The '->' operator applies to pointers and objects, not references - which
@@ -18,6 +18,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QWidget>
 
 #include <algorithm>
@@ -51,6 +52,28 @@ icg::anim::AnimColor styledStroke(const AnimatorCanvas& canvas) {
 }
 } // namespace
 
+// Minimum distance between sampled input points, in STAGE units.
+//
+// The screen-space part (2px / zoom) keeps sampling resolution visually
+// constant as you zoom. The floor is what stops that from running away: at high
+// zoom 2/zoom gets tiny, so a stroke picks up points far denser than the brush
+// is wide - measured at zoom 64, ~26x denser than the stroke can resolve.
+//
+// That density was the cause of BOTH reported problems:
+//   - The stroker offsets the centerline by half the width. When neighbouring
+//     points are closer together than that, the offset outline folds back on
+//     itself and the fill leaves pinholes: the "cuts" in a stroke.
+//   - Vertex count, and so paint cost, grew without limit as you zoomed in -
+//     the lag that got worse the closer you looked.
+// Flooring the spacing at a fraction of the stroke width bounds vertex count
+// independently of zoom, so zooming in no longer costs more to draw. Below the
+// floor the extra points carried no visible detail anyway.
+float BrushTool::sampleSpacing(const AnimatorCanvas& canvas) const {
+    const float screenSpacing = 2.0f / std::max(0.02f, canvas.view().zoom);
+    const float widthFloor = canvas.drawingOptions().strokeWidth * 0.2f;
+    return std::max(screenSpacing, widthFloor);
+}
+
 bool BrushTool::onPress(AnimatorCanvas& canvas, const QMouseEvent& event) {
     if (event.button() != Qt::LeftButton) {
         return false;
@@ -81,8 +104,7 @@ bool BrushTool::onMove(AnimatorCanvas& canvas, const QMouseEvent& event) {
         canvas.update();
         return false;
     }
-    appendIfSpaced(toVec(hoverStage_),
-                   2.0f / std::max(0.02f, canvas.view().zoom));
+    appendIfSpaced(toVec(hoverStage_), sampleSpacing(canvas));
     canvas.update();
     return true;
 }
@@ -136,11 +158,12 @@ bool BrushTool::finishStroke(AnimatorCanvas& canvas) {
         return canvas.addDrawnShape(std::move(dot), style, "Brush Dot") != 0;
     }
 
-    // Fit the raw input directly: least-squares cubics smooth through hand
-    // jitter on their own, and a separate RDP pass only replaces smooth dense
-    // points with angular zigzag that fragments the fit (measured 2.5x more
-    // segments for the same error). The smoothing slider IS the fit tolerance,
-    // so the knob is honest: curves stay within it of the drawn input.
+    // Freeform pen: fit the raw input to smooth Beziers first (least-squares
+    // cubics smooth through hand jitter on their own; a separate RDP pass only
+    // replaces smooth dense points with angular zigzag that fragments the fit,
+    // measured 2.5x more segments for the same error). The smoothing slider IS
+    // the fit tolerance, so the knob is honest: curves stay within it of the
+    // drawn input.
     Vec2 start;
     std::vector<AnimSegment> segments;
     icg::anim::FitBeziersToPolyline(
@@ -149,23 +172,41 @@ bool BrushTool::finishStroke(AnimatorCanvas& canvas) {
         canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
         return false;
     }
-    AnimPath path;
-    path.segments.reserve(segments.size() + 1);
+    AnimPath centerline;
+    centerline.segments.reserve(segments.size() + 1);
     AnimSegment move(AnimSegment::Kind::Move);
     move.p[0] = start;
-    path.segments.push_back(move);
+    centerline.segments.push_back(move);
     for (AnimSegment& segment : segments) {
-        path.segments.push_back(segment);
+        centerline.segments.push_back(segment);
+    }
+
+    // Flash-style brush: the stroke is expanded to UNION-CORRECT fill pieces
+    // ONCE, at commit time, and those pieces are what gets stored. Painting
+    // them later is a plain fill - no per-repaint stroker, no zoom-dependent
+    // cost - and they stay solid where the stroke crosses itself (a circle's
+    // overlap), which a single outline loop cannot do. The centerline is
+    // discarded; width/cap/join are baked into the geometry, exactly like
+    // Flash's brush shapes.
+    const icg::anim::FlatPath flat =
+        icg::anim::Flatten(centerline, icg::anim::kFlattenTolerance);
+    icg::anim::StrokeOutlineOptions outlineOpts;
+    outlineOpts.width = options.strokeWidth;
+    outlineOpts.cap = icg::anim::LineCap::Round;
+    outlineOpts.join = icg::anim::LineJoin::Round;
+    const icg::anim::FlatPath band =
+        icg::anim::StrokeToPieces(flat, outlineOpts);
+    AnimPath path = icg::anim::OutlineToAnimPath(band);
+    if (path.IsEmpty()) {
+        canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
+        return false;
     }
 
     AnimStyle style;
-    style.hasFill = false;
-    style.hasStroke = true;
-    style.stroke = stroke;
-    style.strokeWidth = options.strokeWidth;
-    style.cap = icg::anim::LineCap::Round;
-    style.join = icg::anim::LineJoin::Round;
-    return canvas.addDrawnShape(std::move(path), style, "Brush Stroke") != 0;
+    style.hasFill = true;
+    style.fill = stroke;
+    style.hasStroke = false;
+    return canvas.addDrawnShape(std::move(path), style, "Brush Shape") != 0;
 }
 
 bool BrushTool::onKey(AnimatorCanvas& canvas, QKeyEvent& event) {
@@ -183,16 +224,44 @@ void BrushTool::paintOverlay(QPainter& painter, AnimatorCanvas& canvas) {
     const float zoom = std::max(0.02f, canvas.view().zoom);
     const icg::anim::AnimColor stroke = styledStroke(canvas);
 
-    // Live stroke preview while painting.
+    // Live stroke preview while painting: the raw input expanded to fill
+    // pieces, painted with a single fillPath. The old preview stroked every
+    // raw segment with a QPen, which ran the ~20us-per-vertex raster stroker
+    // on every mouse move - the zoomed-in lag while drawing. A fill is ~10x
+    // cheaper for the same pixels, and pieces stay solid on overlap.
+    //
+    // The preview expands the RAW input, while commit fits Beziers first, so
+    // the final shape is slightly smoother than the preview. That matches
+    // Flash behaviour (ink first, smoothing on release) and keeps every mouse
+    // move cheap: no fitting per move.
     if (stroking_ && raw_.size() >= 2) {
-        QPen pen(QColor(stroke.r, stroke.g, stroke.b, stroke.a));
-        pen.setWidthF(options.strokeWidth);
-        pen.setCapStyle(Qt::RoundCap);
-        pen.setJoinStyle(Qt::RoundJoin);
-        painter.setPen(pen);
-        painter.setBrush(Qt::NoBrush);
-        for (size_t i = 1; i < raw_.size(); ++i) {
-            painter.drawLine(toPoint(raw_[i - 1]), toPoint(raw_[i]));
+        icg::anim::FlatPath rawFlat;
+        rawFlat.polylines.push_back(raw_);
+        rawFlat.closed.push_back(false);
+        icg::anim::StrokeOutlineOptions previewOpts;
+        previewOpts.width = options.strokeWidth;
+        previewOpts.cap = icg::anim::LineCap::Round;
+        previewOpts.join = icg::anim::LineJoin::Round;
+        const icg::anim::FlatPath band =
+            icg::anim::StrokeToPieces(rawFlat, previewOpts);
+        QPainterPath preview;
+        preview.setFillRule(Qt::WindingFill);
+        for (const std::vector<icg::anim::Vec2>& poly : band.polylines) {
+            if (poly.size() < 3) {
+                continue;
+            }
+            preview.moveTo(toPoint(poly[0]));
+            for (size_t i = 1; i < poly.size(); ++i) {
+                preview.lineTo(toPoint(poly[i]));
+            }
+            preview.closeSubpath();
+        }
+        if (!preview.isEmpty()) {
+            painter.save();
+            painter.setPen(Qt::NoPen);
+            painter.setBrush(QColor(stroke.r, stroke.g, stroke.b, stroke.a));
+            painter.drawPath(preview);
+            painter.restore();
         }
     }
 

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <QHash>
+#include <QPainterPath>
 #include <QPointF>
 #include <QRectF>
 #include <QSet>
@@ -45,6 +46,13 @@ struct DrawingOptions {
     float smoothing = 1.0f;   // fit tolerance in stage units (honest: curves stay within it)
     icg::anim::AnimColor fillColor = icg::anim::AnimColor(255, 255, 255, 255);
 };
+
+// Preview quality: how much work a repaint may spend on vector fidelity.
+// Draft is the zoomed-in lag lever - no antialiasing and 4x coarser curve
+// subdivision, ~12-18x faster than Normal at zoom 4-8 (measured). Normal is
+// the default; High halves the subdivision tolerance for inspecting smooth
+// curves up close (slower, not faster).
+enum class PreviewQuality { Draft, Normal, High };
 
 // Pan/zoom mapping between widget pixels and stage units.
 class StageView {
@@ -86,6 +94,14 @@ public:
     void fitToStage();
     // Fits after the first paint, when the widget has a real size.
     void fitWhenSized();
+
+    // --- preview quality ---
+    PreviewQuality previewQuality() const { return quality_; }
+    void setPreviewQuality(PreviewQuality quality);
+    // Flattening tolerance in stage units for this quality level. Everything
+    // vector (subdivision, joint/cap arcs) scales off it, so one knob moves
+    // the whole fidelity/cost tradeoff.
+    float flattenTolerance() const;
 
     // --- selection ---
     // Selection is a set of shape ids on the ACTIVE layer's active keyframe.
@@ -201,15 +217,48 @@ private:
     void paintSelectionOutlines(QPainter& painter) const;
     void paintStageOutline(QPainter& painter) const;
     void paintEmptyHint(QPainter& painter) const;
-    QPainterPath toPainterPath(const icg::anim::ResolvedShape& shape) const;
     static QColor toQColor(const icg::anim::AnimColor& color);
 
-    // --- flattening cache ---
+    // --- one-pass visible draw list ---
+    // `paintShapes`, `paintSelectionOutlines` and `paintEmptyHint` all need the
+    // draw list, and each used to build its own (a deep copy of every visible
+    // shape's FlatPath). They now share ONE list per paint, viewport-culled
+    // once, reused by all three. `visibleList()` caches it; the cache is
+    // invalidated whenever the view or the document changes, which is what
+    // makes it safe to share across a single paintEvent.
+    const std::vector<icg::anim::ResolvedShape>& visibleList() const;
+    void invalidateVisibleList() const { visibleCacheValid_ = false; }
+
+    // --- path caches ---
     // Keyed by shape id. Path geometry only changes through commands (which
     // clear the cache), so repaints - including live move drags, which only
-    // touch transforms - reuse the subdivision. Mutable so const paint and
-    // hit-test paths can populate it.
+    // touch transforms - reuse the subdivision AND the built QPainterPath.
+    // Mutable so const paint and hit-test paths can populate them.
     const icg::anim::FlatPath& flattenedPath(const icg::anim::AnimShape& shape) const;
+    // Stage-space QPainterPath for one resolved shape, rebuilt only when its
+    // matrix changed since the last paint. This is what makes zoomed-in
+    // panning cheap: the subdivision and the Qt path build both cache-hit.
+    const QPainterPath& bakedPath(const icg::anim::ResolvedShape& shape) const;
+    // Stroke outline for one shape: the centerline expanded to a closed,
+    // filled band by anim_geometry::StrokeToOutline. Used ONLY for the
+    // selection highlight, where the loop's edges are stroked (winding never
+    // applies to a stroked highlight, so the loop's self-overlap holes cannot
+    // show). Painting uses strokePiecesPath below.
+    //
+    // Rebuilt when the transform or any stroke parameter changes; it is a pure
+    // function of them, so a pan or zoom reuses it entirely.
+    const QPainterPath& strokeOutlinePath(
+        const icg::anim::ResolvedShape& shape) const;
+    // Stroke fill pieces for one shape: the centerline expanded to UNION-CORRECT
+    // convex pieces by anim_geometry::StrokeToPieces. Painting these with one
+    // WindingFill is ~8-14x faster than stroking the centerline with a pen, and
+    // - unlike the single outline loop - stays solid where the stroke crosses
+    // itself (a brush circle's overlap). Same cache versioning as the outline.
+    const QPainterPath& strokePiecesPath(
+        const icg::anim::ResolvedShape& shape) const;
+    // Stage-space rectangle currently visible in the widget. Shapes whose
+    // stroke-inflated bounds miss it are skipped before any path work.
+    QRectF visibleStageRect() const;
 
     // --- drag state ---
     struct DragState {
@@ -230,6 +279,30 @@ private:
     DragState drag_;
     bool needsFitOnFirstSize_ = true;
     mutable QHash<uint64_t, icg::anim::FlatPath> pathCache_;
+    struct BakedEntry {
+        QPainterPath path;
+        icg::anim::Mat2x3 matrix;
+        bool hasMatrix = false;
+    };
+    mutable QHash<uint64_t, BakedEntry> bakedCache_;
+    // Stroke outlines, keyed by shape id. `OutlineEntry` also remembers the
+    // stroke parameters, since width/cap/join all change the geometry.
+    struct OutlineEntry {
+        QPainterPath path;
+        icg::anim::Mat2x3 matrix;
+        float width = -1.0f;
+        int cap = -1;
+        int join = -1;
+        bool hasMatrix = false;
+    };
+    mutable QHash<uint64_t, OutlineEntry> outlineCache_;
+    // Stroke fill pieces, keyed the same way (transform + width/cap/join).
+    // Reused struct: `width`/`cap`/`join` are the stroke parameters either way.
+    mutable QHash<uint64_t, OutlineEntry> piecesCache_;
+    PreviewQuality quality_ = PreviewQuality::Normal;
+    // One culled draw list per paint, shared by every painter in that paint.
+    mutable std::vector<icg::anim::ResolvedShape> visibleCache_;
+    mutable bool visibleCacheValid_ = false;
     DrawingOptions drawOptions_;
 
     // Tool dispatch. The canvas owns the tools and forwards input; Space
