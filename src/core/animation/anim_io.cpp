@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "../engine/version.h"
+#include "anim_container.h"
 #include "anim_json.h"
 
 namespace icg {
@@ -473,6 +474,11 @@ bool Deserialize(const std::string& text, AnimDocument& out, std::string& error)
 
 // ---------------------------------------------------------------- file IO --
 
+bool DeserializeBytes(const void* bytes, size_t size, AnimDocument& out,
+                      std::string& error) {
+    return LoadContainer(bytes, size, out, error);
+}
+
 bool LoadFile(const std::string& path, AnimDocument& out, std::string& error) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) {
@@ -481,11 +487,16 @@ bool LoadFile(const std::string& path, AnimDocument& out, std::string& error) {
     }
     std::ostringstream buffer;
     buffer << stream.rdbuf();
-    return Deserialize(buffer.str(), out, error);
+    const std::string bytes = buffer.str();
+    // v1 JSON text and the v2 container share the extension; the loader
+    // detects the bytes, so old project files keep opening (migrate on save).
+    return DeserializeBytes(bytes.data(), bytes.size(), out, error);
 }
 
 bool SaveFile(const std::string& path, const AnimDocument& document,
               std::string& error) {
+    // Saves always write the v2 container (compact + compressed). v1 files
+    // load fine and migrate the first time they are saved.
     // Write to a sibling temp file and rename over the target, so a crash or a
     // cancelled save cannot leave a half-written animation behind.
     const std::string tempPath = path + ".tmp";
@@ -495,8 +506,13 @@ bool SaveFile(const std::string& path, const AnimDocument& document,
             error = "Cannot write " + tempPath;
             return false;
         }
-        const std::string text = Serialize(document);
-        stream.write(text.data(), static_cast<std::streamsize>(text.size()));
+        const std::vector<uint8_t> bytes = SaveContainer(document);
+        if (bytes.empty()) {
+            error = "Nothing to write for " + tempPath;
+            return false;
+        }
+        stream.write(reinterpret_cast<const char*>(bytes.data()),
+                     static_cast<std::streamsize>(bytes.size()));
         if (!stream) {
             error = "Write failed for " + tempPath;
             return false;

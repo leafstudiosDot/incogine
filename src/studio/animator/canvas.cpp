@@ -113,7 +113,7 @@ AnimatorCanvas::AnimatorCanvas(AnimatorDocument* document, QWidget* parent)
             bakedCache_.clear();
             outlineCache_.clear();
             piecesCache_.clear();
-            invalidateVisibleList();
+            invalidateDrawCache();
             pruneSelection();
             update();
         });
@@ -179,7 +179,7 @@ void AnimatorCanvas::setPreviewQuality(PreviewQuality quality) {
     bakedCache_.clear();
     outlineCache_.clear();
     piecesCache_.clear();
-    invalidateVisibleList();
+    invalidateDrawCache();
     update();
 }
 
@@ -315,6 +315,7 @@ void AnimatorCanvas::setCurrentFrame(int frame) {
     currentFrame_ = clamped;
     // The target keyframe may not hold the selected shapes.
     pruneSelection();
+    invalidateDrawCache();
     update();
 }
 
@@ -359,53 +360,56 @@ const std::vector<ResolvedShape>& AnimatorCanvas::visibleList() const {
     return visibleCache_;
 }
 
-std::vector<ResolvedShape> AnimatorCanvas::drawList() const {
-    std::vector<ResolvedShape> out;
-    if (document_ == nullptr) {
-        return out;
-    }
-    const icg::anim::AnimDocument& model = document_->document();
-    for (const AnimLayer& layer : model.layers) {
-        if (!layer.visible) {
-            continue;
-        }
-        const AnimKeyframe* key = layer.AtOrBefore(currentFrame_);
-        if (key == nullptr) {
-            continue;
-        }
-        for (const AnimShape& shape : key->shapes) {
-            // Style is cheap (matrix + color mults); the subdivision reuses the
-            // cache, so a repaint costs O(shapes), not O(segments).
-            const icg::anim::ResolvedStyle style =
-                icg::anim::ResolveShapeStyle(shape, *key);
-            const icg::anim::FlatPath& flat = flattenedPath(shape);
-            if (flat.polylines.empty()) {
-                continue;
+const std::vector<ResolvedShape>& AnimatorCanvas::drawList() const {
+    if (!drawCacheValid_) {
+        drawCache_.clear();
+        if (document_ != nullptr) {
+            const icg::anim::AnimDocument& model = document_->document();
+            for (const AnimLayer& layer : model.layers) {
+                if (!layer.visible) {
+                    continue;
+                }
+                const AnimKeyframe* key = layer.AtOrBefore(currentFrame_);
+                if (key == nullptr) {
+                    continue;
+                }
+                for (const AnimShape& shape : key->shapes) {
+                    // Style is cheap (matrix + color mults); the subdivision
+                    // reuses the cache, so a rebuild costs O(shapes), not
+                    // O(segments) - and repaints reuse the list outright.
+                    const icg::anim::ResolvedStyle style =
+                        icg::anim::ResolveShapeStyle(shape, *key);
+                    const icg::anim::FlatPath& flat = flattenedPath(shape);
+                    if (flat.polylines.empty()) {
+                        continue;
+                    }
+                    ResolvedShape resolved;
+                    resolved.shapeId = shape.id;
+                    resolved.name = shape.name;
+                    resolved.path = flat;
+                    resolved.matrix = style.matrix;
+                    resolved.hasFill = style.hasFill;
+                    resolved.fill = style.fill;
+                    resolved.hasStroke = style.hasStroke;
+                    resolved.stroke = style.stroke;
+                    resolved.strokeWidth = style.strokeWidth;
+                    resolved.cap = style.cap;
+                    resolved.join = style.join;
+                    resolved.drawable = true;
+                    drawCache_.push_back(std::move(resolved));
+                }
             }
-            ResolvedShape resolved;
-            resolved.shapeId = shape.id;
-            resolved.name = shape.name;
-            resolved.path = flat;
-            resolved.matrix = style.matrix;
-            resolved.hasFill = style.hasFill;
-            resolved.fill = style.fill;
-            resolved.hasStroke = style.hasStroke;
-            resolved.stroke = style.stroke;
-            resolved.strokeWidth = style.strokeWidth;
-            resolved.cap = style.cap;
-            resolved.join = style.join;
-            resolved.drawable = true;
-            out.push_back(std::move(resolved));
+            // Layers are stored top-first; painting must run bottom-first.
+            std::reverse(drawCache_.begin(), drawCache_.end());
         }
+        drawCacheValid_ = true;
     }
-    // Layers are stored top-first; painting must run bottom-first.
-    std::reverse(out.begin(), out.end());
-    return out;
+    return drawCache_;
 }
 
 uint64_t AnimatorCanvas::hitTest(const QPointF& stagePos,
                                  double toleranceStage) const {
-    const auto shapes = drawList();
+    const auto& shapes = drawList();
     // drawList() is bottom-first, so iterate backwards to pick the topmost.
     for (auto it = shapes.rbegin(); it != shapes.rend(); ++it) {
         const QPointF p(stagePos.x(), stagePos.y());
@@ -516,6 +520,9 @@ void AnimatorCanvas::updateDrag(const QPointF& stagePos) {
             break;
         }
     }
+    // Live transform mutation bypasses the command stack (no documentChanged),
+    // so the draw list must be dropped explicitly or the drag paints stale.
+    invalidateDrawCache();
     update();
 }
 
@@ -564,6 +571,7 @@ void AnimatorCanvas::cancelDrag() {
             }
         }
     }
+    invalidateDrawCache();
     update();
 }
 

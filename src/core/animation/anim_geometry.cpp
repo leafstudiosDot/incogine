@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 #include "anim_path.h"
 
@@ -371,32 +372,6 @@ FlatPath DecimateForStroke(const FlatPath& flat, float tolerance) {
         out.closed.push_back(i < flat.closed.size() ? flat.closed[i] : false);
     }
     return out;
-}
-
-AnimPath OutlineToAnimPath(const FlatPath& flat) {
-    AnimPath path;
-    for (size_t i = 0; i < flat.polylines.size(); ++i) {
-        const std::vector<Vec2>& poly = flat.polylines[i];
-        const bool closed = i < flat.closed.size() ? flat.closed[i] : false;
-        // A closed loop needs at least 3 points to enclose an area; an open
-        // subpath needs at least 2 to draw. Anything smaller is degenerate
-        // input (a dot is the brush's filled-ellipse path, not this).
-        if (poly.size() < 2 || (closed && poly.size() < 3)) {
-            continue;
-        }
-        AnimSegment move(AnimSegment::Kind::Move);
-        move.p[0] = poly[0];
-        path.segments.push_back(move);
-        for (size_t k = 1; k < poly.size(); ++k) {
-            AnimSegment line(AnimSegment::Kind::Line);
-            line.p[0] = poly[k];
-            path.segments.push_back(line);
-        }
-        if (closed) {
-            path.segments.push_back(AnimSegment(AnimSegment::Kind::Close));
-        }
-    }
-    return path;
 }
 
 // ------------------------------------------------------- stroke -> outline --
@@ -964,6 +939,101 @@ FlatPath StrokeToPieces(const FlatPath& flat, const StrokeOutlineOptions& opts) 
         }
     }
     return out;
+}
+
+bool TriangulatePolygon(const std::vector<Vec2>& poly,
+                        std::vector<Vec2>& trisOut) {
+    // Strip duplicate consecutive points (and a duplicated closer): they make
+    // zero-area ears that stall the clipper.
+    std::vector<Vec2> pts;
+    pts.reserve(poly.size());
+    for (const Vec2& p : poly) {
+        if (!pts.empty() && std::fabs(p.x - pts.back().x) < 1e-6f &&
+            std::fabs(p.y - pts.back().y) < 1e-6f) {
+            continue;
+        }
+        pts.push_back(p);
+    }
+    while (pts.size() > 1) {
+        const Vec2& a = pts.front();
+        const Vec2& b = pts.back();
+        if (std::fabs(a.x - b.x) >= 1e-6f || std::fabs(a.y - b.y) >= 1e-6f) {
+            break;
+        }
+        pts.pop_back();
+    }
+    if (pts.size() < 3) {
+        return false;
+    }
+    // Work in positive-shoelace order: for that ordering, convex vertices
+    // are exactly the cross() > 0 left turns, which is what the ear test
+    // below assumes. (In y-down screen space that order reads clockwise on
+    // screen; the math does not care.)
+    if (SignedAreaX2(pts) < 0.0f) {
+        std::reverse(pts.begin(), pts.end());
+    }
+    auto cross = [](const Vec2& a, const Vec2& b, const Vec2& c) {
+        // z of (b-a) x (c-a); > 0 means a left (convex, CCW) turn.
+        return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    };
+    auto inTriangle = [&](const Vec2& p, const Vec2& a, const Vec2& b,
+                          const Vec2& c) {
+        // Strictly inside: on-edge points belong to the neighbor ear instead.
+        const float c1 = cross(a, b, p);
+        const float c2 = cross(b, c, p);
+        const float c3 = cross(c, a, p);
+        return c1 > 1e-6f && c2 > 1e-6f && c3 > 1e-6f;
+    };
+    std::vector<size_t> live(pts.size());
+    for (size_t i = 0; i < pts.size(); ++i) {
+        live[i] = i;
+    }
+    const auto at = [&](size_t k) -> const Vec2& {
+        return pts[live[k % live.size()]];
+    };
+    size_t guard = live.size() * live.size();
+    while (live.size() > 3 && guard-- > 0) {
+        bool clipped = false;
+        for (size_t i = 0; i < live.size(); ++i) {
+            const size_t n = live.size();
+            const Vec2& a = at(i + n - 1);
+            const Vec2& b = at(i);
+            const Vec2& c = at(i + 1);
+            if (cross(a, b, c) <= 1e-6f) {
+                continue; // reflex, never an ear
+            }
+            bool blocked = false;
+            for (size_t j = 0; j < n; ++j) {
+                const Vec2& p = at(j);
+                if (&p == &a || &p == &b || &p == &c) {
+                    continue;
+                }
+                if (inTriangle(p, a, b, c)) {
+                    blocked = true;
+                    break;
+                }
+            }
+            if (blocked) {
+                continue;
+            }
+            trisOut.push_back(a);
+            trisOut.push_back(b);
+            trisOut.push_back(c);
+            live.erase(live.begin() + static_cast<ptrdiff_t>(i));
+            clipped = true;
+            break;
+        }
+        if (!clipped) {
+            return false; // self-intersecting input: refuse, don't loop forever
+        }
+    }
+    if (live.size() != 3) {
+        return false;
+    }
+    trisOut.push_back(pts[live[0]]);
+    trisOut.push_back(pts[live[1]]);
+    trisOut.push_back(pts[live[2]]);
+    return true;
 }
 
 // ------------------------------------------------------------- bezier fit --

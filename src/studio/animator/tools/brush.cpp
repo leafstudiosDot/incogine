@@ -1,9 +1,9 @@
 // Incogine Animator - Flash-style freeform brush tool.
 // Part of Incogine by leafstudiosDot (MPL-2.0). See LICENSE.
 //
-// Drag to paint a filled brush shape (a freeform Pen: input is fitted to smooth
-// Beziers on release, then expanded once to a filled outline which is what gets
-// stored). A bare click makes a dot.
+// Drag to paint a brush stroke (a freeform Pen: input is fitted to smooth
+// Beziers on release and stored as a compact centerline + width; the canvas
+// paints it as union-correct fill pieces). A bare click makes a dot.
 //
 // NOTE: handlers take events by const reference, so members are accessed with
 // '.' The '->' operator applies to pointers and objects, not references - which
@@ -172,41 +172,31 @@ bool BrushTool::finishStroke(AnimatorCanvas& canvas) {
         canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
         return false;
     }
-    AnimPath centerline;
-    centerline.segments.reserve(segments.size() + 1);
+    // Store the SOURCE geometry: the fitted centerline plus the stroke width.
+    // A 100-point stroke fits to ~two dozen segments (~2 kB on disk); the
+    // tessellated fill pieces it paints as would be ~12k segments (~1.3 MB).
+    // Storing derived tessellation multiplied every downstream cost (JSON,
+    // RAM, undo, paint subpaths) by ~500x, so the model keeps the compact
+    // source and the canvas tessellates transiently (flatten + pieces caches).
+    // Painting still never strokes: strokePiecesPath expands the cached
+    // centerline to union-correct fill pieces, solid on overlap.
+    AnimPath path;
+    path.segments.reserve(segments.size() + 1);
     AnimSegment move(AnimSegment::Kind::Move);
     move.p[0] = start;
-    centerline.segments.push_back(move);
+    path.segments.push_back(move);
     for (AnimSegment& segment : segments) {
-        centerline.segments.push_back(segment);
-    }
-
-    // Flash-style brush: the stroke is expanded to UNION-CORRECT fill pieces
-    // ONCE, at commit time, and those pieces are what gets stored. Painting
-    // them later is a plain fill - no per-repaint stroker, no zoom-dependent
-    // cost - and they stay solid where the stroke crosses itself (a circle's
-    // overlap), which a single outline loop cannot do. The centerline is
-    // discarded; width/cap/join are baked into the geometry, exactly like
-    // Flash's brush shapes.
-    const icg::anim::FlatPath flat =
-        icg::anim::Flatten(centerline, icg::anim::kFlattenTolerance);
-    icg::anim::StrokeOutlineOptions outlineOpts;
-    outlineOpts.width = options.strokeWidth;
-    outlineOpts.cap = icg::anim::LineCap::Round;
-    outlineOpts.join = icg::anim::LineJoin::Round;
-    const icg::anim::FlatPath band =
-        icg::anim::StrokeToPieces(flat, outlineOpts);
-    AnimPath path = icg::anim::OutlineToAnimPath(band);
-    if (path.IsEmpty()) {
-        canvas.reportStatus(QObject::tr("Stroke too short - nothing drawn."));
-        return false;
+        path.segments.push_back(segment);
     }
 
     AnimStyle style;
-    style.hasFill = true;
-    style.fill = stroke;
-    style.hasStroke = false;
-    return canvas.addDrawnShape(std::move(path), style, "Brush Shape") != 0;
+    style.hasFill = false;
+    style.hasStroke = true;
+    style.stroke = stroke;
+    style.strokeWidth = options.strokeWidth;
+    style.cap = icg::anim::LineCap::Round;
+    style.join = icg::anim::LineJoin::Round;
+    return canvas.addDrawnShape(std::move(path), style, "Brush Stroke") != 0;
 }
 
 bool BrushTool::onKey(AnimatorCanvas& canvas, QKeyEvent& event) {

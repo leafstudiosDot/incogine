@@ -167,11 +167,11 @@ private:
     std::vector<uint64_t> selectionBeforeMarquee_;
 };
 
-// Freeform pen: drag to paint a Flash-style filled brush shape. Raw input is
+// Freeform pen: drag to paint a Flash-style brush stroke. Raw input is
 // throttled, fitted to smooth Beziers on release (like the Pen tool draws by
-// hand), then expanded ONCE to a filled outline which is what gets stored - so
-// a brush shape paints as a plain fill, with no per-repaint stroker cost. A
-// bare click makes a dot.
+// hand), and stored as a compact centerline + width - so the model, undo and
+// file stay small while the canvas paints union-correct fill pieces with no
+// per-repaint stroker cost. A bare click makes a dot.
 class BrushTool : public ITool {
 public:
     std::string id() const override { return "brush"; }

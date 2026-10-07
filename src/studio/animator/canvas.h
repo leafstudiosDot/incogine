@@ -190,7 +190,10 @@ public:
 
     // Resolved drawing state for every drawable shape on the active keyframe,
     // in draw order (lowest index first, i.e. bottom of the stack first).
-    std::vector<icg::anim::ResolvedShape> drawList() const;
+    // Returned by const reference: the list is rebuilt only when the model,
+    // frame or quality changes, so repaints share it instead of deep-copying
+    // every FlatPath per frame. Do not hold the reference across any edit.
+    const std::vector<icg::anim::ResolvedShape>& drawList() const;
 
 signals:
     void selectionChanged();
@@ -303,6 +306,17 @@ private:
     // One culled draw list per paint, shared by every painter in that paint.
     mutable std::vector<icg::anim::ResolvedShape> visibleCache_;
     mutable bool visibleCacheValid_ = false;
+    // Full draw list, cached across paints. Rebuilding it deep-copies every
+    // visible shape's FlatPath, so doing that once per paint dominated
+    // per-frame cost once scenes grew; now it rebuilds only when the model,
+    // the frame, or the quality changes. Anything that mutates transforms
+    // live (updateDrag/cancelDrag) invalidates it alongside the model path.
+    mutable std::vector<icg::anim::ResolvedShape> drawCache_;
+    mutable bool drawCacheValid_ = false;
+    void invalidateDrawCache() const {
+        drawCacheValid_ = false;
+        visibleCacheValid_ = false;
+    }
     DrawingOptions drawOptions_;
 
     // Tool dispatch. The canvas owns the tools and forwards input; Space

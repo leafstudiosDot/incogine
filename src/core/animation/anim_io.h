@@ -39,11 +39,18 @@ bool Deserialize(const std::string& text, AnimDocument& out, std::string& error)
 
 // --- file IO (Studio authoring side; the engine uses ImportBytes) --
 
-// Reads and deserializes a file. False + `error` when unreadable or invalid.
+// Parses raw file bytes: v2 container or v1 JSON text, auto-detected. This is
+// what the asset importer calls, so the game runtime reads both formats.
+bool DeserializeBytes(const void* bytes, size_t size, AnimDocument& out,
+                      std::string& error);
+
+// Reads and deserializes a file (either format). False + `error` when
+// unreadable or invalid.
 bool LoadFile(const std::string& path, AnimDocument& out, std::string& error);
 
-// Writes atomically via a sibling `.tmp` + rename, so an interrupted save
-// never truncates the user's animation. False + `error` on failure.
+// Always saves in the v2 container format (compact + compressed), atomically
+// via a sibling `.tmp` + rename, so an interrupted save never truncates the
+// user's animation. v1 files migrate the first time they are saved.
 bool SaveFile(const std::string& path, const AnimDocument& document,
               std::string& error);
 

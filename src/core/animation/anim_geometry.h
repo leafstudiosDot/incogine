@@ -178,13 +178,15 @@ FlatPath StrokeToOutline(const FlatPath& flat, const StrokeOutlineOptions& opts)
 // rect. Degenerate input yields no pieces, never NaNs.
 FlatPath StrokeToPieces(const FlatPath& flat, const StrokeOutlineOptions& opts);
 
-// Converts a flattened outline back into a storable path: each polyline becomes
-// Move + Line* (+ Close when the subpath is closed). This is how the
-// Flash-style brush stores its work: the outline IS the artwork (a fill), so
-// painting it is a plain fill with no per-frame stroker involved. Round-trips
-// through Flatten: Move + Line*n + Close flattens back to a closed polyline
-// with the same vertices, in the same order.
-AnimPath OutlineToAnimPath(const FlatPath& flat);
+// Triangulates one simple (non-self-intersecting) polygon by ear clipping,
+// appending triangles as consecutive triples. Holes are NOT supported (no
+// hole-producing fills exist today). Returns false for degenerate input
+// (< 3 distinct points, zero area), appending nothing. Used by the scene
+// mesh builder (and the future GPU renderer); the pieces StrokeToPieces
+// emits are convex, but general fills (ellipses, rects, future shape tools)
+// are triangulated through this same path so concave shapes work too.
+bool TriangulatePolygon(const std::vector<Vec2>& poly,
+                        std::vector<Vec2>& trisOut);
 
 // Error-bounded piecewise fit of a polyline (Schneider's FitCurve strategy):
 // straight runs become one Line, otherwise the longest cubic within `tolerance`

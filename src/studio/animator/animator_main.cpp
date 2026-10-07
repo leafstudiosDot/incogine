@@ -227,6 +227,19 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
                 .transform.position.x;
         check(std::fabs(movedX - (startX + 60.0f)) < 0.01f,
               "drag applied a +60 stage-unit offset");
+        // The cached draw list must follow the live drag, not paint stale.
+        {
+            bool found = false;
+            for (const auto& resolved : canvas->drawList()) {
+                if (resolved.shapeId == shapeId) {
+                    found = true;
+                    check(std::fabs(resolved.matrix.e - (startX + 60.0f)) <
+                              0.05f,
+                          "draw list follows the live drag");
+                }
+            }
+            check(found, "dragged shape present in draw list");
+        }
         check(canvas->commitDrag(), "drag committed");
         check(canvas->isDragging() == false, "drag state cleared");
         check(doc->undo(), "drag undo available");
@@ -399,13 +412,15 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
                   "brush stroke appended one shape");
             const icg::anim::AnimShape& committed =
                 canvas->activeKeyframe()->shapes.back();
-            check(committed.style.hasFill &&
-                      !committed.style.hasStroke,
-                  "brush shape is a fill, not a stroked path");
+            // Compact source storage: a centerline + width, not tessellation.
+            check(committed.style.hasStroke &&
+                      !committed.style.hasFill,
+                  "brush shape is a stroked centerline, not baked fill");
+            check(committed.path.segments.size() < 100,
+                  "brush shape stores dozens of segments, not thousands");
             // Probe ON the stroke: widget point of move 5, which the fitted
             // centerline passes within the smoothing tolerance of, well
-            // inside the half width. (A point merely near the stroke misses:
-            // a fill has no stroke halo to catch it.)
+            // inside the half width.
             const QPointF pMid(p0.x() + 5 * 12.0,
                                p0.y() + std::sin(5 * 0.9) * 20.0);
             check(canvas->hitTest(canvas->view().toStage(pMid)) != 0,

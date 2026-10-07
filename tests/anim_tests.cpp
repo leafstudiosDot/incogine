@@ -12,8 +12,10 @@
 #include <vector>
 
 #include "animation/anim_commands.h"
+#include "animation/anim_container.h"
 #include "animation/anim_geometry.h"
 #include "animation/anim_io.h"
+#include "animation/anim_scene.h"
 
 using namespace icg::anim;
 
@@ -512,50 +514,90 @@ static void TestGeometry() {
         (void)half;
     }
 
-    // OutlineToAnimPath: the Flash-style brush stores the expanded outline, not
-    // the centerline. The stored path must flatten back to the same band.
+    // Compact stroke storage: the model keeps the SOURCE geometry (fitted
+    // centerline + width), never the tessellated pieces. Storing derived
+    // tessellation multiplied every downstream cost by ~500x (a 100-point
+    // stroke: 23 fit segments vs 12.5k piece segments on disk), so this test
+    // locks the invariant: fit-then-store stays small, and the transient
+    // pieces built at paint time still cover the stroke.
     {
-        // Straight stroke -> closed outline -> stored path -> same band back.
-        FlatPath line;
-        line.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(100.0f, 0.0f)});
-        line.closed.push_back(false);
-        StrokeOutlineOptions opts;
-        opts.width = 4.0f;
-        opts.cap = LineCap::Round;
-        opts.join = LineJoin::Round;
-        const FlatPath band = StrokeToOutline(line, opts);
-        const AnimPath stored = OutlineToAnimPath(band);
-        CHECK(!stored.IsEmpty());
-        CHECK(stored.IsClosed());
-        const FlatPath back = Flatten(stored, kFlattenTolerance);
-        REQUIRE_EQ(back.polylines.size(), static_cast<size_t>(1));
-        CHECK_EQ(back.closed[0], true);
-        CHECK_EQ(back.polylines[0].size(), band.polylines[0].size());
-        for (size_t i = 0; i < band.polylines[0].size(); ++i) {
-            CHECK_NEAR(back.polylines[0][i].x, band.polylines[0][i].x, 1e-4f);
-            CHECK_NEAR(back.polylines[0][i].y, band.polylines[0][i].y, 1e-4f);
+        // Hand-like input, the way the brush samples it.
+        std::vector<Vec2> raw;
+        unsigned seed = 424242u;
+        float x = 0.0f, y = 0.0f, vx = 0.0f, vy = 0.0f;
+        for (int i = 0; i < 100; ++i) {
+            seed = seed * 1664525u + 1013904223u;
+            const float rx =
+                static_cast<float>((seed >> 8) & 0xFFFFu) / 65535.0f - 0.5f;
+            raw.push_back(Vec2(x, y));
+            vx = vx * 0.85f + rx * 3.0f;
+            vy = vy * 0.85f + rx * 3.0f;
+            x += 6.0f + vx * 1.8f;
+            y += vy * 1.8f;
         }
-        // The stored band still covers the stroke it came from.
-        CHECK(PointInFlatPath(Vec2(50.0f, 0.0f), back, 0.0f));
-        CHECK(!PointInFlatPath(Vec2(50.0f, 4.0f), back, 0.0f));
-
-        // Open subpaths stay open (no Close appended).
-        FlatPath open;
-        open.polylines.push_back({Vec2(0.0f, 0.0f), Vec2(10.0f, 5.0f),
-                                  Vec2(20.0f, 0.0f)});
-        open.closed.push_back(false);
-        const AnimPath openStored = OutlineToAnimPath(open);
-        CHECK(!openStored.IsEmpty());
-        CHECK(!openStored.IsClosed());
-
-        // Degenerate subpaths are dropped, never stored as slivers.
-        FlatPath junk;
-        junk.polylines.push_back({Vec2(1.0f, 1.0f)});
-        junk.closed.push_back(false);
-        junk.polylines.push_back({Vec2(2.0f, 2.0f), Vec2(2.0f, 2.0f)});
-        junk.closed.push_back(true);
-        CHECK(OutlineToAnimPath(junk).IsEmpty());
-        CHECK(OutlineToAnimPath(FlatPath()).IsEmpty());
+        Vec2 start;
+        std::vector<AnimSegment> segs;
+        FitBeziersToPolyline(raw, 1.0f, start, segs);
+        CHECK(!segs.empty());
+        // The fit collapses ~100 raw points to a handful of segments. The
+        // ceiling is generous (a torture scribble fits here too); what it
+        // catches is storing per-point or per-tessellation data instead.
+        CHECK(segs.size() < raw.size() / 2);
+        AnimPath stored;
+        AnimSegment move(AnimSegment::Kind::Move);
+        move.p[0] = start;
+        stored.segments.push_back(move);
+        for (const AnimSegment& g : segs) {
+            stored.segments.push_back(g);
+        }
+        // Stored path is Move + beziers: compact source geometry.
+        CHECK_EQ(stored.segments.size(), segs.size() + 1);
+        // Transient paint tessellation covers the fitted centerline: every
+        // flattened centerline point is inside some piece (winding rule).
+        const FlatPath flat = Flatten(stored, kFlattenTolerance);
+        StrokeOutlineOptions opts;
+        opts.width = 30.0f;
+        const FlatPath pieces = StrokeToPieces(flat, opts);
+        CHECK(!pieces.polylines.empty());
+        auto insideAny = [](const FlatPath& f, float px, float py) {
+            for (const std::vector<Vec2>& poly : f.polylines) {
+                int winding = 0;
+                const size_t n = poly.size();
+                for (size_t i = 0, j = n - 1; i < n; j = i++) {
+                    const Vec2& a = poly[i];
+                    const Vec2& b = poly[j];
+                    if (a.y <= py) {
+                        if (b.y > py) {
+                            const double ax =
+                                a.x + (static_cast<double>(b.x) - a.x) *
+                                          (py - a.y) / (b.y - a.y);
+                            if (static_cast<double>(px) < ax) ++winding;
+                        }
+                    } else if (b.y <= py) {
+                        const double ax =
+                            a.x + (static_cast<double>(b.x) - a.x) *
+                                      (py - a.y) / (b.y - a.y);
+                        if (static_cast<double>(px) < ax) --winding;
+                    }
+                }
+                if (winding != 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        long holes = 0;
+        long probes = 0;
+        for (const std::vector<Vec2>& poly : flat.polylines) {
+            for (const Vec2& p : poly) {
+                ++probes;
+                if (!insideAny(pieces, p.x, p.y)) {
+                    ++holes;
+                }
+            }
+        }
+        CHECK(probes > 0);
+        CHECK_MSG(holes == 0, "transient pieces cover the stored centerline");
     }
 
     // StrokeToPieces: union-correct fill pieces. Every piece shares one
@@ -1269,6 +1311,276 @@ static void TestFileIO() {
     CHECK(!LoadFile(path, back, error));
 }
 
+// -------------------------------------------------------- v2 container --
+
+static void TestContainer() {
+    TEST_GROUP("v2 container");
+
+    const AnimDocument doc = MakeRichDocument();
+    std::string error;
+
+    // Round-trip: bytes -> document -> identical v1-JSON projection.
+    const std::vector<uint8_t> bytes = SaveContainer(doc);
+    CHECK(!bytes.empty());
+    CHECK(IsContainer(bytes.data(), bytes.size()));
+    AnimDocument back;
+    REQUIRE(LoadContainer(bytes.data(), bytes.size(), back, error));
+    CHECK_EQ(Serialize(back), Serialize(doc));
+
+    // v1 JSON text still loads through the same entry point (migrate on
+    // save: load old, save new, load again - all identical).
+    const std::string oldText = Serialize(doc);
+    CHECK(!IsContainer(oldText.data(), oldText.size()));
+    AnimDocument migrated;
+    REQUIRE(LoadContainer(oldText.data(), oldText.size(), migrated, error));
+    CHECK_EQ(Serialize(migrated), Serialize(doc));
+    const std::vector<uint8_t> repacked = SaveContainer(migrated);
+    AnimDocument repackedBack;
+    REQUIRE(LoadContainer(repacked.data(), repacked.size(), repackedBack,
+                           error));
+    CHECK_EQ(Serialize(repackedBack), Serialize(doc));
+
+    // The container is much smaller than the pretty JSON it replaces.
+    CHECK(repacked.size() * 4 < oldText.size());
+
+    // Manifest reads without touching stroke data.
+    ContainerManifest manifest;
+    REQUIRE(LoadManifest(bytes.data(), bytes.size(), manifest, error));
+    CHECK_EQ(manifest.stageWidth, doc.stageWidth);
+    CHECK_EQ(manifest.fps, doc.fps);
+    CHECK_EQ(manifest.layers.size(), doc.layers.size());
+    for (size_t i = 0; i < doc.layers.size(); ++i) {
+        CHECK_EQ(manifest.layers[i].id, doc.layers[i].id);
+        CHECK_EQ(manifest.layers[i].frames.size(),
+                 doc.layers[i].frames.size());
+    }
+
+    // Lazy frame load: one keyframe, parsed alone, matches the full load.
+    {
+        const AnimLayer& layer = doc.layers[0];
+        REQUIRE(!layer.frames.empty());
+        AnimKeyframe lazy;
+        REQUIRE(LoadLayerFrame(bytes.data(), bytes.size(), layer.id,
+                               layer.frames[0].frame, lazy, error));
+        CHECK_EQ(lazy.frame, layer.frames[0].frame);
+        CHECK_EQ(lazy.shapes.size(), layer.frames[0].shapes.size());
+        // No chunk for a frame that has none.
+        AnimKeyframe missing;
+        CHECK(!LoadLayerFrame(bytes.data(), bytes.size(), layer.id,
+                              999999, missing, error));
+    }
+
+    // Unknown chunk types are skipped (forward compatibility): corrupt the
+    // first STRO chunk's type and the file still loads, minus that frame.
+    {
+        std::vector<uint8_t> edited = bytes;
+        // Header (16B) + manifest chunk header (16B) + manifest payload.
+        size_t pos = 16;
+        uint32_t mType = 0, mFlags = 0, mUnpacked = 0, mPacked = 0;
+        for (int i = 0; i < 4; ++i) {
+            mType |= static_cast<uint32_t>(edited[pos + i]) << (8 * i);
+            mFlags |= static_cast<uint32_t>(edited[pos + 4 + i]) << (8 * i);
+            mUnpacked |= static_cast<uint32_t>(edited[pos + 8 + i]) << (8 * i);
+            mPacked |= static_cast<uint32_t>(edited[pos + 12 + i]) << (8 * i);
+        }
+        (void)mType;
+        (void)mFlags;
+        (void)mUnpacked;
+        pos += 16 + mPacked; // now at the next chunk header (a STRO chunk)
+        REQUIRE(pos + 4 <= edited.size());
+        edited[pos + 0] = 0xFF;
+        edited[pos + 1] = 0xFF;
+        edited[pos + 2] = 0xFF;
+        edited[pos + 3] = 0xFF;
+        AnimDocument skipped;
+        REQUIRE(LoadContainer(edited.data(), edited.size(), skipped, error));
+        ContainerManifest skippedManifest;
+        REQUIRE(LoadManifest(edited.data(), edited.size(), skippedManifest,
+                             error));
+        CHECK_EQ(skippedManifest.layers.size(), manifest.layers.size());
+    }
+
+    // A future container version is rejected with a clear message, not
+    // mis-read. The version sits at bytes 8-9 (u16 LE).
+    {
+        std::vector<uint8_t> future = bytes;
+        REQUIRE(future.size() > 10);
+        future[8] = 99;
+        future[9] = 0;
+        AnimDocument rejected;
+        CHECK(!LoadContainer(future.data(), future.size(), rejected, error));
+        CHECK(error.find("newer") != std::string::npos);
+    }
+
+    // Truncation at any point is an error, never a crash.
+    {
+        const size_t cuts[] = {0, 7, 8, 16, 20, bytes.size() / 2,
+                               bytes.size() - 16, bytes.size() - 1};
+        for (size_t cut : cuts) {
+            if (cut >= bytes.size()) {
+                continue;
+            }
+            AnimDocument broken;
+            CHECK(!LoadContainer(bytes.data(), cut, broken, error));
+        }
+        AnimDocument empty;
+        CHECK(!LoadContainer(bytes.data(), 0, empty, error));
+        CHECK(!LoadContainer(nullptr, 0, empty, error));
+    }
+
+    // An empty document round-trips (manifest + index, no stroke chunks).
+    {
+        AnimDocument fresh = AnimDocument::New(640, 480, 12);
+        const std::vector<uint8_t> freshBytes = SaveContainer(fresh);
+        AnimDocument freshBack;
+        REQUIRE(LoadContainer(freshBytes.data(), freshBytes.size(), freshBack,
+                              error));
+        CHECK_EQ(Serialize(freshBack), Serialize(fresh));
+    }
+}
+
+// ---------------------------------------------------------- scene mesh --
+
+static void TestSceneMesh() {
+    TEST_GROUP("scene mesh");
+
+    auto triArea = [](const SceneMesh& mesh) {
+        double area = 0.0;
+        for (size_t i = 0; i + 2 < mesh.vertices.size(); i += 3) {
+            const TriVertex& a = mesh.vertices[i];
+            const TriVertex& b = mesh.vertices[i + 1];
+            const TriVertex& c = mesh.vertices[i + 2];
+            area += std::fabs((b.x - a.x) * (c.y - a.y) -
+                              (b.y - a.y) * (c.x - a.x)) *
+                    0.5;
+        }
+        return area;
+    };
+
+    // A rect fill triangulates to its exact area, in its color.
+    {
+        ResolvedShape rect;
+        rect.shapeId = 1;
+        rect.path = Flatten(AnimPath::FromRect(10.0f, 20.0f, 100.0f, 50.0f),
+                            kFlattenTolerance);
+        rect.matrix = Mat2x3Identity();
+        rect.hasFill = true;
+        rect.fill = AnimColor(255, 0, 0, 255);
+        rect.drawable = true;
+        SceneMesh mesh;
+        std::vector<ResolvedShape> shapes;
+        shapes.push_back(rect);
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        CHECK(!mesh.vertices.empty());
+        CHECK_EQ(mesh.vertices.size() % 3, static_cast<size_t>(0));
+        CHECK_NEAR(triArea(mesh), 100.0 * 50.0, 1.0);
+        for (const TriVertex& v : mesh.vertices) {
+            CHECK_EQ(v.r, static_cast<uint8_t>(255));
+            CHECK_EQ(v.g, static_cast<uint8_t>(0));
+            CHECK_EQ(v.a, static_cast<uint8_t>(255));
+        }
+    }
+
+    // A concave L triangulates exactly (ear clipping, not fan).
+    {
+        ResolvedShape ell;
+        ell.shapeId = 2;
+        ell.path.polylines.push_back({Vec2(0, 0), Vec2(60, 0), Vec2(60, 20),
+                                      Vec2(20, 20), Vec2(20, 60), Vec2(0, 60)});
+        ell.path.closed.push_back(true);
+        ell.matrix = Mat2x3Identity();
+        ell.hasFill = true;
+        ell.fill = AnimColor(0, 255, 0, 255);
+        ell.drawable = true;
+        SceneMesh mesh;
+        std::vector<ResolvedShape> shapes;
+        shapes.push_back(ell);
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        // 60x20 bar + 20x40 stem = 2000.
+        CHECK_NEAR(triArea(mesh), 2000.0, 1.0);
+    }
+
+    // A stroke becomes its band: ~length x width, in the stroke color.
+    {
+        AnimPath center;
+        AnimSegment move(AnimSegment::Kind::Move);
+        move.p[0] = Vec2(0, 0);
+        center.segments.push_back(move);
+        AnimSegment line(AnimSegment::Kind::Line);
+        line.p[0] = Vec2(100, 0);
+        center.segments.push_back(line);
+        ResolvedShape stroke;
+        stroke.shapeId = 3;
+        stroke.path = Flatten(center, kFlattenTolerance);
+        stroke.matrix = Mat2x3Identity();
+        stroke.hasStroke = true;
+        stroke.stroke = AnimColor(0, 0, 255, 255);
+        stroke.strokeWidth = 4.0f;
+        stroke.cap = LineCap::Round;
+        stroke.join = LineJoin::Round;
+        stroke.drawable = true;
+        SceneMesh mesh;
+        std::vector<ResolvedShape> shapes;
+        shapes.push_back(stroke);
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        CHECK(!mesh.vertices.empty());
+        // 100x4 band + two r=2 cap discs (~25.1): tight band, no more.
+        const double area = triArea(mesh);
+        CHECK(area > 400.0 && area < 450.0);
+        CHECK_EQ(mesh.vertices[0].b, static_cast<uint8_t>(255));
+    }
+
+    // Draw order is preserved (later shapes cover earlier ones): the mesh
+    // keeps shape order, so a painter or index buffer can rely on it.
+    {
+        ResolvedShape first;
+        first.shapeId = 4;
+        first.path = Flatten(AnimPath::FromRect(0, 0, 10, 10),
+                             kFlattenTolerance);
+        first.matrix = Mat2x3Identity();
+        first.hasFill = true;
+        first.fill = AnimColor(10, 0, 0, 255);
+        first.drawable = true;
+        ResolvedShape second = first;
+        second.shapeId = 5;
+        second.fill = AnimColor(20, 0, 0, 255);
+        SceneMesh mesh;
+        std::vector<ResolvedShape> shapes;
+        shapes.push_back(first);
+        shapes.push_back(second);
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        REQUIRE(!mesh.vertices.empty());
+        CHECK_EQ(mesh.vertices.front().r, static_cast<uint8_t>(10));
+        CHECK_EQ(mesh.vertices.back().r, static_cast<uint8_t>(20));
+    }
+
+    // Degenerate input yields nothing, never garbage.
+    {
+        SceneMesh mesh;
+        std::vector<ResolvedShape> shapes;
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        CHECK(mesh.vertices.empty());
+        ResolvedShape hidden;
+        hidden.shapeId = 6;
+        hidden.drawable = false;
+        hidden.hasFill = true;
+        hidden.fill = AnimColor(255, 255, 255, 255);
+        shapes.push_back(hidden);
+        ResolvedShape hairline;
+        hairline.shapeId = 7;
+        hairline.path = Flatten(AnimPath::FromRect(0, 0, 10, 10),
+                                kFlattenTolerance);
+        hairline.matrix = Mat2x3Identity();
+        hairline.hasStroke = true;
+        hairline.stroke = AnimColor(255, 255, 255, 255);
+        hairline.strokeWidth = 0.0f;
+        hairline.drawable = true;
+        shapes.push_back(hairline);
+        BuildSceneMesh(shapes, kFlattenTolerance, mesh);
+        CHECK(mesh.vertices.empty());
+    }
+}
+
 // ------------------------------------------------------------ commands --
 
 static void TestCommandStack() {
@@ -1535,6 +1847,8 @@ int main() {
     TestSerializationRoundTrip();
     TestSerializationErrors();
     TestFileIO();
+    TestContainer();
+    TestSceneMesh();
     TestCommandStack();
     return ::icgtest::Report("animation");
 }

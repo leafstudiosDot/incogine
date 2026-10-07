@@ -61,6 +61,28 @@ License: `(WTFPL OR CC0-1.0) AND Apache-2.0` (as generated in `gl.c`)
 
 ---
 
+## miniz
+
+Single-purpose DEFLATE compressor/decompressor (zlib-compatible streams).
+Used for exactly one thing: compressing `.incoanim` v2 container chunks, so
+animation files stay small without a heavyweight dependency. The game runtime
+decompresses through the same code, which is why this lives in `src/core`
+rather than Studio: it must stay Qt-free.
+
+Vendored at `src/core/thirdparty/miniz/` (deflate subset only: `miniz.h`,
+`miniz.c`, `miniz_common.h`, `miniz_tdef.*`, `miniz_tinfl.*`, plus a local
+`miniz_export.h` stub standing in for the file upstream's CMake generates).
+Only `mz_compress2` / `mz_uncompress` are used.
+
+Used by: `IncogineAnim` (container read/write, runtime included).
+
+Website: https://github.com/richgel999/miniz  
+License: MIT (Copyright 2013-2014 RAD Game Tools and Valve Software, Copyright
+2010-2014 Rich Geldreich and Tenacious Software LLC; full text in
+`src/core/thirdparty/miniz/LICENSE`)
+
+---
+
 ## FFmpeg
 
 Vendored as a source submodule at `reqs/ffmpeg` for **video export** from Incogine Animator (image/video sequences, MP4/MOV/AVI).

@@ -175,12 +175,19 @@ Tolerances small enough to preserve the artwork buy no speedup; the ones that
 buy speedup damage it. The vertices decimation removes are the same ones the
 stroker needs to resolve sub-pixel detail into smooth edges.
 
-Real options, none taken yet:
-- Render the canvas with an OpenGL viewport (`QOpenGLWidget`), where path
-  stroking is GPU-side. Changes the preview rasterizer away from QPainter, so
-  the "preview matches bake" guarantee needs re-checking.
-- Cache the stage raster and only re-render on change, so zoom/pan blit a
-  bitmap instead of re-stroking. Trades memory and adds invalidation bugs.
+GPU path (in progress): the raster canvas stays until the GPU canvas proves
+itself. The seam is landed: `anim_scene::BuildSceneMesh()` turns the same
+resolved shapes the canvas paints into one stage-space triangle soup (fills
+triangulated directly, strokes via the same union-correct pieces, per-vertex
+colors), and `src/studio/animator/renderer.h` defines the `IVectorRenderer`
+contract both backends implement (scene mesh + view + overlays; timeline
+frames and onion-skinning plug in as extra meshes). Pan/zoom stay pure view
+uniforms with zero geometry work. Backend choice: **QRhi** (`QRhiWidget`,
+Vulkan/Metal/D3D/GL, MSAA) over `QOpenGLWidget` (QPainter vectors stay
+CPU-side there, and macOS GL is deprecated) and custom Vulkan (duplicates Qt
+and the engine's glad-GL for no win). Moving the preview off QPainter weakens
+the "preview matches bake" guarantee, so the mesh builder mirrors the canvas
+paint rules exactly (same flattening, same pieces, same winding).
 
 ### Fix adopted: strokes are filled pieces, not pen strokes
 
@@ -306,20 +313,26 @@ Two fixes, both needed:
 At the floored density the stroke measures **0.06%** centerline holes (2 probes
 of 3366, both at the cap), and a 300-unit stroke carries ~26x fewer vertices at
 zoom 64 than before.
-- **Brush (`B`)**: a freeform Pen — drag to paint a Flash-style **filled**
-  brush shape, not a stroked path. Input is throttled to ~2 screen px (floored
-  at 20% of the brush width so zoom cannot make it arbitrarily dense), fitted
-  to error-bounded Beziers on release (least-squares cubics,
-  longest-within-tolerance wins), then expanded ONCE to union-correct fill
-  pieces which is what gets stored. Painting them later is a plain fill: no
-  per-repaint stroker, no zoom-dependent cost, no holes on overlap. The smoothing slider IS the fit tolerance,
-  so the knob is honest: curves stay within it of the drawn input (a 3000-point
-  torture scribble lands ~215 segments / ~13kB at the 1.0 default, vs ~980
-  segments before). A bare click makes a filled dot in the stroke color. Size
-  (stage units), smoothing, color, and opacity come from the tool options
-  strip; `Esc` cancels a stroke. The live preview outlines the raw input as a
-  fill (no QPen stroking, which was the while-drawing lag); the committed
-  shape is slightly smoother, matching Flash's ink-then-smooth feel.
+- **Brush (`B`)**: a freeform Pen — drag to paint a Flash-style brush stroke.
+  Input is throttled to ~2 screen px (floored at 20% of the brush width so zoom
+  cannot make it arbitrarily dense), fitted to error-bounded Beziers on release
+  (least-squares cubics, longest-within-tolerance wins), and stored as the
+  compact **centerline + width** (~two dozen segments / ~5 kB for a 100-point
+  stroke). Storing the tessellated fill pieces instead multiplied every
+  downstream cost by ~500x (12.5k segments / 1.3 MB per stroke), so the model
+  keeps source geometry and the canvas tessellates transiently (flatten +
+  pieces caches, union-correct, no holes on overlap, never a pen stroke). The
+  smoothing slider IS the fit tolerance, so the knob is honest: curves stay
+  within it of the drawn input. A bare click makes a filled dot in the stroke
+  color. Size (stage units), smoothing, color, and opacity come from the tool
+  options strip; `Esc` cancels a stroke. The live preview expands the raw input
+  as fill pieces (no QPen stroking, which was the while-drawing lag); the
+  committed shape is slightly smoother, matching Flash's ink-then-smooth feel.
+- **Draw-list caching**: the resolved draw list is built once per model/frame/
+  quality change and shared by every painter and hit-test in a paint, instead
+  of deep-copying every FlatPath per frame (29.6 ms → 0.1 ms at 100 old-size
+  strokes; ~300x). Live drags invalidate it explicitly since they bypass the
+  command stack.
 - **Pen (`P`)**: Flash-style — click places corner points, click-drag pulls
   symmetric Bezier handles for smooth points, clicking the start point closes,
   double-click or `Enter` finishes an open path, `Esc` cancels, `Backspace`
@@ -370,12 +383,46 @@ for it:
   OBJ / glTF / `.blend` register the same way `.incoanim` does — a future 3D
   importer links `IncogineAssets` and never touches the 2D model.
 
-## File format (v1)
+## File format (v2 container; v1 JSON still loads)
 
-A single **UTF-8 JSON document** with a `formatVersion` field. Human-readable
-and diff-friendly by choice: animation files show up in pull requests, and the
-existing `.incoba` packer already handles shipping, so a zip container would
-buy nothing today. Embedded resources can be added behind a version bump later.
+Saves always write the **v2 container**: a chunked binary file (same
+`.incoanim` extension) with a JSON manifest, per-layer/per-frame binary stroke
+chunks, DEFLATE-compressed payloads, and an index for lazy loading. v1 files
+(a single pretty JSON document, schema below) keep loading unchanged and
+migrate the first time they are saved.
+
+Measured on 30px brush strokes (compact centerline storage): 1 stroke 5 kB
+JSON -> 1 kB container (4.6x); 500 strokes 1.99 MB -> 238 kB (8.4x), saving in
+21 ms and loading in 3 ms. Compression is vendored miniz at its default level
+(Qt-free, so the game runtime uses the same code); see `THIRD_PARTY.md`.
+
+### v2 layout (all integers little-endian)
+
+```
+header:  "INCOANIM2" (8B) | u16 containerVersion=2 | u16 flags=0 | u32 chunkCount
+chunk:   u32 type | u32 flags (bit0 = DEFLATE) | u32 unpackedLen | u32 packedLen
+         | payload[packedLen]
+footer:  "INCOANIM$" (8B) | u64 indexChunkOffset (from file start)
+```
+
+Chunk types: `MHDR` (manifest.json, UTF-8, stored **uncompressed** so it stays
+readable in a hex dump), `STRO` (one layer's keyframe: layer id, frame, kind,
+keyframe transform + tween, then shapes as id, name, style flags/colors/width/
+cap/join, transform, and segments as kind byte + f32 coordinates), `ASET`
+(embedded asset path + bytes; reserved, nothing embeds yet), `INDX` (index:
+type, file offset, packed length, layer id, frame per chunk).
+
+Rules the code enforces: unknown chunk types are **skipped** (forward
+compatibility); every read is bounds-checked (truncation is an error, never a
+crash); a future container version is rejected with a message naming both
+versions; saves stay atomic (temp file + rename, as before). `LoadManifest`
+reads only header + manifest + index (fast project browsing); `LoadLayerFrame`
+seeks the index straight to one frame's chunk (the lazy-load primitive the
+timeline will use). Implementation: `anim_container.*`; the asset importer
+(`anim2d_importer`) loads both formats through `DeserializeBytes`, so shipped
+games read old and new files with no asset changes.
+
+### v1 JSON schema (read-only legacy)
 
 ```json
 {

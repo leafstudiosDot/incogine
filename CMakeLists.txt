@@ -399,8 +399,15 @@ set(ICG_ANIM_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_path.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_json.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_container.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_container.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_io.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_io.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_scene.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_scene.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/thirdparty/miniz/miniz.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/thirdparty/miniz/miniz_tdef.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/core/thirdparty/miniz/miniz_tinfl.c
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim2d_importer.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim2d_importer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core/animation/anim_commands.cpp
@@ -422,6 +429,15 @@ if(MSVC)
     target_compile_options(IncogineAssets PRIVATE /utf-8)
     target_compile_options(IncogineAnim PRIVATE /utf-8)
 endif()
+# miniz is vendored as C sources. Only the DEFLATE subset is built (no archive
+# APIs - the container is custom-chunked, not PKZIP), and the zlib-compatible
+# names are disabled so `compress`/`uncompress` can never collide with the
+# zlib copies inside SDL3_image's vendored libpng when everything links into
+# one game binary. PRIVATE: only IncogineAnim sources include miniz.h.
+target_compile_definitions(IncogineAnim PRIVATE
+    MINIZ_NO_ARCHIVE_APIS
+    MINIZ_NO_ZLIB_COMPATIBLE_NAMES
+)
 icg_group_sources(ICG_ASSETS_SOURCES)
 icg_group_sources(ICG_ANIM_SOURCES)
 
