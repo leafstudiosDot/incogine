@@ -232,6 +232,12 @@ void BrushTool::paintOverlay(QPainter& painter, AnimatorCanvas& canvas) {
         previewOpts.width = options.strokeWidth;
         previewOpts.cap = icg::anim::LineCap::Round;
         previewOpts.join = icg::anim::LineJoin::Round;
+        // Coarse preview tessellation (4x Normal): the preview rebuilds from
+        // scratch on every mouse move, so its vertex count is per-move cost.
+        // The committed stroke fits and tessellates at full quality, so the
+        // final shape is always crisp - the preview is approximate by design
+        // (it already previews raw input while commit fits Beziers first).
+        previewOpts.tolerance = 1.0f;
         const icg::anim::FlatPath band =
             icg::anim::StrokeToPieces(rawFlat, previewOpts);
         QPainterPath preview;

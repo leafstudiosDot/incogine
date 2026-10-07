@@ -377,15 +377,74 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
             doc->document().layers[0].locked = false;
         }
 
-        // The real Brush tool paints a Flash-style FILLED shape (a freeform
-        // pen), not a stroked path. Drive it with synthetic events and check
-        // the committed shape carries a fill and no stroke.
+        // The real Brush tool is a freeform pen: synthetic events drive a
+        // stroke whose committed shape must be a compact centerline + width.
+        // Pixel counts before/after/undo/redo prove the scene cache bakes the
+        // commit incrementally and erases it exactly on undo (regional
+        // rebake), not approximately.
+        //
+        // Pin the geometry first: the window layout can shrink the canvas
+        // (measured 240x254 once), which silently moves every synthetic point
+        // off-stage and off-screen and makes pixel counts meaningless. All
+        // widget coordinates below assume this size and fit.
         {
+            canvas->resize(1200, 800);
+            canvas->fitToStage();
             canvas->setActiveTool("brush");
             canvas->setStrokeWidth(6.0f);
             canvas->setSmoothing(1.0f);
             ITool* brush = canvas->toolSet()->find("brush");
             check(brush != nullptr, "brush tool found for stroke test");
+            // Anything clearly non-background: the stroke paints translucent
+            // black (opacity 0.5 over the checker), so a near-black threshold
+            // would miss it. The baseline absorbs the checker either way; only
+            // the before/after/undo deltas matter.
+            auto countDark = [&]() {
+                const QImage image = canvas->grab().toImage();
+                int n = 0;
+                for (int y = 0; y < image.height(); y += 2) {
+                    const QRgb* line =
+                        reinterpret_cast<const QRgb*>(image.constScanLine(y));
+                    for (int x = 0; x < image.width(); x += 2) {
+                        if (qRed(line[x]) + qGreen(line[x]) + qBlue(line[x]) <
+                            600) {
+                            ++n;
+                        }
+                    }
+                }
+                return n;
+            };
+            // No highlight during pixel comparisons: the blue selection trace
+            // would confound the bake-exactness deltas below.
+            canvas->clearSelection();
+            // Hover first so the baseline includes the brush ring: hasHover_
+            // flips on the first move and the ring then paints in every grab.
+            // Without this, the ring's pixels would masquerade as bake residue
+            // in the undo comparison below.
+            brush->onMove(
+                *canvas,
+                QMouseEvent(QEvent::MouseMove, QPointF(420.0, 308.0),
+                            QPointF(420.0, 308.0), QPointF(420.0, 308.0),
+                            Qt::NoButton, Qt::NoButton, Qt::NoModifier));
+            auto countBlue = [&]() {
+                const QImage image = canvas->grab().toImage();
+                int n = 0;
+                for (int y = 0; y < image.height(); y += 2) {
+                    const QRgb* line =
+                        reinterpret_cast<const QRgb*>(image.constScanLine(y));
+                    for (int x = 0; x < image.width(); x += 2) {
+                        if (qAbs(qRed(line[x]) - 60) +
+                                qAbs(qGreen(line[x]) - 140) +
+                                qAbs(qBlue(line[x]) - 255) <
+                            90) {
+                            ++n;
+                        }
+                    }
+                }
+                return n;
+            };
+            const int darkBefore = countDark();
+            const int blueBefore = countBlue();
             const size_t before =
                 canvas->activeKeyframe()->shapes.size();
             const QPointF p0(300.0, 300.0);
@@ -427,10 +486,28 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
                   "brush shape is hit-testable on its band");
             check(canvas->isSelected(committed.id),
                   "brush shape auto-selected");
+            const int darkCommitted = countDark();
+            const int selCommitted = canvas->selectionCount();
+            const int blueCommitted = countBlue();
+            check(darkCommitted > darkBefore + 100,
+                  "committed stroke paints pixels through the scene cache");
+            check(blueCommitted > blueBefore,
+                  "selection highlight paints its trace");
+            // De-highlight so the undo/redo comparisons below measure only
+            // baked pixels, never selection-trace pixels.
+            canvas->clearSelection();
+            const int darkPlain = countDark();
+            const int selPlain = canvas->selectionCount();
             check(doc->undo(), "brush undo available");
             check(canvas->activeKeyframe()->shapes.size() == before,
                   "brush undo removed the shape");
+            const int darkUndone = countDark();
+            check(darkUndone >= darkBefore - 2 && darkUndone <= darkBefore + 2,
+                  "undo regional rebake restores pre-stroke pixels exactly");
             check(doc->redo(), "brush redo available");
+            const int darkRedone = countDark();
+            check(darkRedone >= darkPlain - 2 && darkRedone <= darkPlain + 2,
+                  "redo rebakes the stroke's pixels exactly");
         }
     }
 

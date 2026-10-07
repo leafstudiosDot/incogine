@@ -1,5 +1,6 @@
 #include "canvas.h"
 
+#include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -107,27 +108,34 @@ AnimatorCanvas::AnimatorCanvas(AnimatorDocument* document, QWidget* parent)
 
     if (document_ != nullptr) {
         // Any command-driven edit may change geometry or the active layer, so
-        // the flattening cache and the selection both need revalidating.
+        // the flattening cache and the selection both need revalidating. The
+        // scene pixmap is NOT touched here: paintEvent's ensureSceneBaked()
+        // diffs against what the pixmap shows and repaints incrementally, so
+        // there is exactly one freshness path and it cannot be forgotten.
         connect(document_, &AnimatorDocument::documentChanged, this, [this] {
             pathCache_.clear();
-            bakedCache_.clear();
-            outlineCache_.clear();
-            piecesCache_.clear();
             invalidateDrawCache();
             pruneSelection();
             update();
         });
     }
+    // Chunked scene baking: idle slices, abortable by generation. Started on
+    // demand by requestFullBake(); the slice re-arms itself while work remains.
+    bakeTimer_.setSingleShot(true);
+    bakeTimer_.setInterval(0);
+    connect(&bakeTimer_, &QTimer::timeout, this, [this] { onBakeSlice(); });
 }
 
 void AnimatorCanvas::setView(const StageView& view) {
     view_ = view;
+    bumpView();
     emitZoomChanged();
     update();
 }
 
 void AnimatorCanvas::zoomBy(double factor) {
     view_.zoomAt(static_cast<float>(factor), QPointF(width() * 0.5, height() * 0.5));
+    bumpView();
     emitZoomChanged();
     update();
 }
@@ -139,6 +147,7 @@ void AnimatorCanvas::fitToStage() {
     const icg::anim::AnimDocument& model = document_->document();
     if (view_.fitToStage(size(), model.stageWidth, model.stageHeight)) {
         needsFitOnFirstSize_ = false;
+        bumpView();
         emitZoomChanged();
         update();
     }
@@ -173,18 +182,19 @@ void AnimatorCanvas::setPreviewQuality(PreviewQuality quality) {
     }
     quality_ = quality;
     // Geometry at every cache level derives from the tolerance, so all of it
-    // goes. The cull pad in visibleList reads flattenTolerance() live, so it
+    // goes - including the scene pixmap, whose baked pixels used the old one.
+    // The cull pad in visibleList reads flattenTolerance() live, so it
     // follows without its own invalidation.
     pathCache_.clear();
-    bakedCache_.clear();
-    outlineCache_.clear();
-    piecesCache_.clear();
     invalidateDrawCache();
+    requestFullBake(false);
     update();
 }
 
 void AnimatorCanvas::resizeEvent(QResizeEvent* event) {
     QWidget::resizeEvent(event);
+    // Widget size feeds the visible stage rect: a resize re-culls.
+    bumpView();
     fitWhenSized();
 }
 
@@ -332,9 +342,11 @@ const icg::anim::FlatPath& AnimatorCanvas::flattenedPath(
 }
 
 const std::vector<ResolvedShape>& AnimatorCanvas::visibleList() const {
-    if (visibleCacheValid_) {
+    if (visViewGen_ == viewGen_ && visDrawGen_ == drawGen_) {
         return visibleCache_;
     }
+    visViewGen_ = viewGen_;
+    visDrawGen_ = drawGen_;
     visibleCache_.clear();
     // Viewport culling happens HERE, once per paint, instead of once per
     // painter that needed the list. The pad covers the stroke halo plus a
@@ -356,7 +368,6 @@ const std::vector<ResolvedShape>& AnimatorCanvas::visibleList() const {
         }
         visibleCache_.push_back(shape);
     }
-    visibleCacheValid_ = true;
     return visibleCache_;
 }
 
@@ -581,23 +592,19 @@ QRectF AnimatorCanvas::visibleStageRect() const {
     return view_.toStageRect(QRectF(0.0, 0.0, width(), height()));
 }
 
-const QPainterPath& AnimatorCanvas::bakedPath(
-    const ResolvedShape& shape) const {
-    auto cached = bakedCache_.find(shape.shapeId);
-    if (cached != bakedCache_.end() && cached->hasMatrix &&
-        cached->matrix == shape.matrix) {
-        return cached->path;
-    }
-    // Rebuild: transform the cached subdivision into stage space once, then
-    // reuse the Qt path until the transform moves (a move drag only rebuilds
-    // the dragged shapes; everything else cache-hits).
-    BakedEntry entry;
-    entry.matrix = shape.matrix;
-    entry.hasMatrix = true;
-    // Winding, not even-odd: stored brush shapes are multi-subpath fill pieces
-    // sharing one winding, whose overlaps must stay solid. Single loops render
-    // identically under either rule, so this changes nothing else.
-    entry.path.setFillRule(Qt::WindingFill);
+namespace {
+
+// Transient raster builders. These return QPainterPaths BY VALUE and retain
+// nothing: the scene pixmap (not per-shape path objects) is the paint cache,
+// so steady-state memory stays flat in stroke count. Callers are the scene
+// baker (occasional, chunked) and the selection highlight (few shapes).
+
+// The flattened subpaths in stage space. WindingFill: multi-subpath fills
+// sharing one winding must stay solid where they overlap; single loops render
+// identically under either rule.
+QPainterPath buildFillPath(const ResolvedShape& shape) {
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
     for (const auto& polyline : shape.path.polylines) {
         if (polyline.size() < 2) {
             continue;
@@ -609,93 +616,27 @@ const QPainterPath& AnimatorCanvas::bakedPath(
             const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
             const QPointF stage(stageVec.x, stageVec.y);
             if (first) {
-                entry.path.moveTo(stage);
+                path.moveTo(stage);
                 first = false;
             } else {
-                entry.path.lineTo(stage);
+                path.lineTo(stage);
             }
         }
     }
-    auto inserted = bakedCache_.insert(shape.shapeId, std::move(entry));
-    return inserted->path;
+    return path;
 }
 
-const QPainterPath& AnimatorCanvas::strokeOutlinePath(
-    const ResolvedShape& shape) const {
-    const int capId = static_cast<int>(shape.cap);
-    const int joinId = static_cast<int>(shape.join);
-    auto cached = outlineCache_.find(shape.shapeId);
-    if (cached != outlineCache_.end() && cached->hasMatrix &&
-        cached->matrix == shape.matrix && cached->width == shape.strokeWidth &&
-        cached->cap == capId && cached->join == joinId) {
-        return cached->path;
-    }
-    // Expand in shape-local space, where `strokeWidth` is the authored width,
-    // then transform into stage space exactly like bakedPath does.
+// The centerline expanded to union-correct fill pieces, in stage space.
+QPainterPath buildPiecesPath(const ResolvedShape& shape, float tolerance) {
     icg::anim::StrokeOutlineOptions opts;
     opts.width = shape.strokeWidth;
     opts.cap = shape.cap;
     opts.join = shape.join;
-    opts.tolerance = flattenTolerance();
-    const icg::anim::FlatPath outline =
-        icg::anim::StrokeToOutline(shape.path, opts);
-
-    OutlineEntry entry;
-    entry.matrix = shape.matrix;
-    entry.width = shape.strokeWidth;
-    entry.cap = capId;
-    entry.join = joinId;
-    entry.hasMatrix = true;
-    for (const auto& polyline : outline.polylines) {
-        if (polyline.size() < 3) {
-            continue;
-        }
-        bool first = true;
-        for (const Vec2& point : polyline) {
-            const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
-            if (first) {
-                entry.path.moveTo(stageVec.x, stageVec.y);
-                first = false;
-            } else {
-                entry.path.lineTo(stageVec.x, stageVec.y);
-            }
-        }
-        entry.path.closeSubpath();
-    }
-    auto inserted = outlineCache_.insert(shape.shapeId, std::move(entry));
-    return inserted->path;
-}
-
-const QPainterPath& AnimatorCanvas::strokePiecesPath(
-    const ResolvedShape& shape) const {
-    const int capId = static_cast<int>(shape.cap);
-    const int joinId = static_cast<int>(shape.join);
-    auto cached = piecesCache_.find(shape.shapeId);
-    if (cached != piecesCache_.end() && cached->hasMatrix &&
-        cached->matrix == shape.matrix && cached->width == shape.strokeWidth &&
-        cached->cap == capId && cached->join == joinId) {
-        return cached->path;
-    }
-    // Expand in shape-local space, where `strokeWidth` is the authored width,
-    // then transform into stage space exactly like bakedPath does.
-    icg::anim::StrokeOutlineOptions opts;
-    opts.width = shape.strokeWidth;
-    opts.cap = shape.cap;
-    opts.join = shape.join;
-    opts.tolerance = flattenTolerance();
+    opts.tolerance = tolerance;
     const icg::anim::FlatPath pieces =
         icg::anim::StrokeToPieces(shape.path, opts);
-
-    OutlineEntry entry;
-    entry.matrix = shape.matrix;
-    entry.width = shape.strokeWidth;
-    entry.cap = capId;
-    entry.join = joinId;
-    entry.hasMatrix = true;
-    // Winding, not even-odd: the pieces share one winding by construction, so
-    // one fill paints their exact union - including where the stroke crosses
-    // itself, where an even-odd fill would punch holes.
-    entry.path.setFillRule(Qt::WindingFill);
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
     for (const auto& polyline : pieces.polylines) {
         if (polyline.size() < 3) {
             continue;
@@ -704,16 +645,458 @@ const QPainterPath& AnimatorCanvas::strokePiecesPath(
         for (const Vec2& point : polyline) {
             const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
             if (first) {
-                entry.path.moveTo(stageVec.x, stageVec.y);
+                path.moveTo(stageVec.x, stageVec.y);
                 first = false;
             } else {
-                entry.path.lineTo(stageVec.x, stageVec.y);
+                path.lineTo(stageVec.x, stageVec.y);
             }
         }
-        entry.path.closeSubpath();
+        path.closeSubpath();
     }
-    auto inserted = piecesCache_.insert(shape.shapeId, std::move(entry));
-    return inserted->path;
+    return path;
+}
+
+// The single outline loop, for stroking the selection highlight (winding
+// never applies to a stroked highlight, so the loop's self-overlap holes
+// cannot show there).
+QPainterPath buildOutlinePath(const ResolvedShape& shape, float tolerance) {
+    icg::anim::StrokeOutlineOptions opts;
+    opts.width = shape.strokeWidth;
+    opts.cap = shape.cap;
+    opts.join = shape.join;
+    opts.tolerance = tolerance;
+    const icg::anim::FlatPath outline =
+        icg::anim::StrokeToOutline(shape.path, opts);
+    QPainterPath path;
+    for (const auto& polyline : outline.polylines) {
+        if (polyline.size() < 3) {
+            continue;
+        }
+        bool first = true;
+        for (const Vec2& point : polyline) {
+            const Vec2 stageVec = icg::anim::TransformPoint(shape.matrix, point);
+            if (first) {
+                path.moveTo(stageVec.x, stageVec.y);
+                first = false;
+            } else {
+                path.lineTo(stageVec.x, stageVec.y);
+            }
+        }
+        path.closeSubpath();
+    }
+    return path;
+}
+
+} // namespace
+
+// ------------------------------------------------------- scene baking --
+//
+// The Part 0 fix in one place: committed shapes live in `sceneCache_` (a
+// stage-space pixmap), so a repaint blits instead of re-filling thousands of
+// vector subpaths. Freshness comes from exactly one path: ensureSceneBaked(),
+// called at the top of every paintEvent, diffs the current draw list against
+// what the pixmap shows (`lastBaked_`) and repaints incrementally. Small sets
+// apply synchronously; anything big goes chunked on idle (bakeQueue_ +
+// bakeTimer_) so a 5000-stroke load stays interactive instead of freezing.
+
+namespace {
+
+// Pixmap coverage for the current scene: the stage plus every visible shape's
+// halo-inflated bounds, so off-stage artwork (visible while editing) bakes
+// too. Returns false when there is nothing to cover.
+bool sceneCoverage(const std::vector<ResolvedShape>& shapes, float stageWidth,
+                   float stageHeight, QRectF& boundsOut) {
+    bool any = false;
+    QRectF bounds(0.0, 0.0, stageWidth, stageHeight);
+    for (const ResolvedShape& shape : shapes) {
+        icg::anim::Vec2 lo, hi;
+        icg::anim::FlatTransformedBounds(shape.path, shape.matrix,
+                                        shape.strokeWidth * 0.5f + 1.0f, lo,
+                                        hi);
+        if (hi.x < lo.x || hi.y < lo.y) {
+            continue;
+        }
+        const QRectF box(lo.x, lo.y, hi.x - lo.x, hi.y - lo.y);
+        bounds = any ? bounds.united(box) : box.united(bounds);
+        any = true;
+    }
+    boundsOut = bounds;
+    return true; // the stage rect alone is always coverable
+}
+
+} // namespace
+
+void AnimatorCanvas::ensureSceneBaked() {
+    if (!sceneDirty_) {
+        return;
+    }
+    sceneDirty_ = false;
+    if (document_ == nullptr) {
+        sceneCache_ = QPixmap();
+        lastBaked_.clear();
+        bakeQueue_.clear();
+        return;
+    }
+    const std::vector<ResolvedShape>& shapes = drawList();
+    const icg::anim::AnimDocument& model = document_->document();
+
+    // Coverage: stage plus current content. Growing past the pixmap (drawing
+    // outside previous extents) needs a full re-bake at the new coverage.
+    QRectF coverage;
+    sceneCoverage(shapes, model.stageWidth, model.stageHeight, coverage);
+    const QSize wantSize(
+        std::max(1, static_cast<int>(std::ceil(coverage.width() *
+                                              sceneBakeScale_))),
+        std::max(1, static_cast<int>(std::ceil(coverage.height() *
+                                              sceneBakeScale_))));
+    bool sizeOk = !sceneCache_.isNull() && sceneCache_.size() == wantSize &&
+                  sceneOrigin_ == coverage.topLeft();
+    if (!sizeOk) {
+        // Coverage grew past the pixmap (drawing outside previous extents).
+        // The old pixels are still valid, so keep them: realloc, copy across,
+        // and queue only what is missing.
+        requestFullBake(true);
+        return;
+    }
+
+    // Diff current ids against what the pixmap shows. Dragged shapes are
+    // skipped: they paint live until commit, and their baked entries still
+    // describe the pre-drag state the pixmap shows (ghosting, by design).
+    QSet<uint64_t> dragging;
+    if (drag_.active) {
+        for (const auto& move : drag_.moves) {
+            dragging.insert(move.shapeId);
+        }
+    }
+    QHash<uint64_t, const ResolvedShape*> current;
+    for (const ResolvedShape& shape : shapes) {
+        current.insert(shape.shapeId, &shape);
+    }
+    std::vector<uint64_t> added;
+    std::vector<uint64_t> changed;
+    std::vector<uint64_t> removed;
+    for (auto it = current.begin(); it != current.end(); ++it) {
+        if (dragging.contains(it.key())) {
+            continue;
+        }
+        auto baked = lastBaked_.find(it.key());
+        if (baked == lastBaked_.end()) {
+            added.push_back(it.key());
+        } else if (!(baked->matrix == it.value()->matrix)) {
+            changed.push_back(it.key());
+        }
+    }
+    for (auto it = lastBaked_.begin(); it != lastBaked_.end(); ++it) {
+        if (!current.contains(it.key())) {
+            removed.push_back(it.key());
+        }
+    }
+    // lastBaked_ can also hold dragged ids from before the drag began; they
+    // stay valid (pre-drag state) and are simply not touched until commit.
+    if (added.empty() && changed.empty() && removed.empty()) {
+        return;
+    }
+    static constexpr size_t kSyncIdLimit = 64;
+    if (added.size() + changed.size() + removed.size() > kSyncIdLimit) {
+        if (!changed.empty() || !removed.empty()) {
+            // Stale regions plus many missing ids: progressive full rebuild
+            // (old pixels stay visible, soft, until slices replace them).
+            requestFullBake(false);
+            return;
+        }
+        // Added-only flood (paste/load of hundreds of shapes): keep the valid
+        // pixmap and queue the new ids for progressive chunked baking. Dedupe
+        // against ids already queued: without this every paint re-queues the
+        // same flood and the queue grows without bound (each paint appends
+        // while slices drain far slower).
+        QSet<uint64_t> queued(bakeQueue_.begin(), bakeQueue_.end());
+        for (uint64_t id : added) {
+            if (!queued.contains(id)) {
+                bakeQueue_.push_back(id);
+                queued.insert(id);
+            }
+        }
+        ++bakeGeneration_;
+        if (!bakeTimer_.isActive()) {
+            bakeTimer_.start();
+        }
+        if (bakeQueue_.size() > 256) {
+            reportStatus(tr("Baking scene (%1 shapes)…").arg(bakeQueue_.size()));
+            bakeReported_ = true;
+        }
+        return;
+    }
+    // Small change: apply synchronously. Added shapes paint straight onto the
+    // pixmap; removed/moved shapes need their regions erased and repainted.
+    if (!added.empty()) {
+        bakeShapesIntoPixmap(added);
+        for (uint64_t id : added) {
+            auto found = current.find(id);
+            if (found != current.end()) {
+                lastBaked_.insert(id, bakedStateFor(**found));
+            }
+        }
+    }
+    if (!changed.empty() || !removed.empty()) {
+        QRectF dirty;
+        bool hasDirty = false;
+        auto grow = [&](const QRectF& box) {
+            dirty = hasDirty ? dirty.united(box) : box;
+            hasDirty = true;
+        };
+        QSet<uint64_t> skip(added.begin(), added.end());
+        for (uint64_t id : changed) {
+            auto baked = lastBaked_.find(id);
+            if (baked != lastBaked_.end()) {
+                grow(baked->bounds);
+            }
+            auto found = current.find(id);
+            if (found != current.end()) {
+                grow(shapeBounds(**found));
+            }
+        }
+        for (uint64_t id : removed) {
+            auto baked = lastBaked_.find(id);
+            if (baked != lastBaked_.end()) {
+                grow(baked->bounds);
+            }
+            lastBaked_.remove(id);
+        }
+        if (hasDirty) {
+            rebakeRegion(dirty, skip);
+        }
+        for (uint64_t id : changed) {
+            auto found = current.find(id);
+            if (found != current.end()) {
+                lastBaked_.insert(id, bakedStateFor(**found));
+            }
+        }
+    }
+}
+
+AnimatorCanvas::BakedState AnimatorCanvas::bakedStateFor(
+    const ResolvedShape& shape) {
+    BakedState state;
+    state.bounds = shapeBounds(shape);
+    state.matrix = shape.matrix;
+    return state;
+}
+
+QRectF AnimatorCanvas::shapeBounds(const ResolvedShape& shape) {
+    icg::anim::Vec2 lo, hi;
+    icg::anim::FlatTransformedBounds(shape.path, shape.matrix,
+                                    shape.strokeWidth * 0.5f + 1.0f, lo, hi);
+    if (hi.x < lo.x || hi.y < lo.y) {
+        return QRectF();
+    }
+    return QRectF(lo.x, lo.y, hi.x - lo.x, hi.y - lo.y);
+}
+
+// Paints drawList entries for `ids` (in z-order) onto the scene pixmap.
+// Paths are built transiently and discarded: nothing per-shape persists.
+void AnimatorCanvas::bakeShapesIntoPixmap(const std::vector<uint64_t>& ids) {
+    if (sceneCache_.isNull() || ids.empty()) {
+        return;
+    }
+    QSet<uint64_t> wanted(ids.begin(), ids.end());
+    QPainter painter(&sceneCache_);
+    painter.setTransform(pixmapTransform());
+    painter.setRenderHint(QPainter::Antialiasing,
+                          quality_ != PreviewQuality::Draft);
+    painter.setPen(Qt::NoPen);
+    for (const ResolvedShape& shape : drawList()) {
+        if (!wanted.contains(shape.shapeId)) {
+            continue;
+        }
+        if (shape.hasFill && shape.fill.a > 0) {
+            painter.fillPath(buildFillPath(shape), toQColor(shape.fill));
+        }
+        if (shape.hasStroke && shape.stroke.a > 0 && shape.strokeWidth > 0.0) {
+            painter.fillPath(buildPiecesPath(shape, flattenTolerance()),
+                             toQColor(shape.stroke));
+        }
+    }
+}
+
+// Erases `stageRect` on the pixmap, then repaints every current shape
+// intersecting it (except `skipIds`, painted separately) back-to-front.
+void AnimatorCanvas::rebakeRegion(const QRectF& stageRect,
+                                 const QSet<uint64_t>& skipIds) {
+    if (sceneCache_.isNull()) {
+        return;
+    }
+    // Pixmap-space rect for the stage-space dirty region. The pad scales with
+    // the bake resolution: antialiasing fringe is ~1 stage unit wide, which is
+    // more device pixels the higher the bake scale. Too small a pad leaves
+    // fringe pixels behind on erase (measured as residue after undo).
+    const int pad = static_cast<int>(std::ceil(sceneBakeScale_)) + 2;
+    const QRect erase = QRect(
+        static_cast<int>(std::floor((stageRect.left() - sceneOrigin_.x()) *
+                                    sceneBakeScale_)) -
+            pad,
+        static_cast<int>(std::floor((stageRect.top() - sceneOrigin_.y()) *
+                                    sceneBakeScale_)) -
+            pad,
+        static_cast<int>(std::ceil(stageRect.width() * sceneBakeScale_)) +
+            pad * 2,
+        static_cast<int>(std::ceil(stageRect.height() * sceneBakeScale_)) +
+            pad * 2)
+                            .intersected(sceneCache_.rect());
+    {
+        QPainter clear(&sceneCache_);
+        clear.setCompositionMode(QPainter::CompositionMode_Clear);
+        clear.fillRect(erase, Qt::transparent);
+    }
+    QPainter painter(&sceneCache_);
+    painter.setTransform(pixmapTransform());
+    painter.setRenderHint(QPainter::Antialiasing,
+                          quality_ != PreviewQuality::Draft);
+    painter.setPen(Qt::NoPen);
+    // Clip to the dirty region (expanded slightly): shapes outside cannot
+    // contribute a pixel, so dense scenes rebake locally, not globally.
+    painter.setClipRect(stageRect.adjusted(-2.0, -2.0, 2.0, 2.0));
+    for (const ResolvedShape& shape : drawList()) {
+        if (skipIds.contains(shape.shapeId)) {
+            continue;
+        }
+        if (!shapeBounds(shape).intersects(stageRect)) {
+            continue;
+        }
+        if (shape.hasFill && shape.fill.a > 0) {
+            painter.fillPath(buildFillPath(shape), toQColor(shape.fill));
+        }
+        if (shape.hasStroke && shape.stroke.a > 0 && shape.strokeWidth > 0.0) {
+            painter.fillPath(buildPiecesPath(shape, flattenTolerance()),
+                             toQColor(shape.stroke));
+        }
+    }
+}
+
+void AnimatorCanvas::requestFullBake(bool trustBaked) {
+    if (document_ == nullptr) {
+        sceneCache_ = QPixmap();
+        lastBaked_.clear();
+        bakeQueue_.clear();
+        return;
+    }
+    const std::vector<ResolvedShape>& shapes = drawList();
+    const icg::anim::AnimDocument& model = document_->document();
+    QRectF coverage;
+    sceneCoverage(shapes, model.stageWidth, model.stageHeight, coverage);
+    const QSize wantSize(
+        std::max(1, static_cast<int>(std::ceil(coverage.width() *
+                                              sceneBakeScale_))),
+        std::max(1, static_cast<int>(std::ceil(coverage.height() *
+                                              sceneBakeScale_))));
+    // Realloc only when the size or origin actually changed; copy the old
+    // pixels across scaled so the scene never blanks (soft during progressive
+    // catch-up, then crisp as slices land). Quality/scale changes clear the
+    // baked record (tessellation differs) but still keep the soft image.
+    QPixmap fresh(wantSize);
+    fresh.fill(Qt::transparent);
+    if (!sceneCache_.isNull()) {
+        QPainter carry(&fresh);
+        carry.drawPixmap(fresh.rect(), sceneCache_, sceneCache_.rect());
+    }
+    sceneCache_ = fresh;
+    sceneOrigin_ = coverage.topLeft();
+    if (!trustBaked) {
+        lastBaked_.clear();
+    }
+    bakeQueue_.clear();
+    bakeQueue_.reserve(shapes.size());
+    for (const ResolvedShape& shape : shapes) {
+        if (trustBaked && lastBaked_.contains(shape.shapeId)) {
+            continue;
+        }
+        bakeQueue_.push_back(shape.shapeId);
+    }
+    ++bakeGeneration_;
+    // Small scenes bake synchronously, right here: no timer round-trip, so a
+    // first paint (or a synchronous grab, or a future frame export) never
+    // observes a half-baked pixmap. Big scenes stay chunked on idle.
+    static constexpr size_t kSyncBakeLimit = 64;
+    if (bakeQueue_.size() > kSyncBakeLimit) {
+        reportStatus(tr("Baking scene (%1 shapes)…").arg(bakeQueue_.size()));
+        bakeReported_ = true;
+        if (!bakeTimer_.isActive()) {
+            bakeTimer_.start();
+        }
+        return;
+    }
+    while (bakeSliceOnce(12)) {
+    }
+}
+
+void AnimatorCanvas::onBakeSlice() {
+    if (bakeSliceOnce(12) && !bakeTimer_.isActive()) {
+        bakeTimer_.start();
+    }
+}
+
+// Bakes queued shapes for up to `budgetMs`, then returns whether work
+// remains. Stale generations abort silently: whoever superseded the bake owns
+// freshness now (the diff path in ensureSceneBaked).
+bool AnimatorCanvas::bakeSliceOnce(int budgetMs) {
+    const uint64_t generation = bakeGeneration_;
+    if (bakeQueue_.empty()) {
+        if (bakeReported_) {
+            bakeReported_ = false;
+            reportStatus(tr("Scene ready."));
+        }
+        return false;
+    }
+    QElapsedTimer slice;
+    slice.start();
+    std::vector<uint64_t> done;
+    while (!bakeQueue_.empty() &&
+           slice.nsecsElapsed() < static_cast<qint64>(budgetMs) * 1000000LL) {
+        if (generation != bakeGeneration_) {
+            return !bakeQueue_.empty();
+        }
+        done.push_back(bakeQueue_.back());
+        bakeQueue_.pop_back();
+    }
+    if (!done.empty()) {
+        bakeShapesIntoPixmap(done);
+        const std::vector<ResolvedShape>& shapes = drawList();
+        QHash<uint64_t, const ResolvedShape*> current;
+        for (const ResolvedShape& shape : shapes) {
+            current.insert(shape.shapeId, &shape);
+        }
+        for (uint64_t id : done) {
+            auto found = current.find(id);
+            if (found != current.end()) {
+                lastBaked_.insert(id, bakedStateFor(**found));
+            }
+        }
+        update(); // show progress: the fresh strip paints on the next frame
+    }
+    return !bakeQueue_.empty();
+}
+
+void AnimatorCanvas::maybeAdaptBakeScale() {
+    if (sceneCache_.isNull()) {
+        return;
+    }
+    // Zooming far past the baked resolution (or far below it) re-bakes at a
+    // new scale on idle. Pan never rebakes: the blit sub-rects the pixmap.
+    // Between threshold and completion the old pixmap keeps blitting (soft
+    // when magnified, never blank).
+    if (view_.zoom > sceneBakeScale_ * 2.0f) {
+        sceneBakeScale_ *= 2.0f;
+        requestFullBake(false);
+    } else if (view_.zoom < sceneBakeScale_ / 8.0f && sceneBakeScale_ > 1.0f) {
+        sceneBakeScale_ *= 0.5f;
+        requestFullBake(false);
+    }
+}
+
+QTransform AnimatorCanvas::pixmapTransform() const {
+    // Stage -> pixmap device pixels: scale, then shift by the origin.
+    return QTransform(sceneBakeScale_, 0.0, 0.0, sceneBakeScale_,
+                      -sceneOrigin_.x() * sceneBakeScale_,
+                      -sceneOrigin_.y() * sceneBakeScale_);
 }
 
 void AnimatorCanvas::paintEvent(QPaintEvent*) {
@@ -721,7 +1104,12 @@ void AnimatorCanvas::paintEvent(QPaintEvent*) {
     // rebuilt whenever the view moved. Doing it here rather than in every view
     // mutator means the cache cannot go stale through a path that forgot to
     // invalidate it, and it still collapses three rebuilds into one per paint.
-    invalidateVisibleList();
+    // Single freshness path for the scene pixmap: diffs the draw list against
+    // what the pixmap shows and repaints incrementally (small sets sync, big
+    // sets chunked on idle). Nothing else touches the pixmap. Skipped outright
+    // when nothing model-side changed since the last paint.
+    ensureSceneBaked();
+    maybeAdaptBakeScale();
     QPainter painter(this);
     // Draft skips antialiasing (the biggest fill-rate lever); Normal and High
     // smooth. Set once here so every painter in the pass inherits it.
@@ -731,7 +1119,6 @@ void AnimatorCanvas::paintEvent(QPaintEvent*) {
     if (document_ == nullptr) {
         return;
     }
-    const icg::anim::AnimDocument& model = document_->document();
 
     painter.save();
     // Stage units -> widget pixels. y-down needs no flip: Qt's y grows downward
@@ -740,9 +1127,10 @@ void AnimatorCanvas::paintEvent(QPaintEvent*) {
     painter.scale(view_.zoom, view_.zoom);
 
     paintStageFill(painter);
-    paintShapes(painter);
+    paintSceneBlit(painter);
+    paintLiveSelection(painter);
     paintSelectionOutlines(painter);
-    // Tool overlays (the marquee) draw last, in stage space.
+    // Tool overlays (marquee, brush preview) draw last, in stage space.
     if (activeTool_ != nullptr) {
         activeTool_->paintOverlay(painter, *this);
     }
@@ -752,6 +1140,70 @@ void AnimatorCanvas::paintEvent(QPaintEvent*) {
     // space so their line width stays constant at any zoom.
     paintStageOutline(painter);
     paintEmptyHint(painter);
+}
+
+// Blits the baked scene pixmap for the visible stage rect. The pixmap is
+// stage-space, so pan is a sub-rect and zoom is a scaled blit - neither
+// re-rasterizes a single vector subpath.
+void AnimatorCanvas::paintSceneBlit(QPainter& painter) const {
+    if (sceneCache_.isNull()) {
+        return;
+    }
+    const QRectF visible = visibleStageRect();
+    const QRectF source((visible.left() - sceneOrigin_.x()) * sceneBakeScale_,
+                        (visible.top() - sceneOrigin_.y()) * sceneBakeScale_,
+                        visible.width() * sceneBakeScale_,
+                        visible.height() * sceneBakeScale_);
+    // Smooth only when magnifying past the baked resolution; 1:1 blits stay
+    // crisp with no filtering cost.
+    painter.setRenderHint(QPainter::SmoothPixmapTransform,
+                          view_.zoom > sceneBakeScale_);
+    painter.drawPixmap(visible, sceneCache_, source);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
+}
+
+// Live vectors for SELECTED shapes (and, during a drag, the dragged ones -
+// which are always selected). Everything else comes from the pixmap.
+// Selected shapes paint live because their highlight must track the cursor
+// exactly; during a drag the pixmap still shows their pre-drag position,
+// which reads as intentional ghosting until commit rebakes the region.
+void AnimatorCanvas::paintLiveSelection(QPainter& painter) const {
+    if (selection_.isEmpty()) {
+        return;
+    }
+    painter.save();
+    painter.setPen(Qt::NoPen);
+    for (const ResolvedShape& shape : visibleList()) {
+        if (!selection_.contains(shape.shapeId)) {
+            continue;
+        }
+        // Skip shapes the pixmap already shows correctly: baked with the
+        // current matrix and not being dragged. (During a drag the pixmap
+        // holds the stale position, so the live paint is the move feedback.)
+        bool dragging = false;
+        if (drag_.active) {
+            for (const auto& move : drag_.moves) {
+                if (move.shapeId == shape.shapeId) {
+                    dragging = true;
+                    break;
+                }
+            }
+        }
+        if (!dragging) {
+            auto baked = lastBaked_.find(shape.shapeId);
+            if (baked != lastBaked_.end() && baked->matrix == shape.matrix) {
+                continue;
+            }
+        }
+        if (shape.hasFill && shape.fill.a > 0) {
+            painter.fillPath(buildFillPath(shape), toQColor(shape.fill));
+        }
+        if (shape.hasStroke && shape.stroke.a > 0 && shape.strokeWidth > 0.0) {
+            painter.fillPath(buildPiecesPath(shape, flattenTolerance()),
+                             toQColor(shape.stroke));
+        }
+    }
+    painter.restore();
 }
 
 void AnimatorCanvas::paintBackdrop(QPainter& painter) const {
@@ -801,41 +1253,6 @@ void AnimatorCanvas::paintStageFill(QPainter& painter) const {
     painter.restore();
 }
 
-void AnimatorCanvas::paintShapes(QPainter& painter) const {
-    // The draw list is culled once per paint (visibleList); every painter in
-    // this paint shares it instead of rebuilding and deep-copying it.
-    for (const ResolvedShape& shape : visibleList()) {
-        // Fills always use the exact path: a filled outline's edges ARE the
-        // artwork, with no band width to hide decimation error behind.
-        const QPainterPath& exact = bakedPath(shape);
-        painter.save();
-        painter.setPen(Qt::NoPen);
-        if (shape.hasFill && shape.fill.a > 0 && !exact.isEmpty()) {
-            painter.fillPath(exact, toQColor(shape.fill));
-        }
-        painter.restore();
-
-        if (shape.hasStroke && shape.stroke.a > 0 && shape.strokeWidth > 0.0) {
-            // Painted as a FILL of precomputed union-correct pieces, not as a
-            // pen stroke of the centerline. Qt's raster stroker costs ~20us per
-            // vertex and scales with the device-space band width, which is why
-            // dense strokes got slower the further you zoomed in. Filling is
-            // ~8-14x faster and is the technique Flash/Animate use (their
-            // brush yields a filled shape). The cached path already carries
-            // WindingFill, so this is one fill call - and unlike the old
-            // single outline loop, it stays solid where the stroke crosses
-            // itself (a brush circle's overlap).
-            const QPainterPath& pieces = strokePiecesPath(shape);
-            if (!pieces.isEmpty()) {
-                painter.save();
-                painter.setPen(Qt::NoPen);
-                painter.fillPath(pieces, toQColor(shape.stroke));
-                painter.restore();
-            }
-        }
-    }
-}
-
 void AnimatorCanvas::paintSelectionOutlines(QPainter& painter) const {
     if (selection_.isEmpty()) {
         return;
@@ -853,13 +1270,18 @@ void AnimatorCanvas::paintSelectionOutlines(QPainter& painter) const {
         }
         // Strokes highlight by tracing the rendered BAND, not the centerline,
         // so the highlight sits exactly on the pixels the user sees (stroking
-        // the loop has no winding issue - only fills do). Pure fills (brush
-        // shapes are stored as fill pieces) skip the path trace: stroking
-        // every piece would draw a mesh of internal edges, so the box and
-        // handles below are their whole highlight.
+        // the loop has no winding issue - only fills do). The loop is built
+        // transiently: only selected shapes pay for it, so it never shows up
+        // in scene-wide costs. Pure fills skip the path trace and use the box
+        // and handles below as their whole highlight.
         if (shape.hasStroke) {
-            const QPainterPath& band = strokeOutlinePath(shape);
-            painter.drawPath(band.isEmpty() ? bakedPath(shape) : band);
+            const QPainterPath band =
+                buildOutlinePath(shape, flattenTolerance());
+            if (!band.isEmpty()) {
+                painter.drawPath(band);
+            } else {
+                painter.drawPath(buildFillPath(shape));
+            }
         }
         // Bounding box + corner handles, so a move has an obvious affordance.
         // Computed from the EXACT path and inflated by the stroke halo only, so
@@ -983,7 +1405,12 @@ void AnimatorCanvas::setToolCursor() {
 
 void AnimatorCanvas::panBy(const QPointF& deltaWidget) {
     view_.panByPixels(deltaWidget);
+    bumpView();
     update();
+}
+
+bool AnimatorCanvas::isSceneBaked() const {
+    return !sceneCache_.isNull() && bakeQueue_.empty();
 }
 
 void AnimatorCanvas::updateViewAfterPan() {
@@ -1139,6 +1566,7 @@ void AnimatorCanvas::wheelEvent(QWheelEvent* event) {
     const float factor =
         delta.y() > 0 ? kWheelZoomStep : 1.0f / kWheelZoomStep;
     view_.zoomAt(factor, event->position());
+    bumpView();
     emitZoomChanged();
     update();
     event->accept();

@@ -16,9 +16,12 @@
 
 #include <QHash>
 #include <QPainterPath>
+#include <QPixmap>
 #include <QPointF>
 #include <QRectF>
 #include <QSet>
+#include <QTimer>
+#include <QTransform>
 #include <QWidget>
 
 #include <cstdint>
@@ -173,6 +176,10 @@ public:
     // Pans by a widget-pixel delta. Kept here so HandTool does not need to know
     // how the transform is stored.
     void panBy(const QPointF& deltaWidget);
+    // True when every current shape is baked into the scene pixmap (no pending
+    // chunked work). For tests and benchmarks that must observe a settled
+    // scene without pumping the event loop for timer slices.
+    bool isSceneBaked() const;
     void updateViewAfterPan();
     void setToolCursor();
 
@@ -216,49 +223,31 @@ private:
     // --- painting helpers ---
     void paintBackdrop(QPainter& painter) const;
     void paintStageFill(QPainter& painter) const;
-    void paintShapes(QPainter& painter) const;
+    void paintSceneBlit(QPainter& painter) const;
+    void paintLiveSelection(QPainter& painter) const;
     void paintSelectionOutlines(QPainter& painter) const;
     void paintStageOutline(QPainter& painter) const;
     void paintEmptyHint(QPainter& painter) const;
     static QColor toQColor(const icg::anim::AnimColor& color);
 
     // --- one-pass visible draw list ---
-    // `paintShapes`, `paintSelectionOutlines` and `paintEmptyHint` all need the
-    // draw list, and each used to build its own (a deep copy of every visible
-    // shape's FlatPath). They now share ONE list per paint, viewport-culled
-    // once, reused by all three. `visibleList()` caches it; the cache is
-    // invalidated whenever the view or the document changes, which is what
-    // makes it safe to share across a single paintEvent.
+    // Painters share ONE viewport-culled list, rebuilt only when the view or
+    // the draw list changed (generations below) instead of once per paint.
     const std::vector<icg::anim::ResolvedShape>& visibleList() const;
-    void invalidateVisibleList() const { visibleCacheValid_ = false; }
+    // Bumps the view generation: call from every view mutator (pan/zoom/fit/
+    // resize/wheel) so the visible list above stays correct.
+    void bumpView() { ++viewGen_; }
 
     // --- path caches ---
-    // Keyed by shape id. Path geometry only changes through commands (which
-    // clear the cache), so repaints - including live move drags, which only
-    // touch transforms - reuse the subdivision AND the built QPainterPath.
-    // Mutable so const paint and hit-test paths can populate them.
+    // Only the compact subdivision is cached (keyed by shape id): path
+    // geometry changes only through commands, which clear it. The RASTER paths
+    // (baked/outline/pieces QPainterPaths) are deliberately NOT cached per
+    // shape anymore: at ~450 kB per fat stroke they OOM before 5000 strokes,
+    // while the scene pixmap below holds the whole committed scene in ~8 MB.
+    // Raster paths are built transiently where needed (scene bake, selection
+    // highlight) and discarded. Mutable so const paint and hit-test paths can
+    // populate the subdivision cache.
     const icg::anim::FlatPath& flattenedPath(const icg::anim::AnimShape& shape) const;
-    // Stage-space QPainterPath for one resolved shape, rebuilt only when its
-    // matrix changed since the last paint. This is what makes zoomed-in
-    // panning cheap: the subdivision and the Qt path build both cache-hit.
-    const QPainterPath& bakedPath(const icg::anim::ResolvedShape& shape) const;
-    // Stroke outline for one shape: the centerline expanded to a closed,
-    // filled band by anim_geometry::StrokeToOutline. Used ONLY for the
-    // selection highlight, where the loop's edges are stroked (winding never
-    // applies to a stroked highlight, so the loop's self-overlap holes cannot
-    // show). Painting uses strokePiecesPath below.
-    //
-    // Rebuilt when the transform or any stroke parameter changes; it is a pure
-    // function of them, so a pan or zoom reuses it entirely.
-    const QPainterPath& strokeOutlinePath(
-        const icg::anim::ResolvedShape& shape) const;
-    // Stroke fill pieces for one shape: the centerline expanded to UNION-CORRECT
-    // convex pieces by anim_geometry::StrokeToPieces. Painting these with one
-    // WindingFill is ~8-14x faster than stroking the centerline with a pen, and
-    // - unlike the single outline loop - stays solid where the stroke crosses
-    // itself (a brush circle's overlap). Same cache versioning as the outline.
-    const QPainterPath& strokePiecesPath(
-        const icg::anim::ResolvedShape& shape) const;
     // Stage-space rectangle currently visible in the widget. Shapes whose
     // stroke-inflated bounds miss it are skipped before any path work.
     QRectF visibleStageRect() const;
@@ -282,30 +271,43 @@ private:
     DragState drag_;
     bool needsFitOnFirstSize_ = true;
     mutable QHash<uint64_t, icg::anim::FlatPath> pathCache_;
-    struct BakedEntry {
-        QPainterPath path;
-        icg::anim::Mat2x3 matrix;
-        bool hasMatrix = false;
-    };
-    mutable QHash<uint64_t, BakedEntry> bakedCache_;
-    // Stroke outlines, keyed by shape id. `OutlineEntry` also remembers the
-    // stroke parameters, since width/cap/join all change the geometry.
-    struct OutlineEntry {
-        QPainterPath path;
-        icg::anim::Mat2x3 matrix;
-        float width = -1.0f;
-        int cap = -1;
-        int join = -1;
-        bool hasMatrix = false;
-    };
-    mutable QHash<uint64_t, OutlineEntry> outlineCache_;
-    // Stroke fill pieces, keyed the same way (transform + width/cap/join).
-    // Reused struct: `width`/`cap`/`join` are the stroke parameters either way.
-    mutable QHash<uint64_t, OutlineEntry> piecesCache_;
     PreviewQuality quality_ = PreviewQuality::Normal;
-    // One culled draw list per paint, shared by every painter in that paint.
+    // Committed-scene pixmap (stage space, sceneBakeScale_ px per unit).
+    // Transparent: the backdrop/checker paint live underneath every frame.
+    QPixmap sceneCache_;
+    float sceneBakeScale_ = 1.0f;
+    // What the pixmap currently shows, per shape id: bounds (with halo, in
+    // stage space) and matrix. The documentChanged diff compares against this
+    // to paint added ids incrementally and regionally rebake removed/moved
+    // ones - precise invalidation from a coarse signal.
+    struct BakedState {
+        QRectF bounds;
+        icg::anim::Mat2x3 matrix;
+    };
+    QHash<uint64_t, BakedState> lastBaked_;
+    // Stage-space origin of the pixmap's top-left pixel (content can live
+    // off-stage, so the pixmap covers stage + content, not just the stage).
+    QPointF sceneOrigin_;
+    // Chunked-bake state: ids still missing from the pixmap, served a time
+    // slice at a time on idle. `bakeGeneration_` aborts stale slices when an
+    // edit lands mid-bake (the diff path takes over instead).
+    std::vector<uint64_t> bakeQueue_;
+    uint64_t bakeGeneration_ = 0;
+    bool bakeReported_ = false;
+    QTimer bakeTimer_;
+    // One culled draw list, shared by every painter in a paint and reused
+    // across paints until the view or the draw list moves on (generations).
     mutable std::vector<icg::anim::ResolvedShape> visibleCache_;
-    mutable bool visibleCacheValid_ = false;
+    mutable uint64_t visViewGen_ = 0;
+    mutable uint64_t visDrawGen_ = 0;
+    // Generation counters: viewGen_ bumps on any view change (pan/zoom/fit/
+    // resize), drawGen_ wherever the draw list is invalidated. The visible
+    // list rebuilds only on mismatch, and the scene-bake diff runs only when
+    // sceneDirty_ is set (model/frame/quality/drag changes). Static
+    // view + static model = zero per-frame resolve work.
+    mutable uint64_t viewGen_ = 0;
+    mutable uint64_t drawGen_ = 0;
+    mutable bool sceneDirty_ = true;
     // Full draw list, cached across paints. Rebuilding it deep-copies every
     // visible shape's FlatPath, so doing that once per paint dominated
     // per-frame cost once scenes grew; now it rebuilds only when the model,
@@ -313,9 +315,39 @@ private:
     // live (updateDrag/cancelDrag) invalidates it alongside the model path.
     mutable std::vector<icg::anim::ResolvedShape> drawCache_;
     mutable bool drawCacheValid_ = false;
+
+    // --- committed-scene raster cache (Part 0 fix) ---
+    // Committed shapes bake ONCE into a stage-space pixmap; each repaint
+    // blits it instead of re-filling thousands of vector subpaths (~30 ms
+    // per fat stroke per fill otherwise - the entire Part 0 lag). Per-frame
+    // paint is then blit + live content (preview, selection, dragged shapes,
+    // overlays): flat in stroke count. Live vectors never touch the pixmap.
+    void ensureSceneBaked();
+    // Paints `ids` (current drawList entries) onto the pixmap, in z-order.
+    void bakeShapesIntoPixmap(const std::vector<uint64_t>& ids);
+    // Erases `stageRect` to transparent and repaints intersecting shapes
+    // (except `skipIds`, painted separately) back-to-front.
+    void rebakeRegion(const QRectF& stageRect, const QSet<uint64_t>& skipIds);
+    // Chunked full (re)bake with soft carry-over (see the .cpp): reallocs,
+    // carries old pixels across scaled, queues the missing ids, arms idle
+    // slices. `trustBaked=false` drops the baked record (quality/scale
+    // changes alter every pixel); true keeps it (coverage growth only).
+    void requestFullBake(bool trustBaked);
+    void onBakeSlice();
+    // One time-boxed chunk of the bake queue; true when work remains.
+    bool bakeSliceOnce(int budgetMs);
+    // Bake resolution follow: zooming past 2x the baked scale (or far below
+    // it) schedules a re-bake at a new scale on idle. Pan never rebakes -
+    // the blit sub-rects the stage-space pixmap.
+    void maybeAdaptBakeScale();
+    // Stage -> pixmap-device transform for the current origin and scale.
+    QTransform pixmapTransform() const;
+    static BakedState bakedStateFor(const icg::anim::ResolvedShape& shape);
+    static QRectF shapeBounds(const icg::anim::ResolvedShape& shape);
     void invalidateDrawCache() const {
         drawCacheValid_ = false;
-        visibleCacheValid_ = false;
+        ++drawGen_;
+        sceneDirty_ = true;
     }
     DrawingOptions drawOptions_;
 

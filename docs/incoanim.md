@@ -257,6 +257,53 @@ preview-only tradeoff - the stored vector data is untouched, and switching back
 to Normal repaints full fidelity. The canvas previously painted with no
 antialiasing at all (QPainter's default); Normal now enables it explicitly.
 
+### Part 0: scene raster cache (stroke-count lag)
+
+Symptom: the more strokes on canvas, the more the *entire Qt UI* lagged while
+brushing, with CPU/RAM/GPU all reading normal. That signature is one saturated
+GUI thread on a many-core box (1 pegged core / 12 threads ≈ 8% in the task
+manager). Profiled headlessly on the GUI thread (real `AnimatorCanvas`
+offscreen, Release): no locks, no GL stalls, no signal storms, no
+`QGraphicsScene` (raw `QWidget` + `QPainter`), handler + picking all ms-scale.
+The entire cost was one line: **every mouse move repainted every visible
+stroke** (`update()` with no rect → full `paintEvent` → one `fillPath` per
+stroke). A fully-visible 12k-subpath fill costs ~25–30 ms *every time it
+paints*; clip-skipped regions are ~free, which is why zoom-out looked fine
+and zoom-in (more visible band per stroke) did not. Brush size matters because
+wider strokes cover more device pixels per fill.
+
+| Strokes | Before (per repaint) | After (per repaint) |
+|---|---|---|
+| 10 | 278 ms | ~3–7 ms |
+| 100 | 3.7 s | ~4–12 ms |
+| 1000 | 30.8 s | ~10–23 ms |
+| 5000 | untestable (per-shape `QPainterPath` caches need GBs) | ~3–78 ms, ~110 MB total |
+
+(Run-to-run variance is ±2–3x on the test box; the shape is what matters:
+three orders of magnitude down, roughly flat in N. Memory went from ~0.8 MB
+to ~22 kB per stroke all-in.)
+
+The fix: committed shapes bake **once** into a stage-space pixmap (transparent;
+backdrop/checker paint live underneath). Each repaint blits instead of
+filling vectors. Freshness is one path — `ensureSceneBaked()` at the top of
+every paint diffs the draw list against what the pixmap shows
+(`lastBaked_`): added ids paint incrementally, removed/moved ids get a
+regional erase + repaint, big changes go chunked on idle slices (progressive,
+cancellable by generation, never freezing). The per-shape `QPainterPath`
+caches are gone (transient builders instead) — they were the memory wall.
+Per-frame paint is now blit + live content (brush preview at coarse tolerance,
+selected/dragged shapes, overlays): ghosting during a drag is intentional
+(the pixmap keeps the pre-drag pixels until commit rebakes the region).
+Pan never rebakes (blit sub-rects); zoom past 2x the baked scale re-bakes
+adaptively on idle. Culling lists and the bake diff are generational, so a
+static scene costs ~zero resolve work per frame.
+
+Deliberately *not* done: a spatial index (linear bounds scans are sub-ms at
+5000; measure before adding), worker-thread baking (GUI-thread slices suffice
+while bakes are chunked; the bake functions take explicit inputs so they can
+move), event compression beyond Qt's paint coalescing (moves cost ~µs;
+paints keep up now).
+
 ### Pixel fidelity, and one intentional difference
 
 Measured against Qt's stroker, worst case:
@@ -639,6 +686,8 @@ stable and diff-friendly.
 - [Architecture](./architecture.md) — the `IncogineAssets` / `IncogineAnim` targets
 - [Incogine Studio](./studio.md) — the IDE
 - [Assets](./assets.md) — the AssetManager and `.incoba` bundles
+- [Timeline](./timeline.md) — M4 layers, frames, playback, RAM cache
+- [3D design](./3d-design.md) — how later milestones add 3D without rewrites
 
 ## Acknowledgements
 
