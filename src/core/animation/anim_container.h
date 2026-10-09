@@ -88,6 +88,11 @@ bool LoadContainer(const void* bytes, size_t size, AnimDocument& out,
 struct ManifestLayer {
     uint64_t id = 0;
     std::string name;
+    bool visible = true;
+    bool locked = false;
+    AnimColor color = AnimColor(110, 150, 200, 255);
+    bool outline = false;
+    LayerKind kind = LayerKind::Vector;
     std::vector<int> frames;
 };
 

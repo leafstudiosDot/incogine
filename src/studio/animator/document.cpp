@@ -47,6 +47,7 @@ void AnimatorDocument::reset(const QString& path) {
     emit pathChanged(path_);
     emit dirtyChanged(false);
     emit documentChanged();
+    emit documentEdited(0, 1, 2147483647, false);
 }
 
 bool AnimatorDocument::load(const QString& path, QString* errorOut) {
@@ -68,6 +69,7 @@ bool AnimatorDocument::load(const QString& path, QString* errorOut) {
     emit pathChanged(path_);
     emit dirtyChanged(false);
     emit documentChanged();
+    emit documentEdited(0, 1, 2147483647, false);
     return true;
 }
 
@@ -114,6 +116,7 @@ QString AnimatorDocument::displayName() const {
 // ----------------------------------------------------------- undo / redo --
 
 bool AnimatorDocument::undo() {
+    const IAnimCommand* undone = stack_.peekUndo();
     if (!stack_.Undo(document_)) {
         return false;
     }
@@ -125,16 +128,19 @@ bool AnimatorDocument::undo() {
     setDirty(true);
     armAutosave();
     emit documentChanged();
+    emitEditFootprint(undone);
     return true;
 }
 
 bool AnimatorDocument::redo() {
+    const IAnimCommand* redone = stack_.peekRedo();
     if (!stack_.Redo(document_)) {
         return false;
     }
     setDirty(true);
     armAutosave();
     emit documentChanged();
+    emitEditFootprint(redone);
     return true;
 }
 
@@ -149,7 +155,24 @@ bool AnimatorDocument::apply(std::unique_ptr<IAnimCommand> command) {
     setDirty(true);
     armAutosave();
     emit documentChanged();
+    emitEditFootprint(stack_.peekUndo());
     return true;
+}
+
+// Translates one command's raster footprint into the documentEdited signal.
+// A null command (should not happen on these paths) invalidates everything:
+// over-invalidation is always safe, under-invalidation never is.
+void AnimatorDocument::emitEditFootprint(const IAnimCommand* command) {
+    if (command == nullptr) {
+        emit documentEdited(0, 1, 2147483647, false);
+        return;
+    }
+    uint64_t layerId = 0;
+    int firstFrame = 1;
+    int lastFrame = 2147483647;
+    command->rasterRange(document_, layerId, firstFrame, lastFrame);
+    emit documentEdited(layerId, firstFrame, lastFrame,
+                        command->compositeOnly());
 }
 
 bool AnimatorDocument::setStageSize(int width, int height) {
@@ -198,6 +221,17 @@ bool AnimatorDocument::setLayerVisible(uint64_t layerId, bool visible) {
 bool AnimatorDocument::setLayerLocked(uint64_t layerId, bool locked) {
     return apply(std::unique_ptr<IAnimCommand>(
         new icg::anim::SetLayerLockedCommand(layerId, locked)));
+}
+
+bool AnimatorDocument::setLayerColor(uint64_t layerId,
+                                     const icg::anim::AnimColor& color) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::SetLayerColorCommand(layerId, color)));
+}
+
+bool AnimatorDocument::setLayerOutline(uint64_t layerId, bool outline) {
+    return apply(std::unique_ptr<IAnimCommand>(
+        new icg::anim::SetLayerOutlineCommand(layerId, outline)));
 }
 
 bool AnimatorDocument::moveLayer(size_t from, size_t to) {

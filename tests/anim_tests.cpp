@@ -1823,6 +1823,75 @@ static void TestFrameOps() {
     }
 }
 
+// -------------------------------------------------------- layer props --
+
+// Timeline row display + outline mode: color is display-only, outline changes
+// rendered pixels (so the bake cache must key on it - covered canvas-side).
+// Both round-trip through commands and the v2 container manifest.
+static void TestLayerProps() {
+    TEST_GROUP("layer props");
+
+    AnimDocument doc = MakeTimelineDoc();
+    AnimCommandStack stack;
+    const uint64_t layerId = doc.layers.back().id;
+
+    // Defaults: neutral chip, solid render, vector kind.
+    {
+        const AnimLayer* layer = doc.FindLayerById(layerId);
+        REQUIRE(layer != nullptr);
+        CHECK(layer->color == AnimColor(110, 150, 200, 255));
+        CHECK(!layer->outline);
+        CHECK(layer->kind == LayerKind::Vector);
+    }
+
+    // Color set/undo/redo; setting the same color refuses (no dead history).
+    REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                     new SetLayerColorCommand(
+                                         layerId, AnimColor(10, 20, 30, 40)))));
+    CHECK(doc.FindLayerById(layerId)->color == AnimColor(10, 20, 30, 40));
+    CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                      new SetLayerColorCommand(
+                                          layerId, AnimColor(10, 20, 30, 40)))));
+    REQUIRE(stack.Undo(doc));
+    CHECK(doc.FindLayerById(layerId)->color == AnimColor(110, 150, 200, 255));
+    REQUIRE(stack.Redo(doc));
+    CHECK(doc.FindLayerById(layerId)->color == AnimColor(10, 20, 30, 40));
+
+    // Outline toggle round-trips; missing layer refuses.
+    REQUIRE(stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                     new SetLayerOutlineCommand(layerId, true))));
+    CHECK(doc.FindLayerById(layerId)->outline);
+    REQUIRE(stack.Undo(doc));
+    CHECK(!doc.FindLayerById(layerId)->outline);
+    REQUIRE(stack.Redo(doc));
+    CHECK(doc.FindLayerById(layerId)->outline);
+    CHECK(!stack.Execute(doc, std::unique_ptr<IAnimCommand>(
+                                      new SetLayerOutlineCommand(999999, true))));
+
+    // Manifest round-trip carries color/outline/kind.
+    {
+        const std::vector<uint8_t> bytes = SaveContainer(doc);
+        AnimDocument back;
+        std::string error;
+        REQUIRE(LoadContainer(bytes.data(), bytes.size(), back, error));
+        const AnimLayer* layer = back.FindLayerById(layerId);
+        REQUIRE(layer != nullptr);
+        CHECK(layer->color == AnimColor(10, 20, 30, 40));
+        CHECK(layer->outline);
+        ContainerManifest manifest;
+        REQUIRE(LoadManifest(bytes.data(), bytes.size(), manifest, error));
+        bool found = false;
+        for (const ManifestLayer& entry : manifest.layers) {
+            if (entry.id == layerId) {
+                found = true;
+                CHECK(entry.color == AnimColor(10, 20, 30, 40));
+                CHECK(entry.outline);
+            }
+        }
+        CHECK(found);
+    }
+}
+
 // ------------------------------------------------------------ commands --
 
 static void TestCommandStack() {
@@ -2093,6 +2162,7 @@ int main() {
     TestContainer();
     TestSceneMesh();
     TestFrameOps();
+    TestLayerProps();
     TestCommandStack();
     return ::icgtest::Report("animation");
 }

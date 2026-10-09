@@ -40,6 +40,27 @@ public:
 
     virtual bool Do(AnimDocument& document) = 0;
     virtual void Undo(AnimDocument& document) = 0;
+
+    // Raster footprint of this edit AND its undo: the (layer, frame) range
+    // whose rendered pixels can change. layerId 0 = all layers; first > last
+    // = none (display-only edits like rename or color). The RAM cache (and
+    // any future renderer) invalidates exactly this, never the whole project.
+    // Computed from the LIVE document on every query (not stored), so spans
+    // stay correct even when other edits land between do and undo. Default is
+    // everything: overriding precisely is optional but expected for content
+    // edits.
+    virtual void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                             int& firstFrame, int& lastFrame) const {
+        (void)document;
+        layerId = 0;
+        firstFrame = 1;
+        lastFrame = 2147483647;
+    }
+
+    // True when only compositing changed (reorder, visibility): per-layer
+    // pixels stay valid, only assembled frames drop. Lets a layer reorder
+    // skip re-rasterizing a single shape.
+    virtual bool compositeOnly() const { return false; }
 };
 
 // Bounded undo/redo history. Executing a new command clears the redo branch,
@@ -59,6 +80,15 @@ public:
 
     bool CanUndo() const { return !undo_.empty(); }
     bool CanRedo() const { return !redo_.empty(); }
+    // The command an Undo()/Redo() call would run (null when unavailable).
+    // Lets callers query a command (e.g. its raster footprint) around the
+    // stack operation without touching ownership.
+    const IAnimCommand* peekUndo() const {
+        return undo_.empty() ? nullptr : undo_.back().get();
+    }
+    const IAnimCommand* peekRedo() const {
+        return redo_.empty() ? nullptr : redo_.back().get();
+    }
     // Empty when unavailable.
     std::string undoName() const;
     std::string redoName() const;
@@ -84,6 +114,9 @@ public:
     const char* name() const override { return "Set Stage Size"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // Cached images are stage-sized: any stage change drops them all.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     int width_;
@@ -98,6 +131,9 @@ public:
     const char* name() const override { return "Set FPS"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No pixels: playback rate only.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     int fps_;
@@ -110,6 +146,9 @@ public:
     const char* name() const override { return "Set Loop"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No pixels: playback behavior only.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     bool loop_;
@@ -122,6 +161,9 @@ public:
     const char* name() const override { return "Set Background"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No cached pixels: the background composites live, never baked.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     AnimColor color_;
@@ -135,6 +177,9 @@ public:
     const char* name() const override { return "Set Bake Scale"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No cached pixels: export-only setting.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     float scale_;
@@ -166,6 +211,10 @@ public:
     const char* name() const override { return "Add Layer"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // A new (empty) layer: nothing to rasterize, but composites covering it
+    // must reassemble. Uses the post-Do id (allocated on first run).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     std::string name_;
@@ -179,6 +228,8 @@ public:
     const char* name() const override { return "Delete Layer"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     uint64_t layerId_;
@@ -193,6 +244,9 @@ public:
     const char* name() const override { return "Rename Layer"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No pixels: timeline label only.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     uint64_t layerId_;
@@ -207,6 +261,8 @@ public:
     const char* name() const override { return "Toggle Layer Visibility"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // Layer pixels unchanged: only assembled frames drop.
+    bool compositeOnly() const override { return true; }
 
 private:
     uint64_t layerId_;
@@ -221,11 +277,55 @@ public:
     const char* name() const override { return "Toggle Layer Lock"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // No pixels: editing guard only.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     uint64_t layerId_;
     bool locked_;
     bool oldLocked_ = false;
+};
+
+// Recolors a timeline row chip. Display only: never touches rendered pixels,
+// so undo restores the old color exactly with no bake implications.
+class SetLayerColorCommand : public IAnimCommand {
+public:
+    SetLayerColorCommand(uint64_t layerId, AnimColor color)
+        : layerId_(layerId), color_(color) {}
+    const char* name() const override { return "Set Layer Color"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+    // No pixels: row-chip display only.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
+
+private:
+    uint64_t layerId_;
+    AnimColor color_;
+    AnimColor oldColor_;
+    bool applied_ = false;
+};
+
+// Toggles a layer's outline (wireframe) mode. This DOES change rendered
+// pixels (fills skipped, thin centerlines), so the canvas bake cache keys on
+// it via ResolvedShape::layerOutline - toggling repaints, it never goes stale.
+class SetLayerOutlineCommand : public IAnimCommand {
+public:
+    SetLayerOutlineCommand(uint64_t layerId, bool outline)
+        : layerId_(layerId), outline_(outline) {}
+    const char* name() const override { return "Toggle Layer Outline"; }
+    bool Do(AnimDocument& document) override;
+    void Undo(AnimDocument& document) override;
+    // Whole layer, all frames: wireframe changes every one of its pixels.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
+
+private:
+    uint64_t layerId_;
+    bool outline_;
+    bool oldOutline_ = false;
+    bool applied_ = false;
 };
 
 // Moves the layer at `fromIndex` to `toIndex` (0 = topmost), preserving every
@@ -237,6 +337,8 @@ public:
     const char* name() const override { return "Reorder Layer"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // Layer pixels unchanged: only assembled frames drop.
+    bool compositeOnly() const override { return true; }
 
 private:
     size_t fromIndex_;
@@ -267,6 +369,10 @@ public:
     const char* name() const override { return "Move"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The edited keyframe's span, resolved live (never stored: interleaved
+    // edits can move span boundaries between do and undo).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     // Finds the keyframe, or nullptr when the layer/frame is gone.
@@ -290,6 +396,9 @@ public:
     const char* name() const override { return "Delete"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The edited keyframe's span, resolved live (see Move).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     static AnimKeyframe* FindKeyframe(AnimDocument& document, uint64_t layerId,
@@ -316,6 +425,9 @@ class InsertFramesCommand : public IAnimCommand {
     const char* name() const override { return "Insert Frame"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // Everything at/after the insertion point, on all layers.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
   private:
     int frame_;
@@ -335,6 +447,9 @@ class RemoveFramesCommand : public IAnimCommand {
     const char* name() const override { return "Remove Frame"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // Everything at/after the removal point, on all layers.
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
   private:
     int frame_;
@@ -357,6 +472,9 @@ class InsertKeyframeCommand : public IAnimCommand {
     const char* name() const override { return "Insert Keyframe"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The new keyframe's span, resolved live (see Move).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
   private:
     uint64_t layerId_;
@@ -374,6 +492,9 @@ class ClearKeyframeCommand : public IAnimCommand {
     const char* name() const override { return "Clear Keyframe"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The cleared keyframe's span, resolved live (see Move).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
   private:
     uint64_t layerId_;
@@ -398,6 +519,9 @@ class PasteFramesCommand : public IAnimCommand {
     const char* name() const override { return "Paste Frames"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The pasted range's span, resolved live (see Move).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
   private:
     uint64_t layerId_;
@@ -424,6 +548,9 @@ public:
     const char* name() const override { return "Draw"; }
     bool Do(AnimDocument& document) override;
     void Undo(AnimDocument& document) override;
+    // The edited keyframe's span, resolved live (see Move).
+    void rasterRange(const AnimDocument& document, uint64_t& layerId,
+                     int& firstFrame, int& lastFrame) const override;
 
 private:
     uint64_t layerId_;

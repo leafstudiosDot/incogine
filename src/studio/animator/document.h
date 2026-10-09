@@ -65,6 +65,8 @@ public:
     bool renameLayer(uint64_t layerId, const QString& name);
     bool setLayerVisible(uint64_t layerId, bool visible);
     bool setLayerLocked(uint64_t layerId, bool locked);
+    bool setLayerColor(uint64_t layerId, const icg::anim::AnimColor& color);
+    bool setLayerOutline(uint64_t layerId, bool outline);
     bool moveLayer(size_t from, size_t to);
 
     // --- frame edits (timeline; each goes through the command stack) ---
@@ -109,6 +111,14 @@ public:
 signals:
     // Any change that alters the document, from an edit, undo/redo, or load.
     void documentChanged();
+    // Precise raster footprint of the change that just landed: the layer and
+    // frame range whose rendered pixels can differ (layerId 0 = all layers,
+    // first > last = none), plus whether only compositing changed (reorder,
+    // visibility: layer pixels intact, assembled frames drop). The RAM cache
+    // invalidates exactly this. Emitted alongside documentChanged by every
+    // mutation path, including undo/redo.
+    void documentEdited(uint64_t layerId, int firstFrame, int lastFrame,
+                        bool compositeOnly);
     // Dirty state flipped.
     void dirtyChanged(bool dirty);
     void pathChanged(const QString& path);
@@ -121,6 +131,8 @@ private:
     // Central mutation path: push a command, and on success mark dirty and
     // notify. Returns whether the edit landed.
     bool apply(std::unique_ptr<icg::anim::IAnimCommand> command);
+    // Emits documentEdited for a just-applied/undone/redone command.
+    void emitEditFootprint(const icg::anim::IAnimCommand* command);
     void setDirty(bool dirty);
     void armAutosave();
 

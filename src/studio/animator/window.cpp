@@ -24,6 +24,8 @@
 #include "canvas.h"
 #include "channel.h"
 #include "document.h"
+#include "framecache.h"
+#include "timeline.h"
 #include "widgets/options_bar.h"
 
 using icg::anim::AnimDocument;
@@ -289,6 +291,28 @@ void AnimatorWindow::buildDocks() {
     dock->setObjectName(QStringLiteral("animatorDocumentDock"));
     dock->setWidget(propertiesDock_);
     addDockWidget(Qt::RightDockWidgetArea, dock);
+
+    // Docked bottom: the M4 timeline (layers + frames + transport). Built
+    // after the canvas so it can drive the playhead.
+    timeline_ = new TimelineWidget(document_.get(), canvas_, this);
+    timelineDock_ = new QDockWidget(tr("Timeline"), this);
+    timelineDock_->setObjectName(QStringLiteral("animatorTimelineDock"));
+    timelineDock_->setWidget(timeline_);
+    addDockWidget(Qt::BottomDockWidgetArea, timelineDock_);
+
+    // Shared RAM frame cache (1.3): one owner, two readers. The cache bakes
+    // from the document, the canvas blits composites during playback, and the
+    // timeline strip shows which frames are baked. documentEdited carries the
+    // precise footprint, so edits drop exactly their pixels - never the whole
+    // project. Parent-owned (this): dies with the window, worker joins there.
+    frameCache_ = new FrameCache(this);
+    frameCache_->setDocument(document_.get());
+    canvas_->setFrameCache(frameCache_);
+    timeline_->setFrameCache(frameCache_);
+    connect(document_.get(), &AnimatorDocument::documentEdited, frameCache_,
+            &FrameCache::invalidate);
+    connect(timeline_, &TimelineWidget::playingChanged, canvas_,
+            &AnimatorCanvas::setPlaybackActive);
 }
 
 void AnimatorWindow::buildMenus() {
@@ -360,24 +384,28 @@ void AnimatorWindow::buildMenus() {
     viewMenu->addSeparator();
     // Preview quality: Draft trades antialiasing and curve subdivision for
     // repaint speed (~12-18x at zoom 4-8, measured) - the lever for zoomed-in
-    // lag on dense brushwork. Persists like the active tool.
+    // lag on dense brushwork. Persists like the active tool. A saved "Normal"
+    // (the pre-1.2 name for Low) migrates to Low on read.
     {
         qualityGroup_ = new QActionGroup(this);
         qualityGroup_->setExclusive(true);
         QMenu* qualityMenu = viewMenu->addMenu(tr("Preview &Quality"));
         const QSettings settings;
-        const QString savedQuality = settings
-                                         .value(QStringLiteral(
-                                                    "animator/previewQuality"),
-                                                QStringLiteral("Normal"))
-                                         .toString();
+        QString savedQuality = settings
+                                   .value(QStringLiteral(
+                                              "animator/previewQuality"),
+                                          QStringLiteral("Low"))
+                                   .toString();
+        if (savedQuality == QStringLiteral("Normal")) {
+            savedQuality = QStringLiteral("Low");
+        }
         struct QualityEntry {
             const char* id;
             const char* tip;
         };
         const QualityEntry entries[] = {
-            {"Draft", "Fastest: no antialiasing, coarser curves"},
-            {"Normal", "Default: antialiased, full curves"},
+            {"Draft", "Fastest: no antialiasing, coarser curves, 1x bake cap"},
+            {"Low", "Default: antialiased, full curves"},
             {"High", "Smoothest curves up close (slower)"},
         };
         for (const QualityEntry& entry : entries) {
@@ -396,7 +424,7 @@ void AnimatorWindow::buildMenus() {
         }
         if (qualityGroup_->checkedAction() == nullptr &&
             !qualityGroup_->actions().isEmpty()) {
-            qualityGroup_->actions().at(1)->setChecked(true); // Normal
+            qualityGroup_->actions().at(1)->setChecked(true); // Low
         }
         onPreviewQualityTriggered();
     }
@@ -406,6 +434,10 @@ void AnimatorWindow::buildMenus() {
         for (QAction* action : toolGroup_->actions()) {
             viewMenu->addAction(action);
         }
+    }
+    viewMenu->addSeparator();
+    if (timelineDock_ != nullptr) {
+        viewMenu->addAction(timelineDock_->toggleViewAction());
     }
 
     saveAction_->setEnabled(document_->hasPath());
@@ -668,9 +700,12 @@ void AnimatorWindow::onPreviewQualityTriggered() {
         return;
     }
     const QAction* checked = qualityGroup_->checkedAction();
-    const QString id =
-        checked != nullptr ? checked->data().toString() : QStringLiteral("Normal");
-    PreviewQuality quality = PreviewQuality::Normal;
+    QString id = checked != nullptr ? checked->data().toString()
+                                    : QStringLiteral("Low");
+    if (id == QStringLiteral("Normal")) {
+        id = QStringLiteral("Low"); // pre-1.2 name
+    }
+    PreviewQuality quality = PreviewQuality::Low;
     if (id == QStringLiteral("Draft")) {
         quality = PreviewQuality::Draft;
     } else if (id == QStringLiteral("High")) {

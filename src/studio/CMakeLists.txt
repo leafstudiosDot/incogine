@@ -189,6 +189,8 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/canvas.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/document.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/document.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/framecache.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/framecache.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/window.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/window.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/tools.h
@@ -197,6 +199,8 @@ if(Qt6Widgets_FOUND)
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/cursor.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/brush.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/tools/pen.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/timeline.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/animator/timeline.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/widgets/options_bar.h
         ${CMAKE_CURRENT_SOURCE_DIR}/animator/widgets/options_bar.cpp
     )

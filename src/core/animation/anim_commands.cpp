@@ -291,6 +291,48 @@ void SetLayerLockedCommand::Undo(AnimDocument& document) {
     }
 }
 
+bool SetLayerColorCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr || layer->color == color_) {
+        return false;
+    }
+    oldColor_ = layer->color;
+    layer->color = color_;
+    applied_ = true;
+    return true;
+}
+
+void SetLayerColorCommand::Undo(AnimDocument& document) {
+    if (!applied_) {
+        return;
+    }
+    if (AnimLayer* layer = document.FindLayerById(layerId_)) {
+        layer->color = oldColor_;
+    }
+    applied_ = false;
+}
+
+bool SetLayerOutlineCommand::Do(AnimDocument& document) {
+    AnimLayer* layer = document.FindLayerById(layerId_);
+    if (layer == nullptr || layer->outline == outline_) {
+        return false;
+    }
+    oldOutline_ = layer->outline;
+    layer->outline = outline_;
+    applied_ = true;
+    return true;
+}
+
+void SetLayerOutlineCommand::Undo(AnimDocument& document) {
+    if (!applied_) {
+        return;
+    }
+    if (AnimLayer* layer = document.FindLayerById(layerId_)) {
+        layer->outline = oldOutline_;
+    }
+    applied_ = false;
+}
+
 bool MoveLayerCommand::Do(AnimDocument& document) {
     if (fromIndex_ >= document.layers.size() ||
         toIndex_ >= document.layers.size()) {
@@ -660,6 +702,201 @@ void PasteFramesCommand::Undo(AnimDocument& document) {
     }
     replaced_.clear();
     document.Normalize();
+}
+
+// ------------------------------------------------- raster footprints --
+
+namespace {
+
+// Display-only edits touch no pixels: empty range (first > last).
+void EmptyRange(uint64_t& layerId, int& firstFrame, int& lastFrame) {
+    layerId = 0;
+    firstFrame = 1;
+    lastFrame = 0;
+}
+
+// Whole document (structural changes: stage size, length, full-layer ops).
+void AllFrames(uint64_t& layerId, int& firstFrame, int& lastFrame) {
+    layerId = 0;
+    firstFrame = 1;
+    lastFrame = 2147483647;
+}
+
+// Last frame the keyframe at `frame` can affect: up to (not including) the
+// next keyframe on the layer, else the timeline end. Resolved live from the
+// passed document so spans stay correct even when other edits land between
+// do and undo (a stored span end would go stale both ways).
+int SpanEndFor(const AnimDocument& document, uint64_t layerId, int frame) {
+    int end = document.FrameCount();
+    if (const AnimLayer* layer = document.FindLayerById(layerId)) {
+        for (const AnimKeyframe& key : layer->frames) {
+            if (key.frame > frame && key.frame - 1 < end) {
+                end = key.frame - 1;
+            }
+        }
+    }
+    return end;
+}
+
+} // namespace
+
+void SetStageSizeCommand::rasterRange(const AnimDocument& document,
+                                     uint64_t& layerId, int& firstFrame,
+                                     int& lastFrame) const {
+    (void)document;
+    AllFrames(layerId, firstFrame, lastFrame);
+}
+
+void SetFpsCommand::rasterRange(const AnimDocument& document,
+                               uint64_t& layerId, int& firstFrame,
+                               int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetLoopCommand::rasterRange(const AnimDocument& document,
+                                 uint64_t& layerId, int& firstFrame,
+                                 int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetBackgroundCommand::rasterRange(const AnimDocument& document,
+                                       uint64_t& layerId, int& firstFrame,
+                                       int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetBakeScaleCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void RenameLayerCommand::rasterRange(const AnimDocument& document,
+                                     uint64_t& layerId, int& firstFrame,
+                                     int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetLayerColorCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetLayerLockedCommand::rasterRange(const AnimDocument& document,
+                                       uint64_t& layerId, int& firstFrame,
+                                       int& lastFrame) const {
+    (void)document;
+    EmptyRange(layerId, firstFrame, lastFrame);
+}
+
+void SetLayerOutlineCommand::rasterRange(const AnimDocument& document,
+                                        uint64_t& layerId, int& firstFrame,
+                                        int& lastFrame) const {
+    (void)document;
+    layerId = layerId_;
+    firstFrame = 1;
+    lastFrame = 2147483647;
+}
+
+void AddLayerCommand::rasterRange(const AnimDocument& document,
+                                  uint64_t& layerId, int& firstFrame,
+                                  int& lastFrame) const {
+    (void)document;
+    layerId = layerId_;
+    firstFrame = 1;
+    lastFrame = 2147483647;
+}
+
+void DeleteLayerCommand::rasterRange(const AnimDocument& document,
+                                     uint64_t& layerId, int& firstFrame,
+                                     int& lastFrame) const {
+    (void)document;
+    layerId = layerId_;
+    firstFrame = 1;
+    lastFrame = 2147483647;
+}
+
+void MoveShapesCommand::rasterRange(const AnimDocument& document,
+                                    uint64_t& layerId, int& firstFrame,
+                                    int& lastFrame) const {
+    layerId = layerId_;
+    firstFrame = frame_;
+    lastFrame = SpanEndFor(document, layerId_, frame_);
+}
+
+void DeleteShapesCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    layerId = layerId_;
+    firstFrame = frame_;
+    lastFrame = SpanEndFor(document, layerId_, frame_);
+}
+
+void AddShapesCommand::rasterRange(const AnimDocument& document,
+                                   uint64_t& layerId, int& firstFrame,
+                                   int& lastFrame) const {
+    layerId = layerId_;
+    firstFrame = frame_;
+    lastFrame = SpanEndFor(document, layerId_, frame_);
+}
+
+void InsertFramesCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    (void)document;
+    layerId = 0;
+    firstFrame = frame_;
+    lastFrame = 2147483647;
+}
+
+void RemoveFramesCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    (void)document;
+    layerId = 0;
+    firstFrame = frame_;
+    lastFrame = 2147483647;
+}
+
+void InsertKeyframeCommand::rasterRange(const AnimDocument& document,
+                                       uint64_t& layerId, int& firstFrame,
+                                       int& lastFrame) const {
+    layerId = layerId_;
+    firstFrame = frame_;
+    lastFrame = SpanEndFor(document, layerId_, frame_);
+}
+
+void ClearKeyframeCommand::rasterRange(const AnimDocument& document,
+                                      uint64_t& layerId, int& firstFrame,
+                                      int& lastFrame) const {
+    layerId = layerId_;
+    firstFrame = frame_;
+    lastFrame = SpanEndFor(document, layerId_, frame_);
+}
+
+void PasteFramesCommand::rasterRange(const AnimDocument& document,
+                                     uint64_t& layerId, int& firstFrame,
+                                     int& lastFrame) const {
+    layerId = layerId_;
+    if (inserted_.empty()) {
+        AllFrames(layerId, firstFrame, lastFrame);
+        return;
+    }
+    int lo = inserted_.front();
+    int hi = inserted_.front();
+    for (int frame : inserted_) {
+        lo = std::min(lo, frame);
+        hi = std::max(hi, frame);
+    }
+    firstFrame = lo;
+    lastFrame = SpanEndFor(document, layerId_, hi);
 }
 
 } // namespace anim

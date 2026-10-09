@@ -97,11 +97,27 @@ struct AnimKeyframe {
 
 // ------------------------------------------------------------- documents --
 
+// What a layer holds. Only Vector works today; the rest are reserved slots
+// so bitmap/SVG import (1.4) and 3D layers (Part 2) arrive without renumbering
+// or migrating existing files. Readers treat unknown values as Vector.
+enum class LayerKind : uint8_t {
+    Vector = 0,
+    Bitmap = 1, // imported PNG/JPG (1.4)
+    Mesh = 2,   // 3D mesh layer (Part 2)
+    Camera = 3, // After Effects-style camera layer (Part 2)
+};
+
 struct AnimLayer {
     uint64_t id = 0;
     std::string name;
     bool visible = true;
     bool locked = false;
+    // Timeline row chip color. Display only: never affects rendered pixels.
+    AnimColor color = AnimColor(110, 150, 200, 255);
+    // Outline mode: the layer renders as wireframe (fills skipped, strokes as
+    // thin centerlines). Editing aid only, like Flash's outline layers.
+    bool outline = false;
+    LayerKind kind = LayerKind::Vector;
     // Sorted ascending by `frame`, no duplicates. Always sorted by mutators.
     std::vector<AnimKeyframe> frames;
 
@@ -228,6 +244,10 @@ struct ResolvedShape {
     float strokeWidth = 0.0f;
     LineCap cap = LineCap::Round;
     LineJoin join = LineJoin::Round;
+    // True when the shape's layer is in outline mode: fills are skipped and
+    // strokes render as thin centerlines. Carried here (rather than looked up
+    // per paint) so the bake cache can see it change.
+    bool layerOutline = false;
     // False when the path is empty (nothing to draw or pick).
     bool drawable = false;
 };

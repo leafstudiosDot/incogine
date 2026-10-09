@@ -243,18 +243,27 @@ non-crossing stroke is pixel-identical to the stroker.
 
 ### Preview quality (the zoom lever)
 
-`View > Preview Quality` (persisted in `QSettings`, default Normal):
+`View > Preview Quality` (persisted in `QSettings`, default Low; a saved
+`Normal` from before 1.2 migrates to Low). Exactly one table defines each
+level — `QualitySpec` in `canvas.h` — never scattered `if`s:
 
-| Level | Antialiasing | Curve tolerance | Effect at zoom 4-8 |
-|---|---|---|---|
-| Draft | off | 4x (1.0) | **~12-18x faster** than Normal |
-| Normal | on | 1x (0.25) | default |
-| High | on | 0.5x (0.125) | slower, smoother curves up close |
+| Level | Curve tolerance | Antialiasing | Bake-scale cap | MSAA |
+|---|---|---|---|---|
+| Draft | 4x (1.0) | off | 1x (never upscales) | 0 |
+| Low | 1x (0.25) | on | 4x adaptive | 4 |
+| High | 0.5x (0.125) | on | 4x adaptive | 8 |
+| Final | 1x (0.25) | on | 4x adaptive | 8 |
+
+`Final` is not a viewport mode: it is the canonical quality the RAM cache
+(1.3) and export bake at, so cached frames, scrubbing, and exported pixels
+agree regardless of viewport setting. MSAA is reserved for the QRhi backend;
+the CPU raster path ignores it. Switching levels never mutates project data
+(covered by self-test: serialized bytes identical across switches).
 
 Draft is the answer to zoomed-in lag on dense brushwork: it attacks both zoom
 costs at once (fill-rate via no AA, tessellation via fewer vertices). It is a
 preview-only tradeoff - the stored vector data is untouched, and switching back
-to Normal repaints full fidelity. The canvas previously painted with no
+to Low repaints full fidelity. The canvas previously painted with no
 antialiasing at all (QPainter's default); Normal now enables it explicitly.
 
 ### Part 0: scene raster cache (stroke-count lag)
@@ -299,10 +308,50 @@ adaptively on idle. Culling lists and the bake diff are generational, so a
 static scene costs ~zero resolve work per frame.
 
 Deliberately *not* done: a spatial index (linear bounds scans are sub-ms at
-5000; measure before adding), worker-thread baking (GUI-thread slices suffice
-while bakes are chunked; the bake functions take explicit inputs so they can
-move), event compression beyond Qt's paint coalescing (moves cost ~µs;
-paints keep up now).
+5000; measure before adding), moving the *scene* bake off-thread (GUI-thread
+slices suffice while bakes are chunked; the bake functions take explicit
+inputs so they can move), event compression beyond Qt's paint coalescing
+(moves cost ~µs; paints keep up now). Frame prefetch (1.3 below) is the one
+place a worker thread exists: snapshots cross the thread boundary, results
+come back over a signal, and a generation counter drops stale bakes.
+
+### 1.3: RAM frame cache (playback/scrub)
+
+The scene pixmap above covers editing one frame; playback steps through many.
+Re-rasterizing every vector subpath per frame drops frames on dense brushwork,
+so baked frames are kept as `QImage`s in `FrameCache`
+(`src/studio/animator/framecache.{h,cpp}`), two tiers:
+
+- **Layer images** keyed by (layer id, frame): survive compositing-only edits.
+- **Composites** keyed by frame: what playback blits and the timeline strip shows.
+
+One bake path serves both tiers (`painthelp.h`, shared with the canvas), at
+**Final** quality — cached pixels, scrubbing, and export agree regardless of
+viewport setting. The stage background composites live underneath (never
+baked), so background edits touch no cached pixels at all.
+
+Invalidation is precise, never whole-project: every command reports its
+`(layer, frame-span)` footprint via `IAnimCommand::rasterRange()` (resolved
+live from the document, so undo spans stay correct), the controller emits it
+as `documentEdited`, and the cache drops exactly that range. Reorder and
+visibility are `compositeOnly`: assembled frames drop but layer pixels stay,
+so the next composite reassembles with zero vector work. Display-only edits
+(rename, color, lock, fps, loop) report an empty range and drop nothing.
+
+Keyed by **(layer, frame), never shape id** — so the known timeline wart
+(duplicated shape ids across keyframes, see `docs/timeline.md`) stays benign:
+a layer image rasterizes whatever keyframe resolves at its frame.
+
+Prefetch runs on a worker thread from a snapshot copy (one copy per burst,
+shared across the queued frames); a generation counter bumped on every
+invalidation drops results for edits that landed mid-bake. A scrub miss bakes
+synchronously on the GUI thread — always correct, the worker just makes the
+miss rare. Eviction is LRU across both tiers under one byte budget (default
+256 MB; a 1920x1080 composite is ~8 MB), with frames near the playhead
+([playhead-2, playhead+8]) evicted last. During playback the canvas blits the
+cached composite and skips the scene bake (which stays dirty and rebakes when
+playback stops); on a miss it falls through to the exact scene path. Repaints
+never bake: the paint lookup is pure, no prefetch, no sync bake.
 
 ### Pixel fidelity, and one intentional difference
 

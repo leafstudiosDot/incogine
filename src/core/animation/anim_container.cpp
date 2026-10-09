@@ -578,6 +578,12 @@ std::vector<uint8_t> SaveContainer(const AnimDocument& document) {
             entry.emplace_back("name", JsonValue::String(layer.name));
             entry.emplace_back("visible", JsonValue::Bool(layer.visible));
             entry.emplace_back("locked", JsonValue::Bool(layer.locked));
+            entry.emplace_back("color",
+                               JsonValue::String(layer.color.ToHex()));
+            entry.emplace_back("outline", JsonValue::Bool(layer.outline));
+            entry.emplace_back(
+                "kind",
+                JsonValue::Number(static_cast<double>(layer.kind)));
             JsonArray frames;
             for (const AnimKeyframe& key : layer.frames) {
                 frames.emplace_back(JsonValue::Number(key.frame));
@@ -735,6 +741,17 @@ bool LoadContainer(const void* bytes, size_t size, AnimDocument& out,
                     layer.name = ManifestString(&entry, "name", "Layer");
                     layer.visible = ManifestBool(&entry, "visible", true);
                     layer.locked = ManifestBool(&entry, "locked", false);
+                    layer.color = AnimColor::FromHex(
+                        ManifestString(&entry, "color", "#6E96C8FF"));
+                    layer.outline = ManifestBool(&entry, "outline", false);
+                    // Unknown kinds read back as Vector: old files predate
+                    // the field (absent -> 0) and future kinds must not break
+                    // this reader.
+                    const int kindValue = static_cast<int>(
+                        ManifestNum(&entry, "kind", 0.0));
+                    layer.kind = (kindValue >= 0 && kindValue <= 3)
+                                     ? static_cast<LayerKind>(kindValue)
+                                     : LayerKind::Vector;
                     document.layers.push_back(std::move(layer));
                 }
             }
@@ -821,6 +838,18 @@ bool LoadManifest(const void* bytes, size_t size, ContainerManifest& out,
                 layer.id =
                     static_cast<uint64_t>(ManifestNum(&entry, "id", 0.0));
                 layer.name = ManifestString(&entry, "name", "Layer");
+                layer.visible = ManifestBool(&entry, "visible", true);
+                layer.locked = ManifestBool(&entry, "locked", false);
+                layer.color = AnimColor::FromHex(
+                    ManifestString(&entry, "color", "#6E96C8FF"));
+                layer.outline = ManifestBool(&entry, "outline", false);
+                {
+                    const int kindValue = static_cast<int>(
+                        ManifestNum(&entry, "kind", 0.0));
+                    layer.kind = (kindValue >= 0 && kindValue <= 3)
+                                     ? static_cast<LayerKind>(kindValue)
+                                     : LayerKind::Vector;
+                }
                 if (const json::JsonValue* frames = entry.Find("frames")) {
                     for (const json::JsonValue& f : frames->AsArray()) {
                         layer.frames.push_back(static_cast<int>(f.AsNumber(0)));

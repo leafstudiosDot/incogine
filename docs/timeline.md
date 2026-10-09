@@ -5,12 +5,16 @@ description: Layers panel, frame grid, playhead, and playback for Incogine Anima
 
 # Timeline — M4
 
-## Status: model done, UI pending
+## Status: model + UI built (this milestone)
 
 The timeline **editing model** is implemented and headless-tested
-(`TestFrameOps` in `tests/anim_tests.cpp`, ~150 checks). The **UI** (layers
-panel, frame grid, playback controls) is not built yet — this page is the
-design it should follow.
+(`TestFrameOps`, ~150 checks): frame/insert/remove/keyframe/clear/paste
+commands plus `SetLayerColor`/`SetLayerOutline`. The **UI** is built:
+bottom-dock `TimelineWidget` (transport bar + custom grid + scrollbars),
+frame ops via F5/F6/F7/Shift+F5/Del/Ctrl+C/V, context menus, layer add/delete/
+rename/reorder/eye/lock/outline/color, work area (Shift+drag ruler, loop
+respects it), tween spans hatched as reserved, cache strip showing 1.3 cached
+frames, prev/next onion-skin toggle. Clipboard holds a single keyframe (ranges later).
 
 ## Editing model (done)
 
@@ -40,17 +44,25 @@ clearKeyframe/pasteFrames`. The copy clipboard lives in the timeline widget
   `TweenSpan` (reserved data, sampled in M7).
 - **Playhead**: click/drag to scrub, wired to the existing
   `AnimatorCanvas::setCurrentFrame()`.
-- **Playback**: play/pause/stop + loop at document FPS via `QTimer`.
+- **Playback**: play/pause/stop + loop at document FPS via `QTimer` (ticks
+  retime when FPS changes mid-playback).
 - **Frame ops UI**: F5/F6/F7/Shift+F5 shortcuts, right-click menu
   (insert/clear/copy/paste), all through the controller above.
 
-## Measured: no frame cache needed
+## Measured: resolve is cheap, raster is what the cache buys
 
 Playback frame-step cost (4 layers x 12 keyframes x 30 strokes, 120 frames):
 **0.008 ms/step resolve-only** (5555x headroom at 24 fps), 0.36 ms/step even
 with flattening redone. The document is fully in memory and the canvas caches
 subdivisions per shape id, so the ±24-frame preload window idea is unnecessary
 — verified by measurement, not kept as an option.
+
+That measurement is resolve-only (model queries, no pixels). Rasterizing is
+the per-frame cost that actually scales with stroke count, which is what 1.3's
+RAM frame cache addresses (see `docs/incoanim.md`): composites blit during
+playback, precise invalidation per command footprint, worker prefetch ahead of
+the playhead. The cache strip above the ruler shows which frames hold baked
+composites.
 
 ## Decided for M4
 
@@ -60,8 +72,10 @@ subdivisions per shape id, so the ±24-frame preload window idea is unnecessary
   distinctly now (data exists, inert until M7), so M7 plugs behavior into
   already-visible UI.
 - **Known wart**: keyframe promotion (`AddShapesCommand`) and F6 copy
-  duplicate shape ids across keyframes. Benign today (caches clear on every
-  edit and rebuild per frame, copies start identical), but the timeline
-  switches frames *without* a document change — safe only because of that.
-  If per-frame caches ever key on id alone, this must be fixed first
-  (remap on copy, like paste already does).
+  duplicate shape ids across keyframes. Benign today and under the 1.3 frame
+  cache: its layer images key on (layer id, frame), never on shape id — each
+  entry rasterizes whatever keyframe resolves at its frame, so duplicated ids
+  cannot alias pixels. (The canvas subdivision cache keys on shape id, but it
+  clears on every edit and rebuilds per frame, so the same reasoning holds.)
+  If a future cache ever keys pixels on shape id alone, this must be fixed
+  first (remap on copy, like paste already does).

@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMessageBox>
 #include <QMouseEvent>
@@ -25,22 +26,31 @@
 #include <cmath>
 
 #include <iostream>
+#include <memory>
 
 #include "canvas.h"
+#include "animation/anim_io.h"
 #include "channel.h"
 #include "document.h"
+#include "framecache.h"
+#include "timeline.h"
 #include "window.h"
 
 namespace {
 
 // Drives the window through a real open/edit/save/undo cycle and reports
-// whether each step behaved. Returns a process exit code.
-int runSelfTest(AnimatorWindow& window, const QString& path) {
-    int failures = 0;
-    auto check = [&failures](bool ok, const char* what) {
+// whether each step behaved. Phase 1 runs synchronously (everything except
+// worker delivery); the worker check runs as phase 2 on the event loop (see
+// the cache block below), which then quits with the exit code. Split because
+// delivery only happens through real dispatch - polling it with a manual pump
+// raced and hung the suite.
+void runSelfTest(AnimatorWindow& window, const QString& path,
+                 std::shared_ptr<int> exitCode) {
+    auto failures = std::make_shared<int>(0);
+    auto check = [failures](bool ok, const char* what) {
         std::cout << "self-test: " << what << (ok ? " ok" : " FAILED") << std::endl;
         if (!ok) {
-            ++failures;
+            ++(*failures);
         }
     };
 
@@ -327,13 +337,92 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
         check(canvas->drawingOptions().smoothing == 2.5f, "smoothing set");
 
         // Preview quality round-trips and moves the flatten tolerance.
+        // Switching is view-only: the serialized project must not change.
+        const std::string beforeQuality =
+            icg::anim::Serialize(doc->document());
         canvas->setPreviewQuality(PreviewQuality::Draft);
         check(canvas->previewQuality() == PreviewQuality::Draft,
               "draft quality set");
         check(canvas->flattenTolerance() > 0.25f, "draft coarsens subdivision");
-        canvas->setPreviewQuality(PreviewQuality::Normal);
-        check(canvas->previewQuality() == PreviewQuality::Normal,
-              "normal quality restored");
+        canvas->setPreviewQuality(PreviewQuality::High);
+        check(canvas->previewQuality() == PreviewQuality::High,
+              "high quality set");
+        canvas->setPreviewQuality(PreviewQuality::Low);
+        check(canvas->previewQuality() == PreviewQuality::Low,
+              "low quality restored");
+        check(icg::anim::Serialize(doc->document()) == beforeQuality,
+              "quality switches leave project data untouched");
+
+        // Timeline: widget exists, playhead drives the canvas frame, layer
+        // ops through the controller reflect in row count, onion toggles.
+        {
+            TimelineWidget* timeline = window.findChild<TimelineWidget*>();
+            check(timeline != nullptr, "timeline widget found");
+            if (timeline != nullptr) {
+                check(timeline->rowCount() >= 1, "timeline lists layers");
+                timeline->setPlayhead(3);
+                check(timeline->playhead() == 1 || timeline->playhead() == 3,
+                      "playhead clamps to the timeline length");
+                check(canvas->currentFrame() == timeline->playhead(),
+                      "playhead drives the canvas frame");
+                const int rowsBefore = timeline->rowCount();
+                check(doc->addLayer("Timeline Test"),
+                      "timeline layer add commits");
+                check(timeline->rowCount() == rowsBefore + 1,
+                      "timeline row appears");
+                check(doc->undo(), "timeline layer add undoes");
+                check(timeline->rowCount() == rowsBefore,
+                      "timeline row removed by undo");
+                const uint64_t layerId = canvas->activeLayerId();
+                check(doc->setLengthFrames(8), "timeline length extends");
+                timeline->setPlayhead(3);
+                check(timeline->playhead() == 3, "playhead moves in range");
+                check(doc->insertKeyframe(layerId, 3, true),
+                      "timeline blank keyframe inserts");
+                check(doc->clearKeyframe(layerId, 3),
+                      "timeline keyframe clears");
+                check(doc->undo(), "timeline clear undoes");
+                canvas->setOnionSkinEnabled(true);
+                check(canvas->onionSkinEnabled(), "onion skin toggles on");
+                canvas->setOnionSkinEnabled(false);
+                check(!canvas->onionSkinEnabled(), "onion skin toggles off");
+                // Playback interplay through the real user path: Space on the
+                // grid starts the timer, an FPS edit mid-play retimes the
+                // ticks, Space stops. The timer is always stopped before the
+                // test moves on, so nothing lingers.
+                TimelineGrid* grid = window.findChild<TimelineGrid*>();
+                check(grid != nullptr, "timeline grid found");
+                if (grid != nullptr) {
+                    const auto expectedInterval = [](int fps) {
+                        return std::max(1, 1000 / std::max(1, fps));
+                    };
+                    QKeyEvent space(QEvent::KeyPress, Qt::Key_Space,
+                                    Qt::NoModifier);
+                    QApplication::sendEvent(grid, &space);
+                    check(timeline->isPlaying(), "space starts playback");
+                    check(timeline->playbackIntervalMs() ==
+                              expectedInterval(doc->document().fps),
+                          "playback ticks at document fps");
+                    check(canvas->isPlaybackActive(),
+                          "playback engages the cache blit");
+                    // A value that differs: the early fps test leaves 12.
+                    const int newFps =
+                        doc->document().fps == 12 ? 24 : 12;
+                    check(doc->setFps(newFps), "fps edits mid-playback");
+                    check(timeline->playbackIntervalMs() ==
+                              expectedInterval(newFps),
+                          "fps edit retimes playback ticks");
+                    check(timeline->isPlaying(),
+                          "retime does not stop playback");
+                    QApplication::sendEvent(grid, &space);
+                    check(!timeline->isPlaying(), "space pauses playback");
+                    check(!canvas->isPlaybackActive(),
+                          "pause releases the cache blit");
+                    check(doc->undo(), "fps edit undoes");
+                }
+                timeline->setPlayhead(1);
+            }
+        }
 
         // A drawn shape commits through the stack, selects itself, and undoes.
         {
@@ -509,12 +598,140 @@ int runSelfTest(AnimatorWindow& window, const QString& path) {
             check(darkRedone >= darkPlain - 2 && darkRedone <= darkPlain + 2,
                   "redo rebakes the stroke's pixels exactly");
         }
+        // RAM frame cache (1.3): sync bake size, precise invalidation,
+        // compositing-only survival, budget eviction, worker prefetch.
+        {
+            FrameCache* cache = window.findChild<FrameCache*>();
+            check(cache != nullptr, "frame cache owned by the window");
+            TimelineWidget* timeline =
+                window.findChild<TimelineWidget*>();
+            check(timeline != nullptr &&
+                      timeline->frameCache() == cache,
+                  "timeline strip reads the shared cache");
+            if (cache != nullptr) {
+                const uint64_t layerId = canvas->activeLayerId();
+                check(doc->document().FrameCount() >= 6,
+                      "cache fixture has frames to span");
+                // Sync bake: stage-sized, and non-empty where art resolves.
+                const QImage baked = cache->composite(2);
+                check(!baked.isNull(), "cache bakes a composite");
+                check(baked.width() == doc->document().stageWidth &&
+                          baked.height() == doc->document().stageHeight,
+                      "cached composite is stage-sized");
+                int opaque = 0;
+                for (int y = 0; y < baked.height(); y += 4) {
+                    const QRgb* line = reinterpret_cast<const QRgb*>(
+                        baked.constScanLine(y));
+                    for (int x = 0; x < baked.width(); x += 4) {
+                        if (qAlpha(line[x]) > 0) {
+                            ++opaque;
+                        }
+                    }
+                }
+                check(opaque > 0, "cached composite holds artwork pixels");
+                check(cache->hasComposite(2), "frame 2 composite cached");
+                // Precise invalidation: an edit at frame 6 drops its own
+                // span only - frame 2 survives, with its layer pixels intact.
+                cache->composite(6);
+                check(cache->hasComposite(6), "frame 6 composite cached");
+                check(cache->hasLayer(layerId, 2),
+                      "frame 2 layer image cached");
+                check(doc->insertKeyframe(layerId, 6, false),
+                      "keyframe inserts at 6");
+                check(!cache->hasComposite(6),
+                      "edit drops its own span");
+                check(cache->hasComposite(2),
+                      "distant frame survives the edit");
+                check(cache->hasLayer(layerId, 2),
+                      "distant layer pixels survive the edit");
+                check(doc->undo(), "keyframe insert undoes");
+                check(cache->hasComposite(2),
+                      "undo keeps the distant frame");
+                // Compositing-only edits (visibility) drop assembled frames
+                // but keep layer pixels: the next composite reassembles with
+                // zero vector work.
+                cache->composite(2);
+                check(doc->setLayerVisible(layerId, false),
+                      "layer hides");
+                check(!cache->hasComposite(2),
+                      "visibility drops assembled frames");
+                check(cache->hasLayer(layerId, 2),
+                      "visibility keeps layer pixels");
+                check(doc->setLayerVisible(layerId, true),
+                      "layer shows again");
+                // Budget eviction: small budget holds, playhead frame wins.
+                cache->clear();
+                cache->setBudgetBytes(8LL * 1024LL * 1024LL);
+                cache->setPlayhead(4);
+                cache->composite(1);
+                cache->composite(2);
+                cache->composite(3);
+                cache->composite(4);
+                check(cache->bytesUsed() <= cache->budgetBytes(),
+                      "cache honors its byte budget");
+                check(cache->hasComposite(4),
+                      "playhead frame survives eviction");
+                cache->setBudgetBytes(256LL * 1024LL * 1024LL);
+                // Worker prefetch: frames ahead bake off-thread. Delivery is
+                // verified in phase 2 (below), through real event-loop
+                // dispatch - never by polling with a manual pump, which
+                // proved flaky (a manual pump raced worker delivery and hung
+                // the suite intermittently with the thread parked at 0% CPU).
+                // Phase 1 ends here: it returns so the loop runs freely
+                // (worker bakes, paints paint, timers fire - exactly like
+                // production playback), and phase 2 asserts afterwards.
+                cache->clear();
+                cache->prefetchAround(1);
+                // Phase 2 runs after the loop has delivered worker results
+                // through real dispatch (see above): asserts delivery,
+                // finishes the suite, quits the loop with the exit code.
+                // Captures are all shared or long-lived (the window, canvas,
+                // and cache outlive the loop; failures/exitCode are shared),
+                // so running after phase 1 returns is safe. The delay is
+                // generous on purpose: Debug rasterizes full-stage frames
+                // slowly, and frame 3 waits behind heavier frames in FIFO.
+                QTimer::singleShot(10000, QApplication::instance(),
+                                   [check, failures, exitCode, tempPath,
+                                    canvas, cache] {
+                                       check(cache->hasComposite(3),
+                                             "worker prefetches frames ahead");
+                                       canvas->setPlaybackActive(true);
+                                       check(canvas->isPlaybackActive(),
+                                             "playback mode engages");
+                                       canvas->setPlaybackActive(false);
+                                       check(!canvas->isPlaybackActive(),
+                                             "playback mode releases");
+                                       QFile::remove(tempPath);
+                                       std::cout << "self-test: finished ("
+                                                 << *failures << " failure(s))"
+                                                 << std::endl;
+                                       *exitCode = *failures == 0 ? 0 : 1;
+                                       // Drain-then-quit: a bare quit() here
+                                       // usually leaves the loop running
+                                       // (thread parked at 0% CPU, never
+                                       // exits); quitting after one pump has
+                                       // exited cleanly but not reliably, so
+                                       // exit stays flaky. Root cause inside
+                                       // Qt's event delivery is unknown - the
+                                       // kill-after-run workflow in the build
+                                       // notes applies either way.
+                                       QCoreApplication::processEvents();
+                                       QApplication::instance()->quit();
+                                   });
+                return;
+            }
+        }
     }
 
+    // Reached only when the window has no frame cache (never in production -
+    // the window always wires one): finish inline so the suite still reports.
     QFile::remove(tempPath);
 
-    std::cout << "self-test: finished (" << failures << " failure(s))" << std::endl;
-    return failures == 0 ? 0 : 1;
+    std::cout << "self-test: finished (" << *failures << " failure(s))" << std::endl;
+    *exitCode = *failures == 0 ? 0 : 1;
+    // Drain-then-quit, as in phase 2 above.
+    QCoreApplication::processEvents();
+    QApplication::instance()->quit();
 }
 
 } // namespace
@@ -577,11 +794,13 @@ int main(int argc, char** argv) {
     }
 
     // Self-test drives the window inside a real event loop, mirroring Studio's
-    // --self-test: the work runs in one timer and the quit comes from a
-    // SEPARATE later timer. Calling quit() from inside the working callback
-    // leaves the application torn down without the loop having run to
-    // completion, which crashes during static destruction - the same reason
-    // Studio schedules its quit separately.
+    // --self-test: phase 1 runs in one timer; worker delivery is asserted in
+    // a later phase (scheduled from phase 1), and the quit comes from phase 2
+    // or the backstop below - never from inside the working callback, which
+    // would tear the application down without the loop having run to
+    // completion and crash during static destruction (the same reason Studio
+    // schedules its quit separately). The backstop also bounds the suite:
+    // nonzero exit when a phase stalls instead of lingering forever.
     std::cout << "self-test: entering self-test mode" << std::endl;
     // Dark palette exercises the themed-paint path with a non-default style,
     // matching Studio's self-test.
@@ -596,10 +815,13 @@ int main(int argc, char** argv) {
 
     window.show();
 
-    int exitCode = 0;
-    QTimer::singleShot(0, &app, [&] { exitCode = runSelfTest(window, path); });
-    QTimer::singleShot(750, &app, &QApplication::quit);
+    // Default nonzero: if no phase ever reports (a stall), the backstop quit
+    // below still ends the run and it reads as failure, not success.
+    auto exitCode = std::make_shared<int>(1);
+    QTimer::singleShot(0, &app, [&] { runSelfTest(window, path, exitCode); });
+    QTimer::singleShot(180000, &app, &QApplication::quit);
     const int loopCode = app.exec();
-    return exitCode != 0 ? exitCode : loopCode;
+    std::cout << "self-test: event loop exited" << std::endl;
+    return *exitCode != 0 ? *exitCode : loopCode;
 }
 

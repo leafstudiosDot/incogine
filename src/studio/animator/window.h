@@ -21,6 +21,7 @@
 class AnimatorCanvas;
 class AnimatorChannel;
 class AnimatorDocument;
+class FrameCache;
 class QAction;
 class QActionGroup;
 class QCheckBox;
@@ -90,6 +91,9 @@ private:
     bool updatingControls() const { return updatingControls_; }
 
     std::unique_ptr<AnimatorDocument> document_;
+    // Shared RAM frame cache (1.3, owned here): canvas playback blits plus
+    // the timeline cache strip read from this one object.
+    FrameCache* frameCache_ = nullptr;
     // Single-instance channel: another launch of this same file is routed here
     // instead of starting a second editor on the same document.
     AnimatorChannel* channel_ = nullptr;
@@ -104,6 +108,8 @@ private:
     void refreshOptionsVisibility();
 
     QWidget* propertiesDock_ = nullptr;
+    class TimelineWidget* timeline_ = nullptr;
+    QDockWidget* timelineDock_ = nullptr;
     QSpinBox* widthSpin_ = nullptr;
     QSpinBox* heightSpin_ = nullptr;
     QSpinBox* fpsSpin_ = nullptr;

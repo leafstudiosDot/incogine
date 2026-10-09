@@ -36,6 +36,7 @@
 class AnimatorDocument;
 class ITool;
 class HandTool;
+class FrameCache;
 
 // Brush / pen style shared by the drawing tools. Owned by the canvas; the
 // options strip in the window edits it, and the tools read it when committing.
@@ -51,11 +52,38 @@ struct DrawingOptions {
 };
 
 // Preview quality: how much work a repaint may spend on vector fidelity.
-// Draft is the zoomed-in lag lever - no antialiasing and 4x coarser curve
-// subdivision, ~12-18x faster than Normal at zoom 4-8 (measured). Normal is
-// the default; High halves the subdivision tolerance for inspecting smooth
-// curves up close (slower, not faster).
-enum class PreviewQuality { Draft, Normal, High };
+// Exactly one table defines what each level changes (tessellation, AA, bake
+// scale cap, MSAA) - see QualitySpec below, not scattered `if`s. Draft is
+// the zoomed-in lag lever - no antialiasing and 4x coarser curve subdivision,
+// ~12-18x faster than Low at zoom 4-8 (measured). Low is the default; High
+// halves the subdivision tolerance for inspecting smooth curves up close
+// (slower, not faster). Final is NOT a viewport mode: it is the canonical
+// quality the RAM cache and export bake at, so cached frames, scrubbing, and
+// exported pixels all agree with each other regardless of viewport setting.
+enum class PreviewQuality { Draft, Low, High, Final };
+
+// One row of the quality config table. msaaSamples is reserved for the QRhi
+// backend (render-target sample count); the CPU raster path ignores it.
+struct QualitySpec {
+    float toleranceScale = 1.0f; // x kFlattenTolerance for subdivision + arcs
+    bool antialias = true;
+    float maxBakeScale = 4.0f; // scene-pixmap adaptive cap (Draft never upscales)
+    int msaaSamples = 4;       // QRhi future; unused on CPU raster
+};
+
+inline QualitySpec qualitySpec(PreviewQuality quality) {
+    switch (quality) {
+        case PreviewQuality::Draft:
+            return QualitySpec{4.0f, false, 1.0f, 0};
+        case PreviewQuality::High:
+            return QualitySpec{0.5f, true, 4.0f, 8};
+        case PreviewQuality::Final:
+            return QualitySpec{1.0f, true, 4.0f, 8};
+        case PreviewQuality::Low:
+        default:
+            return QualitySpec{1.0f, true, 4.0f, 4};
+    }
+}
 
 // Pan/zoom mapping between widget pixels and stage units.
 class StageView {
@@ -176,6 +204,22 @@ public:
     // Pans by a widget-pixel delta. Kept here so HandTool does not need to know
     // how the transform is stored.
     void panBy(const QPointF& deltaWidget);
+    // Onion skinning (M4): when enabled, the nearest keyframes strictly before
+    // and after the current frame paint ghosted behind the scene (Flash red/
+    // green convention). View-only: never touches the model or the bake.
+    void setOnionSkinEnabled(bool enabled);
+    bool onionSkinEnabled() const { return onionSkin_; }
+    // --- RAM frame cache (1.3) ---
+    // During playback the canvas blits cached composites instead of rebaking
+    // vectors per frame; on a miss it falls back to the scene path (always
+    // correct) and the cache prefetches ahead. Non-owning: the window owns the
+    // cache and shares it with the timeline strip.
+    void setFrameCache(FrameCache* cache);
+    // True while the timeline is playing: enables cache blits + prefetch.
+    // Scrubbing with playback off stays on the exact scene path.
+    void setPlaybackActive(bool active);
+    bool isPlaybackActive() const { return playbackActive_; }
+
     // True when every current shape is baked into the scene pixmap (no pending
     // chunked work). For tests and benchmarks that must observe a settled
     // scene without pumping the event loop for timer slices.
@@ -223,7 +267,12 @@ private:
     // --- painting helpers ---
     void paintBackdrop(QPainter& painter) const;
     void paintStageFill(QPainter& painter) const;
+    void paintOnionSkins(QPainter& painter) const;
     void paintSceneBlit(QPainter& painter) const;
+    // Blits the RAM-cache composite for the current frame (1.3 playback
+    // path). The image is stage-sized at 1px/unit, transparent: stage fill and
+    // backdrop paint underneath exactly like the scene pixmap.
+    void paintCacheBlit(QPainter& painter) const;
     void paintLiveSelection(QPainter& painter) const;
     void paintSelectionOutlines(QPainter& painter) const;
     void paintStageOutline(QPainter& painter) const;
@@ -265,13 +314,14 @@ private:
     void emitZoomChanged();
 
     AnimatorDocument* document_;
+    bool onionSkin_ = false;
     StageView view_;
     QSet<uint64_t> selection_;
     int currentFrame_ = 1;
     DragState drag_;
     bool needsFitOnFirstSize_ = true;
     mutable QHash<uint64_t, icg::anim::FlatPath> pathCache_;
-    PreviewQuality quality_ = PreviewQuality::Normal;
+    PreviewQuality quality_ = PreviewQuality::Low;
     // Committed-scene pixmap (stage space, sceneBakeScale_ px per unit).
     // Transparent: the backdrop/checker paint live underneath every frame.
     QPixmap sceneCache_;
@@ -283,7 +333,28 @@ private:
     struct BakedState {
         QRectF bounds;
         icg::anim::Mat2x3 matrix;
+        // Everything else that changes rendered pixels. Compared alongside
+        // the matrix so e.g. toggling a layer's outline mode repaints instead
+        // of going stale (the toggle changes no geometry at all).
+        bool hasFill = false;
+        icg::anim::AnimColor fill;
+        bool hasStroke = false;
+        icg::anim::AnimColor stroke;
+        float strokeWidth = 0.0f;
+        icg::anim::LineCap cap = icg::anim::LineCap::Round;
+        icg::anim::LineJoin join = icg::anim::LineJoin::Round;
+        bool layerOutline = false;
     };
+    // True when `shape` would paint exactly what `state` recorded.
+    static bool matchesBaked(const BakedState& state,
+                             const icg::anim::ResolvedShape& shape) {
+        return state.matrix == shape.matrix && state.hasFill == shape.hasFill &&
+               state.fill == shape.fill && state.hasStroke == shape.hasStroke &&
+               state.stroke == shape.stroke &&
+               state.strokeWidth == shape.strokeWidth &&
+               state.cap == shape.cap && state.join == shape.join &&
+               state.layerOutline == shape.layerOutline;
+    }
     QHash<uint64_t, BakedState> lastBaked_;
     // Stage-space origin of the pixmap's top-left pixel (content can live
     // off-stage, so the pixmap covers stage + content, not just the stage).
@@ -361,4 +432,8 @@ private:
     HandTool* handTool_ = nullptr;
     // The tool that was active before Space was pressed, restored on release.
     ITool* toolBeforeSpace_ = nullptr;
+    // RAM frame cache + playback flag (1.3). Both non-owning; null until the
+    // window wires them. Null-safe everywhere: the canvas works without them.
+    FrameCache* frameCache_ = nullptr;
+    bool playbackActive_ = false;
 };
